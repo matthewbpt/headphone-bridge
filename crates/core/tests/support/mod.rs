@@ -160,6 +160,15 @@ pub fn received(records: &[FrameRecord]) -> Vec<Vec<u8>> {
         .collect()
 }
 
+/// The frames the app sent, in order.
+pub fn sent(records: &[FrameRecord]) -> Vec<Vec<u8>> {
+    records
+        .iter()
+        .filter(|record| record.direction == Direction::Sent)
+        .map(|record| record.bytes.clone())
+        .collect()
+}
+
 /// Plays a recorded session on `link`: delivers each received frame to the
 /// core, and checks each sent frame is the next one the core writes.
 pub async fn replay(link: &mut DeviceLink, records: &[FrameRecord]) {
@@ -210,5 +219,23 @@ pub fn samsung_frame(id: u8, payload: &[u8]) -> Vec<u8> {
     frame.extend(body);
     frame.extend_from_slice(&crc.to_le_bytes());
     frame.push(0xdd);
+    frame
+}
+
+/// Encodes a Sony MDR v2 Table 1 (`0x0C`) frame the way a Device would. Only
+/// for frames no fixture has; see `tests/fixtures/wh-1000xm5/gen.py`.
+pub fn sony_frame(seq: u8, data: &[u8]) -> Vec<u8> {
+    let mut body = vec![0x0c, seq];
+    body.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    body.extend_from_slice(data);
+    body.push(body.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte)));
+    let mut frame = vec![0x3e];
+    for byte in body {
+        match byte {
+            0x3c..=0x3e => frame.extend([0x3d, byte - 0x10]),
+            _ => frame.push(byte),
+        }
+    }
+    frame.push(0x3c);
     frame
 }

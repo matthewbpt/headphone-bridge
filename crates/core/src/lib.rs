@@ -300,22 +300,27 @@ async fn run_sony_session(
     mut on_update: impl FnMut(Update),
 ) -> NotAttachedReason {
     let mut session = sony::Session::new();
-    loop {
-        for frame in session.outgoing() {
-            if link.outgoing.send(frame).is_err() {
-                return NotAttachedReason::LinkDropped;
-            }
-        }
-        let Some(bytes) = link.incoming.recv().await else {
-            return NotAttachedReason::LinkDropped;
-        };
-        for update in session.receive(&bytes) {
-            let unsupported = update == Update::Unsupported;
-            on_update(update);
-            if unsupported {
-                // Dropping the link Detaches without writing anything more.
-                return NotAttachedReason::UnsupportedModel;
-            }
-        }
+    let write = |session: &mut sony::Session| {
+        session
+            .outgoing()
+            .into_iter()
+            .all(|frame| link.outgoing.send(frame).is_ok())
+    };
+    if !write(&mut session) {
+        return NotAttachedReason::LinkDropped;
     }
+    while let Some(bytes) = link.incoming.recv().await {
+        let updates = session.receive(&bytes);
+        if updates.contains(&Update::Unsupported) {
+            on_update(Update::Unsupported);
+            // Dropping the link Detaches without writing anything more.
+            return NotAttachedReason::UnsupportedModel;
+        }
+        // Write first, so ACKs are out before the update is reported.
+        if !write(&mut session) {
+            return NotAttachedReason::LinkDropped;
+        }
+        updates.into_iter().for_each(&mut on_update);
+    }
+    NotAttachedReason::LinkDropped
 }
