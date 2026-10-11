@@ -83,13 +83,19 @@ struct Watcher {
     observations: mpsc::UnboundedSender<Observation>,
     /// Devices reported Connected, and not since reported disconnected.
     reported: HashSet<Address>,
+    /// Devices whose events are being followed.
+    followed: HashSet<Address>,
 }
+
+/// A Device's events, then `None` once bluer ends the stream.
+type DeviceEvents = futures::stream::BoxStream<'static, (Address, Option<DeviceEvent>)>;
 
 impl Watcher {
     fn new(observations: mpsc::UnboundedSender<Observation>) -> Watcher {
         Watcher {
             observations,
             reported: HashSet::new(),
+            followed: HashSet::new(),
         }
     }
 
@@ -99,35 +105,78 @@ impl Watcher {
         // knows, and every one it learns about.
         let mut device_events = SelectAll::new();
         for address in adapter.device_addresses().await? {
-            device_events.push(follow(adapter, address).await?);
+            self.follow(adapter, &mut device_events, address).await;
             self.check(adapter, address).await;
         }
         loop {
             tokio::select! {
+                // bluer reports any interface added to or removed from a
+                // Device, e.g. Battery1 on connect and disconnect, as the
+                // Device being added or removed, so check what it is now.
                 Some(event) = adapter_events.next() => match event {
-                    AdapterEvent::DeviceAdded(address) => {
-                        device_events.push(follow(adapter, address).await?);
+                    AdapterEvent::DeviceAdded(address) | AdapterEvent::DeviceRemoved(address) => {
+                        self.follow(adapter, &mut device_events, address).await;
                         self.check(adapter, address).await;
                     }
-                    AdapterEvent::DeviceRemoved(address) => self.disconnected(address),
                     _ => {}
                 },
-                Some((address, DeviceEvent::PropertyChanged(property))) = device_events.next() => {
-                    match property {
+                Some((address, event)) = device_events.next() => match event {
+                    Some(DeviceEvent::PropertyChanged(property)) => match property {
                         DeviceProperty::Connected(false) => self.disconnected(address),
                         DeviceProperty::Connected(true)
                         | DeviceProperty::ServicesResolved(_)
                         | DeviceProperty::Uuids(_) => self.check(adapter, address).await,
                         _ => {}
+                    },
+                    // bluer also ends a Device's stream when any one of its
+                    // interfaces is removed, though the Device remains.
+                    None => {
+                        self.followed.remove(&address);
+                        self.follow(adapter, &mut device_events, address).await;
+                        self.check(adapter, address).await;
                     }
+                },
+                else => {
+                    eprintln!("stopped watching Bluetooth Devices: the adapter went away");
+                    return Ok(());
                 }
-                else => return Ok(()),
             }
         }
     }
 
-    /// Reports the Device Connected once BlueZ knows its services, which it
-    /// resolves after the Device connects.
+    /// Follows the Device at `address`, if it exists and isn't followed.
+    async fn follow(
+        &mut self,
+        adapter: &Adapter,
+        device_events: &mut SelectAll<DeviceEvents>,
+        address: Address,
+    ) {
+        if self.followed.contains(&address) {
+            return;
+        }
+        let Ok(device) = adapter.device(address) else {
+            return;
+        };
+        // Following a removed Device would end at once, and follow again.
+        if device.is_connected().await.is_err() {
+            return;
+        }
+        if let Ok(events) = device.events().await {
+            self.followed.insert(address);
+            let end = futures::stream::once(async move { (address, None) });
+            device_events.push(
+                events
+                    .map(move |event| (address, Some(event)))
+                    .chain(end)
+                    .boxed(),
+            );
+        }
+    }
+
+    /// Reports the Device Connected once BlueZ knows its services. BlueZ
+    /// resolves them after a new Device connects, but on a paired Device's
+    /// reconnect it keeps the services it already knows and never sets
+    /// ServicesResolved.
     async fn check(&mut self, adapter: &Adapter, address: Address) {
         let Ok(device) = adapter.device(address) else {
             return;
@@ -135,21 +184,17 @@ impl Watcher {
         if !device.is_connected().await.unwrap_or(false) {
             return self.disconnected(address);
         }
-        if self.reported.contains(&address) || !device.is_services_resolved().await.unwrap_or(false)
-        {
+        if self.reported.contains(&address) {
+            return;
+        }
+        let service_uuids: HashSet<Uuid> = device.uuids().await.ok().flatten().unwrap_or_default();
+        if service_uuids.is_empty() && !device.is_services_resolved().await.unwrap_or(false) {
             return;
         }
         let Ok(name) = device.alias().await else {
             return;
         };
-        let service_uuids = device
-            .uuids()
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        let service_uuids = service_uuids.into_iter().collect();
         self.reported.insert(address);
         let _ = self
             .observations
@@ -167,14 +212,6 @@ impl Watcher {
                 .send(Observation::DeviceDisconnected(port_address(address)));
         }
     }
-}
-
-async fn follow(
-    adapter: &Adapter,
-    address: Address,
-) -> bluer::Result<futures::stream::BoxStream<'static, (Address, DeviceEvent)>> {
-    let events = adapter.device(address)?.events().await?;
-    Ok(events.map(move |event| (address, event)).boxed())
 }
 
 /// bluer prints addresses in the port's form, `AC:80:0A:11:22:33`.
