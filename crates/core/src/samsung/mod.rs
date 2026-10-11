@@ -7,7 +7,7 @@ mod frame;
 use uuid::{uuid, Uuid};
 
 use crate::command::NoiseControlMode;
-use crate::device_list::Battery;
+use crate::device_list::{Battery, EffectiveModeReason};
 use crate::model::Model;
 pub use crate::update::Update;
 pub use frame::Frame;
@@ -42,6 +42,8 @@ pub struct Session {
     buds: Buds,
     /// The mode the app last asked for, until the Device confirms it.
     pending_mode: Option<NoiseControlMode>,
+    /// Whether a Chosen Mode has been reported yet.
+    chosen_known: bool,
 }
 
 impl Session {
@@ -72,10 +74,19 @@ impl Session {
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
     }
 
-    fn confirm(&mut self, mode: NoiseControlMode) {
-        if self.pending_mode == Some(mode) {
-            self.pending_mode = None;
+    /// The update for a mode the Device reports applying while the buds are
+    /// at `placement`: the Chosen Mode if `chosen` or the app asked for it,
+    /// otherwise the Effective Mode alone.
+    fn mode_update(&mut self, mode: NoiseControlMode, placement: u8, chosen: bool) -> Update {
+        if chosen || self.pending_mode == Some(mode) {
+            if self.pending_mode == Some(mode) {
+                self.pending_mode = None;
+            }
+            self.chosen_known = true;
+            return Update::ChosenMode(mode);
         }
+        let reason = (!both_worn(placement)).then_some(EffectiveModeReason::BudOutOfEar);
+        Update::EffectiveMode(mode, reason)
     }
 
     /// The Ambient Level a Device reports as `value`, if it is in the
@@ -115,9 +126,15 @@ impl Session {
                 }
                 let charging = p.get(42).copied().unwrap_or(0);
                 self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
+                // Byte 12 is the mode the Device is applying: Off while it has
+                // paused the Chosen Mode because a bud is out (capture-1c).
+                // Any other mode, or Off with both buds in, is the Chosen
+                // Mode, as is the first one reported, for want of a better
+                // guess.
                 if let Some(mode) = noise_control_mode(p[12]) {
-                    self.confirm(mode);
-                    updates.push(Update::ChosenMode(mode));
+                    let chosen =
+                        !self.chosen_known || mode != NoiseControlMode::Off || both_worn(p[6]);
+                    updates.push(self.mode_update(mode, p[6], chosen));
                 }
                 updates.extend(self.ambient_level(p.get(23)));
             }
@@ -126,17 +143,14 @@ impl Session {
                 let Some(mode) = noise_control_mode(p[0]) else {
                     return Vec::new();
                 };
-                // Byte 6 is the cause: 1 for a gesture, which chooses a mode.
-                // Other causes are placement changes, whose mode is only
-                // temporary, unless it is the one the app asked for: the
-                // Device confirms a set with such a cause too. Older Models
-                // send only the mode.
+                // Byte 1 is the placement and byte 6 the cause: 1 for a
+                // gesture, which chooses a mode. Other causes are placement
+                // changes, whose mode is only the Effective Mode, unless it is
+                // the one the app asked for: the Device confirms a set with
+                // such a cause too. Older Models send only the mode.
                 let gesture = p.len() < 7 || p[6] == 0x01;
-                if gesture || self.pending_mode == Some(mode) {
-                    self.confirm(mode);
-                    return vec![Update::ChosenMode(mode)];
-                }
-                return Vec::new();
+                let placement = p.get(1).copied().unwrap_or(0x11);
+                return vec![self.mode_update(mode, placement, gesture)];
             }
             id::STATUS_UPDATED if p.len() >= 8 => {
                 self.buds.apply(p[5], p[7], [p[1], p[2], p[6]]);
@@ -175,6 +189,13 @@ fn model_for_device_id(device_id: u16) -> Option<Model> {
     (359..=361)
         .contains(&device_id)
         .then_some(Model::GalaxyBuds4Pro)
+}
+
+/// Whether placement nibbles (L high, R low) put both buds in the ear.
+fn both_worn(placement: u8) -> bool {
+    [placement >> 4, placement & 0x0F]
+        .into_iter()
+        .all(|nibble| Placement::from_nibble(nibble) == Placement::Wearing)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
