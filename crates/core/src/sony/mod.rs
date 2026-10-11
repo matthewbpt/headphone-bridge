@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 
 use uuid::{uuid, Uuid};
 
+use crate::command::NoiseControlMode;
 use crate::device_list::Battery;
 use crate::model::Model;
 pub use crate::update::Update;
@@ -32,6 +33,9 @@ mod command {
     pub const POWER_GET_STATUS: u8 = 0x22;
     pub const POWER_RET_STATUS: u8 = 0x23;
     pub const POWER_NTFY_STATUS: u8 = 0x25;
+    pub const NCASM_GET_PARAM: u8 = 0x66;
+    pub const NCASM_RET_PARAM: u8 = 0x67;
+    pub const NCASM_NTFY_PARAM: u8 = 0x69;
 }
 
 /// `ConnectInquiredType::FIXED_VALUE`.
@@ -50,6 +54,10 @@ mod function {
     pub const BATTERY_LEVEL_INDICATOR: u8 = 0x20;
     pub const BATTERY_LEVEL_WITH_THRESHOLD: u8 = 0x28;
 }
+
+/// `NcAsmInquiredType` for the WH-1000XM5: noise cancelling and ambient sound
+/// with a level, as its support function `0x6B` declares (libmdr).
+const NCASM_TYPE: u8 = 0x17;
 
 /// One control link session with a Sony Device.
 ///
@@ -102,7 +110,7 @@ impl Session {
                 self.outgoing
                     .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
                 if frame.data_type == DataType::Mdr {
-                    return self.message(&frame.data).into_iter().collect();
+                    return self.message(&frame.data);
                 }
             }
             DataType::Other(_) => {}
@@ -121,22 +129,24 @@ impl Session {
     }
 
     /// Handles a Table 1 message.
-    fn message(&mut self, data: &[u8]) -> Option<Update> {
+    fn message(&mut self, data: &[u8]) -> Vec<Update> {
         match *data {
             [command::CONNECT_RET_PROTOCOL_INFO, ..] if !self.identified => {
                 self.request(vec![command::CONNECT_GET_DEVICE_INFO, MODEL_NAME]);
-                None
+                Vec::new()
             }
             [command::CONNECT_RET_DEVICE_INFO, MODEL_NAME, len, ref name @ ..]
                 if !self.identified =>
             {
-                let name = name.get(..len as usize)?;
+                let Some(name) = name.get(..len as usize) else {
+                    return Vec::new();
+                };
                 let Some(model) = model_for_name(name) else {
-                    return Some(Update::Unsupported);
+                    return vec![Update::Unsupported];
                 };
                 self.identified = true;
                 self.request(vec![command::CONNECT_GET_SUPPORT_FUNCTION, FIXED_VALUE]);
-                Some(Update::Identified(model))
+                vec![Update::Identified(model)]
             }
             [command::CONNECT_RET_SUPPORT_FUNCTION, _, count, ref functions @ ..]
                 if self.identified =>
@@ -157,14 +167,27 @@ impl Session {
                     power::BATTERY
                 };
                 self.request(vec![command::POWER_GET_STATUS, battery]);
-                None
+                Vec::new()
             }
             [command::POWER_RET_STATUS | command::POWER_NTFY_STATUS, power::BATTERY | power::BATTERY_WITH_THRESHOLD, level, ..]
                 if self.identified && level <= 100 =>
             {
-                Some(Update::Battery(Battery::Headphones { level }))
+                if data[0] == command::POWER_RET_STATUS {
+                    self.request(vec![command::NCASM_GET_PARAM, NCASM_TYPE]);
+                }
+                vec![Update::Battery(Battery::Headphones { level })]
             }
-            _ => None,
+            [command::NCASM_RET_PARAM | command::NCASM_NTFY_PARAM, NCASM_TYPE, _status, effect, mode, _focus_on_voice, level]
+                if self.identified =>
+            {
+                let mode = match (effect, mode) {
+                    (0x00, _) => NoiseControlMode::Off,
+                    (_, 0x00) => NoiseControlMode::NoiseCancelling,
+                    _ => NoiseControlMode::Ambient,
+                };
+                vec![Update::ChosenMode(mode), Update::AmbientLevel(level)]
+            }
+            _ => Vec::new(),
         }
     }
 
