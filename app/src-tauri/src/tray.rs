@@ -36,6 +36,15 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         .menu(&build(app, &menu)?)
         .show_menu_on_left_click(true)
         .on_menu_event(on_menu_event);
+    // macOS tints a template image to suit a light or dark menu bar. Linux
+    // panels don't, and a black icon would vanish on GNOME's dark panel.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .icon(tauri::include_image!("icons/tray-template.png"))
+            .icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
