@@ -343,10 +343,7 @@ impl BluetoothThread {
             let gave_up = error_since.is_some_and(|since| since.elapsed() > OPEN_ERROR_GRACE)
                 || started.elapsed() > OPEN_TIMEOUT;
             if gave_up {
-                unsafe {
-                    channel.setDelegate(None);
-                    channel.closeChannel();
-                }
+                release(&channel);
                 delegate.close();
                 return Err(match last_error {
                     Some(status) => self.open_failure(status),
@@ -436,10 +433,7 @@ impl BluetoothThread {
 
     fn close(&mut self, link: LinkId) {
         if let Some(Link { channel, delegate }) = self.links.remove(&link) {
-            unsafe {
-                channel.setDelegate(None);
-                channel.closeChannel();
-            }
+            release(&channel);
             delegate.close();
         }
     }
@@ -465,6 +459,19 @@ impl BluetoothThread {
         }
         if let Some(notification) = self.connect_notification.take() {
             unsafe { notification.unregister() };
+        }
+    }
+}
+
+/// Stops `channel` calling its delegate, and closes it if it's open.
+/// `closeChannel` closes the Device's RFCOMM channel with the same id whatever
+/// the state of this object, so on one that's closed, or never finished
+/// opening, it could only close another.
+fn release(channel: &IOBluetoothRFCOMMChannel) {
+    unsafe {
+        channel.setDelegate(None);
+        if channel.isOpen() {
+            channel.closeChannel();
         }
     }
 }
