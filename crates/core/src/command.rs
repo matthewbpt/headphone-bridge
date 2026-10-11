@@ -14,7 +14,8 @@ pub enum Command {
 }
 
 /// Why a command was rejected before anything was sent to a Device.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CommandError {
     /// No Connected Device has that address.
     UnknownDevice,
