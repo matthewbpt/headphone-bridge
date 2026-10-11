@@ -51,6 +51,8 @@ pub struct Frame {
     /// The sequence number, 0 or 1.
     pub seq: u8,
     pub data: Vec<u8>,
+    /// The whole frame as it appeared on the wire.
+    pub raw: Vec<u8>,
 }
 
 pub fn encode(data_type: DataType, seq: u8, data: &[u8]) -> Vec<u8> {
@@ -101,7 +103,7 @@ impl Deframer {
                     .iter()
                     .rposition(|&b| b == START)
                     .unwrap();
-            frames.extend(decode(&self.buffer[last_start + 1..end]));
+            frames.extend(decode(&self.buffer[last_start..=end]));
             consumed = end + 1;
         }
         if self.buffer[consumed..].iter().all(|&b| b != START) {
@@ -112,8 +114,9 @@ impl Deframer {
     }
 }
 
-/// Decodes the bytes between a start and an end byte.
-fn decode(escaped: &[u8]) -> Option<Frame> {
+/// Decodes a frame from its start byte to its end byte.
+fn decode(raw: &[u8]) -> Option<Frame> {
+    let escaped = &raw[1..raw.len() - 1];
     let mut body = Vec::with_capacity(escaped.len());
     let mut bytes = escaped.iter();
     while let Some(&byte) = bytes.next() {
@@ -139,5 +142,6 @@ fn decode(escaped: &[u8]) -> Option<Frame> {
         data_type: DataType::from_byte(body[0]),
         seq: body[1],
         data: data.to_vec(),
+        raw: raw.to_vec(),
     })
 }

@@ -27,8 +27,8 @@ HEADER = """\
 # protocol info reply is the XM5 fw 1.1.3 one; the support function list is
 # made up (battery 0x20, NC/ASM 0x68). Battery: 70 %, then a notification of 69 %."""
 
-# (direction, type, seq, data, comment); the Model is identified by the
-# model name reply, so later records carry the Model's slug.
+# (direction, type, seq, data, comment); the model name reply identifies the
+# Model, so it and later records carry the Model's slug, as the frame log does.
 STEPS = [
     (">>", MDR, 0, "00 00", "GET protocol info"),
     ("<<", ACK, 1, "", None),
@@ -49,7 +49,7 @@ STEPS = [
     ("<<", MDR, 0, "25 00 45 00", None),
     (">>", ACK, 1, "", None),
 ]
-IDENTIFIED_AT = 7
+IDENTIFIED_AT = 6
 
 print(HEADER)
 for i, (direction, data_type, seq, data, comment) in enumerate(STEPS):

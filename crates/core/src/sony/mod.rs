@@ -15,7 +15,8 @@ use uuid::{uuid, Uuid};
 use crate::device_list::Battery;
 use crate::model::Model;
 pub use crate::update::Update;
-use frame::{encode, DataType, Deframer, Frame};
+pub use frame::Frame;
+use frame::{encode, DataType, Deframer};
 
 /// The vendor's v2 RFCOMM service.
 pub const SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
@@ -86,28 +87,27 @@ impl Session {
         std::mem::take(&mut self.outgoing)
     }
 
-    /// Feeds bytes received from the Device, in chunks of any size.
-    pub fn receive(&mut self, bytes: &[u8]) -> Vec<Update> {
-        let mut updates = Vec::new();
-        for frame in self.deframer.push(bytes) {
-            match frame.data_type {
-                DataType::Ack => self.acknowledged(&frame),
-                DataType::Mdr | DataType::MdrNo2 => {
-                    self.outgoing
-                        .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
-                    if frame.data_type == DataType::Mdr {
-                        if let Some(update) = self.message(&frame.data) {
-                            if update == Update::Unsupported {
-                                return vec![update];
-                            }
-                            updates.push(update);
-                        }
-                    }
+    /// Feeds bytes received from the Device, in chunks of any size, and
+    /// returns the whole frames they complete.
+    pub fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
+        self.deframer.push(bytes)
+    }
+
+    /// Handles a frame received from the Device. Any frames to send in
+    /// response, such as its ACK, are then in [`Session::outgoing`].
+    pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
+        match frame.data_type {
+            DataType::Ack => self.acknowledged(frame),
+            DataType::Mdr | DataType::MdrNo2 => {
+                self.outgoing
+                    .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
+                if frame.data_type == DataType::Mdr {
+                    return self.message(&frame.data).into_iter().collect();
                 }
-                DataType::Other(_) => {}
             }
+            DataType::Other(_) => {}
         }
-        updates
+        Vec::new()
     }
 
     fn acknowledged(&mut self, ack: &Frame) {
@@ -142,9 +142,11 @@ impl Session {
                 if self.identified =>
             {
                 let functions: Vec<u8> = functions
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .take(count as usize)
-                    .map(|function| function[0])
+                    .map(|[function, _]| *function)
                     .collect();
                 let has = |function| functions.contains(&function);
                 let battery = if !has(function::BATTERY_LEVEL_INDICATOR)

@@ -14,10 +14,83 @@
 //!
 //! Lines starting with `#` are comments. `crates/core/tests/fixtures/README.md`
 //! describes the fixture files.
+//!
+//! The frame log itself is a developer setting, off by default, switched with
+//! [`crate::Command::SetFrameLog`]. While it's on, every control link session
+//! records each frame it sends or receives, and a background thread appends
+//! the records to the file, so sessions never wait on disk.
 
 use std::fmt;
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufWriter, Write};
+use std::path::Path;
 use std::str::FromStr;
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// The frame log setting. Clones share it, so switching it on or off reaches
+/// every session, including ones already running.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FrameLog {
+    writer: Arc<Mutex<Option<Writer>>>,
+}
+
+#[derive(Debug)]
+struct Writer {
+    records: mpsc::Sender<FrameRecord>,
+    thread: JoinHandle<()>,
+}
+
+impl FrameLog {
+    /// Switches the log on, appending to `path`, or switches it to `path` if
+    /// it was on already.
+    pub(crate) fn start(&self, path: &Path) -> io::Result<()> {
+        self.stop();
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+        writeln!(file, "# Headphone Bridge frame log")?;
+        let (records, queue) = mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("frame-log".into())
+            .spawn(move || write_records(file, queue))?;
+        *self.writer.lock().unwrap() = Some(Writer { records, thread });
+        Ok(())
+    }
+
+    /// Switches the log off, once every record so far is written.
+    pub(crate) fn stop(&self) {
+        let writer = self.writer.lock().unwrap().take();
+        if let Some(Writer { records, thread }) = writer {
+            drop(records);
+            let _ = thread.join();
+        }
+    }
+
+    /// Records a frame, timestamped now, if the log is on.
+    pub(crate) fn record(&self, model: &str, direction: Direction, bytes: &[u8]) {
+        if let Some(writer) = &*self.writer.lock().unwrap() {
+            let _ = writer.records.send(FrameRecord {
+                timestamp: SystemTime::now(),
+                model: model.to_owned(),
+                direction,
+                bytes: bytes.to_vec(),
+            });
+        }
+    }
+}
+
+/// Appends records until the log is switched off, flushing whenever the queue
+/// runs dry. A failed write loses records, never stalls a session.
+fn write_records(file: File, queue: mpsc::Receiver<FrameRecord>) {
+    let mut out = BufWriter::new(file);
+    while let Ok(record) = queue.recv() {
+        let _ = writeln!(out, "{record}");
+        for record in queue.try_iter() {
+            let _ = writeln!(out, "{record}");
+        }
+        let _ = out.flush();
+    }
+}
 
 /// One frame sent or received on a control link.
 #[derive(Debug, Clone, PartialEq, Eq)]

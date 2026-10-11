@@ -1,8 +1,11 @@
 mod support;
 
+use std::path::PathBuf;
+
+use headphone_bridge_core::frame_log::FrameRecord;
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    AmbientLevelRange, Battery, Capabilities, Core, DeviceState, Model, NoiseControlMode,
+    AmbientLevelRange, Battery, Capabilities, Command, Core, DeviceState, Model, NoiseControlMode,
     NotAttachedReason,
 };
 use support::{
@@ -241,6 +244,36 @@ async fn a_dropped_link_detaches_the_xm5() {
         }
     );
     assert_eq!((device.model, device.battery), (None, None));
+}
+
+#[tokio::test]
+async fn every_frame_of_an_attach_is_frame_logged_like_the_fixture() {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("xm5_attach.frames");
+    let _ = std::fs::remove_file(&path);
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    core.command(Command::SetFrameLog(Some(path.clone())))
+        .await
+        .unwrap();
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    let records = fixture("wh-1000xm5/attach");
+
+    replay(&mut link, &records).await;
+    wait_for(&core, |list| {
+        list.devices[0].battery == Some(Battery::Headphones { level: 69 })
+    })
+    .await;
+    core.command(Command::SetFrameLog(None)).await.unwrap();
+
+    let log = FrameRecord::parse_all(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let summary = |records: &[FrameRecord]| -> Vec<_> {
+        records
+            .iter()
+            .map(|r| (r.model.clone(), r.direction, r.bytes.clone()))
+            .collect()
+    };
+    assert_eq!(summary(&log), summary(&records));
 }
 
 /// An ACK with sequence number 0: for a frame sent with 1.

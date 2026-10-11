@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 
 pub use command::{Command, CommandError, NoiseControlMode};
 pub use device_list::{Battery, Device, DeviceList, DeviceState, NotAttachedReason};
+use frame_log::{Direction, FrameLog};
 pub use model::{AmbientLevelRange, Capabilities, Model};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
@@ -42,6 +43,7 @@ impl Core {
             devices: BTreeMap::new(),
             link_events,
             next_attempt: 0,
+            frame_log: FrameLog::default(),
         };
         tokio::spawn(state.run(commands_rx, link_events_rx));
         Core {
@@ -80,6 +82,7 @@ struct State<P> {
     /// Tells apart link sessions, so events from a session that has been
     /// replaced are ignored.
     next_attempt: u64,
+    frame_log: FrameLog,
 }
 
 /// A Connected Device and its control link session, if any.
@@ -191,6 +194,7 @@ impl<P: Platform> State<P> {
         self.next_attempt += 1;
         let platform = self.platform.clone();
         let events = self.link_events.clone();
+        let frame_log = self.frame_log.clone();
         let address = address.clone();
         let task = tokio::spawn(async move {
             let send = |kind| {
@@ -207,8 +211,8 @@ impl<P: Platform> State<P> {
             let on_update = |update| send(LinkEventKind::Update(update));
             let reason = match platform.open_control_link(&address, service).await {
                 Ok(link) => match vendor {
-                    Vendor::Samsung => run_samsung_session(link, on_update).await,
-                    Vendor::Sony => run_sony_session(link, on_update).await,
+                    Vendor::Samsung => run_samsung_session(link, frame_log, on_update).await,
+                    Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
                 },
                 Err(failure) => failure.into(),
             };
@@ -250,8 +254,18 @@ impl<P: Platform> State<P> {
         }
     }
 
-    fn command(&mut self, _command: Command) -> Result<(), CommandError> {
-        Err(CommandError::UnknownDevice)
+    fn command(&mut self, command: Command) -> Result<(), CommandError> {
+        match command {
+            Command::SetFrameLog(Some(path)) => self
+                .frame_log
+                .start(&path)
+                .map_err(|error| CommandError::FrameLogUnavailable(error.to_string())),
+            Command::SetFrameLog(None) => {
+                self.frame_log.stop();
+                Ok(())
+            }
+            _ => Err(CommandError::UnknownDevice),
+        }
     }
 
     fn publish(&self) {
@@ -274,19 +288,33 @@ impl<P: Platform> State<P> {
 /// Device turns out to be an unsupported Model. Returns why it ended.
 async fn run_samsung_session(
     mut link: ControlLink,
+    frame_log: FrameLog,
     mut on_update: impl FnMut(Update),
 ) -> NotAttachedReason {
-    if link.outgoing.send(samsung::Session::handshake()).is_err() {
+    // Frames are logged under the vendor's slug until the Model is identified.
+    let mut slug = "samsung";
+    let handshake = samsung::Session::handshake();
+    frame_log.record(slug, Direction::Sent, &handshake);
+    if link.outgoing.send(handshake).is_err() {
         return NotAttachedReason::LinkDropped;
     }
     let mut session = samsung::Session::default();
     while let Some(bytes) = link.incoming.recv().await {
-        for update in session.receive(&bytes) {
-            let unsupported = update == Update::Unsupported;
-            on_update(update);
-            if unsupported {
-                // Dropping the link Detaches without writing anything more.
-                return NotAttachedReason::UnsupportedModel;
+        for frame in session.deframe(&bytes) {
+            let updates = session.receive(&frame);
+            for update in &updates {
+                if let Update::Identified(model) = update {
+                    slug = model.slug();
+                }
+            }
+            frame_log.record(slug, Direction::Received, &frame.raw);
+            for update in updates {
+                let unsupported = update == Update::Unsupported;
+                on_update(update);
+                if unsupported {
+                    // Dropping the link Detaches without writing anything more.
+                    return NotAttachedReason::UnsupportedModel;
+                }
             }
         }
     }
@@ -297,30 +325,42 @@ async fn run_samsung_session(
 /// Device turns out to be an unsupported Model. Returns why it ended.
 async fn run_sony_session(
     mut link: ControlLink,
+    frame_log: FrameLog,
     mut on_update: impl FnMut(Update),
 ) -> NotAttachedReason {
+    // Frames are logged under the vendor's slug until the Model is identified.
+    let mut slug = "sony";
     let mut session = sony::Session::new();
-    let write = |session: &mut sony::Session| {
-        session
-            .outgoing()
-            .into_iter()
-            .all(|frame| link.outgoing.send(frame).is_ok())
+    // Every frame the session sends goes out, and into the log, through here.
+    let write = |session: &mut sony::Session, slug: &str| {
+        session.outgoing().into_iter().all(|frame| {
+            frame_log.record(slug, Direction::Sent, &frame);
+            link.outgoing.send(frame).is_ok()
+        })
     };
-    if !write(&mut session) {
+    if !write(&mut session, slug) {
         return NotAttachedReason::LinkDropped;
     }
     while let Some(bytes) = link.incoming.recv().await {
-        let updates = session.receive(&bytes);
-        if updates.contains(&Update::Unsupported) {
-            on_update(Update::Unsupported);
-            // Dropping the link Detaches without writing anything more.
-            return NotAttachedReason::UnsupportedModel;
+        for frame in session.deframe(&bytes) {
+            let updates = session.receive(&frame);
+            for update in &updates {
+                if let Update::Identified(model) = update {
+                    slug = model.slug();
+                }
+            }
+            frame_log.record(slug, Direction::Received, &frame.raw);
+            if updates.contains(&Update::Unsupported) {
+                on_update(Update::Unsupported);
+                // Dropping the link Detaches without writing anything more.
+                return NotAttachedReason::UnsupportedModel;
+            }
+            // Write first, so ACKs are out before the update is reported.
+            if !write(&mut session, slug) {
+                return NotAttachedReason::LinkDropped;
+            }
+            updates.into_iter().for_each(&mut on_update);
         }
-        // Write first, so ACKs are out before the update is reported.
-        if !write(&mut session) {
-            return NotAttachedReason::LinkDropped;
-        }
-        updates.into_iter().for_each(&mut on_update);
     }
     NotAttachedReason::LinkDropped
 }
