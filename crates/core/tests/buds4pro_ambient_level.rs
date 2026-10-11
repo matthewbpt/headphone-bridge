@@ -119,9 +119,9 @@ async fn an_ack_confirms_the_level_only_when_it_carries_the_one_asked_for() {
         link.written.recv().await.unwrap(),
         [0xfd, 0x04, 0x00, 0x84, 0x00, 0x5c, 0xd7, 0xdd]
     );
-    // No capture shows a Buds4 Pro ACK for AMBIENT_VOLUME. Its NOISE_CONTROLS
-    // ACK carries the applied mode (real-noise-control), so this one is
-    // assumed to carry the applied level. Any other value is only a receipt.
+    // A Buds4 Pro ACKs AMBIENT_VOLUME with the applied level (frame log,
+    // 2026-10-11). An ACK with any other value, such as one for an earlier
+    // set, is only a receipt.
     link.send.send(samsung_frame(0x42, &[0x84, 0x03])).unwrap();
     link.send
         .send(samsung_frame(

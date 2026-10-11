@@ -71,9 +71,10 @@ impl Session {
     }
 
     /// The frames that ask the Device to set the Ambient Level, in the
-    /// Model's own steps. No capture shows how a Buds4 Pro confirms this. It
-    /// is assumed to ACK like a mode set, and like one it is followed by
-    /// `MANAGER_INFO`, whose extended status reports the level.
+    /// Model's own steps. A Buds4 Pro confirms with an ACK carrying the
+    /// applied level, one per set even when sets arrive in quick succession
+    /// (frame log, 2026-10-11). Like a mode set it is followed by
+    /// `MANAGER_INFO`, whose extended status also reports the level.
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
         self.pending_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
