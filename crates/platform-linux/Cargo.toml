@@ -1,0 +1,17 @@
+[package]
+name = "headphone-bridge-platform-linux"
+version = "0.1.0"
+description = "Headphone Bridge's Linux platform adapter: BlueZ and PulseAudio/PipeWire behind the core's platform port"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+headphone-bridge-core = { path = "../core" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio = { workspace = true, features = ["time", "io-util"] }
+uuid.workspace = true
+bluer = { version = "0.17.4", features = ["bluetoothd", "rfcomm"] }
+futures = "0.3"
+libpulse-binding = "2.30"
