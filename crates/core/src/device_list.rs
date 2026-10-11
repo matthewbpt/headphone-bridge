@@ -47,6 +47,23 @@ pub struct Device {
 }
 
 impl Device {
+    /// A Device whose Model isn't known, nor anything it reports: when it is
+    /// first Connected, and again whenever it is Detached.
+    pub(crate) fn unidentified(address: DeviceAddress, name: String, state: DeviceState) -> Device {
+        Device {
+            address,
+            name,
+            model: None,
+            state,
+            capabilities: Capabilities::default(),
+            chosen_mode: None,
+            effective_mode: None,
+            effective_mode_reason: None,
+            ambient_level: None,
+            battery: None,
+        }
+    }
+
     /// Records the mode the Device is applying, and why, if it says. The
     /// reason shows only while the mode differs from the Chosen Mode.
     pub(crate) fn set_effective_mode(

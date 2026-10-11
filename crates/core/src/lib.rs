@@ -123,8 +123,8 @@ struct Tracked {
     session: Option<LinkSession>,
     /// Automatic retries since the Device was last Attached.
     retries: u32,
-    /// When the Device was last Attached, while it is.
-    attached: Option<u64>,
+    /// The Device's place in the order of Attaches, while it is Attached.
+    attach_order: Option<u64>,
 }
 
 /// How long a Device has to identify itself once its control link is open.
@@ -264,22 +264,11 @@ impl<P: Platform> State<P> {
             }
         };
         let mut tracked = Tracked {
-            device: Device {
-                address: identity.address.clone(),
-                name: identity.name,
-                model: None,
-                state,
-                capabilities: Capabilities::default(),
-                chosen_mode: None,
-                effective_mode: None,
-                effective_mode_reason: None,
-                ambient_level: None,
-                battery: None,
-            },
+            device: Device::unidentified(identity.address.clone(), identity.name, state),
             vendor,
             session: None,
             retries: 0,
-            attached: None,
+            attach_order: None,
         };
         if attach {
             tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
@@ -371,7 +360,7 @@ impl<P: Platform> State<P> {
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
                 tracked.retries = 0;
-                tracked.attached = Some(self.next_attach);
+                tracked.attach_order = Some(self.next_attach);
                 self.next_attach += 1;
             }
             // The session ends straight after, with that reason.
@@ -391,20 +380,13 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                *device = Device {
-                    address: device.address.clone(),
-                    name: device.name.clone(),
-                    model: None,
-                    state: DeviceState::NotAttached { reason },
-                    capabilities: Capabilities::default(),
-                    chosen_mode: None,
-                    effective_mode: None,
-                    effective_mode_reason: None,
-                    ambient_level: None,
-                    battery: None,
-                };
+                *device = Device::unidentified(
+                    device.address.clone(),
+                    device.name.clone(),
+                    DeviceState::NotAttached { reason },
+                );
                 tracked.session = None;
-                tracked.attached = None;
+                tracked.attach_order = None;
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -492,14 +474,14 @@ impl<P: Platform> State<P> {
         let playing = self.audio_output.as_ref().filter(|address| {
             self.devices
                 .get(address)
-                .is_some_and(|t| t.attached.is_some())
+                .is_some_and(|t| t.attach_order.is_some())
         });
         if let Some(address) = playing {
             return Some(address.clone());
         }
         self.devices
             .values()
-            .filter_map(|tracked| Some((tracked.attached?, &tracked.device.address)))
+            .filter_map(|tracked| Some((tracked.attach_order?, &tracked.device.address)))
             .max()
             .map(|(_, address)| address.clone())
     }

@@ -22,6 +22,7 @@ impl Model {
         }
     }
 
+    /// The Model's name, as the app shows it.
     pub fn display_name(self) -> &'static str {
         match self {
             Model::GalaxyBuds4Pro => "Galaxy Buds4 Pro",
