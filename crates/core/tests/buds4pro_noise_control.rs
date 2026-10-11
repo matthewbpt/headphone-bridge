@@ -3,8 +3,8 @@ mod support;
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState, NoiseControlMode};
 use support::{
-    buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
-    SAMSUNG_SERVICE,
+    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink,
+    FakeOs, SAMSUNG_SERVICE,
 };
 
 /// `NOISE_CONTROLS` (0x78) with Noise Cancelling (1).
@@ -37,7 +37,8 @@ async fn the_extended_status_reports_the_chosen_mode() {
 }
 
 #[tokio::test]
-async fn setting_a_mode_sends_noise_controls_then_polls_and_the_ack_alone_changes_nothing() {
+async fn setting_a_mode_sends_noise_controls_then_polls_and_an_ack_of_another_mode_changes_nothing()
+{
     let (core, _os, mut link) = attached_buds4pro().await;
 
     core.command(Command::SetNoiseControlMode(
@@ -51,7 +52,8 @@ async fn setting_a_mode_sends_noise_controls_then_polls_and_the_ack_alone_change
     // capture-2: after a set, the Device stayed silent until the next
     // MANAGER_INFO, then confirmed within half a second.
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
-    // A Buds4 Pro ACKs with a result code (0), not the mode: only a receipt.
+    // An ACK carrying a value other than the requested mode (here 0, which
+    // omarchy-buds reads as a result code) is only a receipt.
     link.send.send(samsung_frame(0x42, &[0x78, 0x00])).unwrap();
     // A status that changes the battery shows the ACK has been handled.
     link.send
@@ -216,4 +218,35 @@ async fn a_mode_is_never_sent_to_an_unsupported_model() {
         .await;
 
     assert_eq!(result, Err(CommandError::UnsupportedModel));
+}
+
+#[tokio::test]
+async fn real_buds4pro_sets_are_confirmed_by_their_acks() {
+    use headphone_bridge_core::frame_log::Direction;
+    use NoiseControlMode::*;
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let mut link = os.next_link().await;
+    // The Device ACKs each set with `78 <applied mode>` and sends nothing
+    // else, so the ACK must confirm it.
+    let records = fixture("galaxy-buds4-pro/real-noise-control");
+    let set_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(3) == Some(&0x78))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(set_at.len(), 2);
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    wait_for(&core, |list| list.devices[0].chosen_mode == Some(Off)).await;
+    for (i, mode) in [Ambient, NoiseCancelling].into_iter().enumerate() {
+        core.command(Command::SetNoiseControlMode(buds4pro().address, mode))
+            .await
+            .unwrap();
+        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[set_at[i]..end]).await;
+        wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;
+    }
 }

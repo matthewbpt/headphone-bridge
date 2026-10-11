@@ -108,7 +108,7 @@ async fn a_level_is_not_sent_before_the_model_and_its_capabilities_are_known() {
 }
 
 #[tokio::test]
-async fn an_ack_alone_does_not_change_the_level() {
+async fn an_ack_confirms_the_level_only_when_it_carries_the_one_asked_for() {
     let (core, _os, mut link) = attached_buds4pro().await;
     wait_for(&core, |list| list.devices[0].ambient_level == Some(2)).await;
 
@@ -119,16 +119,16 @@ async fn an_ack_alone_does_not_change_the_level() {
         link.written.recv().await.unwrap(),
         [0xfd, 0x04, 0x00, 0x84, 0x00, 0x5c, 0xd7, 0xdd]
     );
-    // No capture shows a Buds4 Pro ACK for AMBIENT_VOLUME; its NOISE_CONTROLS
-    // ACK carries a result code (0), so an ACK is only a receipt.
-    link.send.send(samsung_frame(0x42, &[0x84, 0x00])).unwrap();
+    // No capture shows a Buds4 Pro ACK for AMBIENT_VOLUME. Its NOISE_CONTROLS
+    // ACK carries the applied mode (real-noise-control), so this one is
+    // assumed to carry the applied level. Any other value is only a receipt.
+    link.send.send(samsung_frame(0x42, &[0x84, 0x03])).unwrap();
     link.send
         .send(samsung_frame(
             0x60,
             &[0x01, 0x50, 0x50, 0x01, 0x01, 0x11, 0x00, 0x00],
         ))
         .unwrap();
-
     let list = wait_for(&core, |list| {
         matches!(
             list.devices[0].battery,
@@ -137,6 +137,10 @@ async fn an_ack_alone_does_not_change_the_level() {
     })
     .await;
     assert_eq!(list.devices[0].ambient_level, Some(2));
+
+    link.send.send(samsung_frame(0x42, &[0x84, 0x00])).unwrap();
+
+    wait_for(&core, |list| list.devices[0].ambient_level == Some(0)).await;
 }
 
 #[tokio::test]

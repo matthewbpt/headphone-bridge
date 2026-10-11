@@ -17,6 +17,7 @@ use frame::{encode, Deframer};
 pub const SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
 
 mod id {
+    pub const ACK: u8 = 66;
     pub const STATUS_UPDATED: u8 = 96;
     pub const EXTENDED_STATUS_UPDATED: u8 = 97;
     pub const NOISE_CONTROLS_UPDATE: u8 = 119;
@@ -42,6 +43,8 @@ pub struct Session {
     buds: Buds,
     /// The mode the app last asked for, until the Device confirms it.
     pending_mode: Option<NoiseControlMode>,
+    /// The Ambient Level the app last asked for, until the Device confirms it.
+    pending_level: Option<u8>,
     /// Whether a Chosen Mode has been reported yet.
     chosen_known: bool,
 }
@@ -54,10 +57,11 @@ impl Session {
         encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
     }
 
-    /// The frames that ask the Device to switch to `mode`, one per write. On
-    /// a Buds4 Pro the ACK is only a receipt, and the confirming
-    /// `NOISE_CONTROLS_UPDATE` may not come until the app next sends
-    /// `MANAGER_INFO` (capture-2), so a set is followed by one as a poll.
+    /// The frames that ask the Device to switch to `mode`, one per write. A
+    /// Buds4 Pro confirms with an ACK carrying the applied mode
+    /// (real-noise-control). In capture-2 it sent no ACK, and confirmed with
+    /// a `NOISE_CONTROLS_UPDATE` only after the next `MANAGER_INFO`, so a set
+    /// is followed by one as a poll.
     pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) -> Vec<Vec<u8>> {
         self.pending_mode = Some(mode);
         vec![
@@ -67,10 +71,11 @@ impl Session {
     }
 
     /// The frames that ask the Device to set the Ambient Level, in the
-    /// Model's own steps. No capture shows how a Buds4 Pro confirms this, so
-    /// like a mode set it is followed by `MANAGER_INFO`, whose extended status
-    /// reports the level.
+    /// Model's own steps. No capture shows how a Buds4 Pro confirms this. It
+    /// is assumed to ACK like a mode set, and like one it is followed by
+    /// `MANAGER_INFO`, whose extended status reports the level.
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
+        self.pending_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
     }
 
@@ -139,6 +144,24 @@ impl Session {
                 updates.extend(self.ambient_level(p.get(23)));
             }
             id::AMBIENT_VOLUME => return self.ambient_level(p.first()).into_iter().collect(),
+            // An ACK is `<id of the message> <value>`. It confirms a set only
+            // when the value is the one the app asked for: other firmware may
+            // send a result code there, and then the ACK is only a receipt.
+            id::ACK if self.model.is_some() && p.len() >= 2 => {
+                return match p[0] {
+                    id::NOISE_CONTROLS => match noise_control_mode(p[1]) {
+                        Some(mode) if self.pending_mode == Some(mode) => {
+                            vec![self.mode_update(mode, 0x11, true)]
+                        }
+                        _ => Vec::new(),
+                    },
+                    id::AMBIENT_VOLUME if self.pending_level == Some(p[1]) => {
+                        self.pending_level = None;
+                        self.ambient_level(p.get(1)).into_iter().collect()
+                    }
+                    _ => Vec::new(),
+                };
+            }
             id::NOISE_CONTROLS_UPDATE if self.model.is_some() && !p.is_empty() => {
                 let Some(mode) = noise_control_mode(p[0]) else {
                     return Vec::new();
