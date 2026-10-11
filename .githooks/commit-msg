@@ -1,0 +1,64 @@
+#!/bin/sh
+# Checks a commit message against Conventional Commits, as set out in
+# docs/agents/commits.md. Git runs it as the commit-msg hook once
+# `git config core.hooksPath .githooks` is set; CI runs it on every commit in a PR.
+#
+# Usage: commit-msg <file containing the message>
+
+set -eu
+
+msg_file=${1:?usage: commit-msg <message-file>}
+
+types='feat|fix|refactor|perf|test|docs|build|ci|chore|style|revert'
+pattern="^($types)(\([a-z0-9][a-z0-9-]*\))?!?: [^ ]"
+max_header=72
+
+# Git hands the hook the message before cleanup: drop comment lines, stop at the
+# scissors line that `git commit -v` adds, and skip leading blank lines.
+lines=$(awk '
+	/^# -+ >8 -+$/ { exit }
+	/^#/ { next }
+	!started && /^[[:space:]]*$/ { next }
+	{ started = 1; print }
+' "$msg_file")
+
+header=$(printf '%s\n' "$lines" | sed -n '1p')
+second=$(printf '%s\n' "$lines" | sed -n '2p')
+
+# An empty message: git aborts the commit itself.
+[ -n "$header" ] || exit 0
+
+# Messages git writes itself.
+case $header in
+	'Merge '* | 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) exit 0 ;;
+esac
+
+problems=''
+if ! printf '%s\n' "$header" | grep -Eq "$pattern"; then
+	problems="$problems
+  - the header must be '<type>(<optional scope>)!: <description>'
+    with type one of: $(printf '%s' "$types" | sed 's/|/, /g')"
+fi
+if [ "${#header}" -gt "$max_header" ]; then
+	problems="$problems
+  - the header is ${#header} characters; keep it to $max_header"
+fi
+case $header in
+	*.) problems="$problems
+  - drop the trailing period from the description" ;;
+esac
+if [ -n "$second" ]; then
+	problems="$problems
+  - leave a blank line between the header and the body"
+fi
+
+[ -z "$problems" ] && exit 0
+
+{
+	printf 'commit-msg: this message does not follow Conventional Commits:\n\n'
+	printf '  %s\n' "$header"
+	printf '%s\n\n' "$problems"
+	printf 'Example: fix(macos): let a Device settle before opening its control link\n'
+	printf 'See docs/agents/commits.md.\n'
+} >&2
+exit 1
