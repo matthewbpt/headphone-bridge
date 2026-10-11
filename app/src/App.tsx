@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import {
   reasonText,
@@ -10,6 +10,7 @@ import {
 } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
+import { ModeIcon } from "./ModeIcon";
 
 export function App() {
   return (
@@ -98,6 +99,32 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 }
 
 function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
+  // The mode asked for, until the next snapshot moves the Chosen Mode. Held
+  // here rather than in the selector, so the rest of the Device view can
+  // treat a pending mode as Chosen.
+  const [pendingMode, setPendingMode] = useState<NoiseControlMode | null>(null);
+  const [modeError, setModeError] = useState<string | null>(null);
+
+  useEffect(() => setPendingMode(null), [device.chosenMode]);
+  useEffect(() => {
+    if (pendingMode === null) return;
+    const timer = setTimeout(() => {
+      setPendingMode(null);
+      setModeError(`${labels.modes[pendingMode]} wasn't confirmed by the Device`);
+    }, PENDING_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [pendingMode, labels]);
+
+  const chooseMode = (mode: NoiseControlMode) => {
+    setModeError(null);
+    setPendingMode(mode);
+    setNoiseControlMode(device.address, mode).catch((e) => {
+      setPendingMode(null);
+      setModeError(`Couldn't set ${labels.modes[mode]}: ${e}`);
+    });
+  };
+
+  const attached = device.state.kind === "attached";
   return (
     <>
       <div>{stateText(device)}</div>
@@ -107,67 +134,84 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
       {device.state.kind === "notAttached" && device.state.reason.kind !== "unsupportedModel" && (
         <RetryButton address={device.address} />
       )}
-      {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
-        <NoiseControlModeButtons device={device} labels={labels} />
+      {attached && device.capabilities.noiseControlModes.length > 0 && (
+        <>
+          <NoiseControlModeSelector
+            device={device}
+            pending={pendingMode}
+            labels={labels}
+            onChoose={chooseMode}
+          />
+          {device.effectiveModeReason && (
+            <p className="hint">{labels.hints[device.effectiveModeReason]}</p>
+          )}
+          {modeError && (
+            <p className="error" role="alert">
+              {modeError}
+            </p>
+          )}
+        </>
       )}
-      {device.state.kind === "attached" && device.capabilities.ambientLevel && (
+      {attached && device.capabilities.ambientLevel && (
         <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
-      )}
-      {device.state.kind === "attached" && device.effectiveMode && (
-        <div>Applying: {labels.modes[device.effectiveMode]}</div>
       )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
   );
 }
 
+/**
+ * The window's mode order, from hearing everything to hearing nothing. The
+ * core's Capability order is its own; the window shows this one.
+ */
+const MODE_ORDER: NoiseControlMode[] = ["off", "ambient", "adaptive", "noiseCancelling"];
+
 /** How long a pressed button stays pending if the Device never confirms. */
 const PENDING_TIMEOUT_MS = 10_000;
 
-function NoiseControlModeButtons({ device, labels }: { device: Device; labels: Labels }) {
-  // The mode asked for, until the next snapshot moves the Chosen Mode.
-  const [pending, setPending] = useState<NoiseControlMode | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => setPending(null), [device.chosenMode]);
-  useEffect(() => {
-    if (pending === null) return;
-    const timer = setTimeout(() => {
-      setPending(null);
-      setError(`${labels.modes[pending]} wasn't confirmed by the Device`);
-    }, PENDING_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [pending, labels]);
-
-  const choose = (mode: NoiseControlMode) => {
-    setError(null);
-    setPending(mode);
-    setNoiseControlMode(device.address, mode).catch((e) => {
-      setPending(null);
-      setError(`Couldn't set ${labels.modes[mode]}: ${e}`);
-    });
-  };
-
+/**
+ * Round icon buttons joined by a track, after the Galaxy Buds app. The
+ * Chosen Mode is filled; a pending mode takes the fill, dimmed and ringed,
+ * until the Device confirms it.
+ */
+function NoiseControlModeSelector({
+  device,
+  pending,
+  labels,
+  onChoose,
+}: {
+  device: Device;
+  pending: NoiseControlMode | null;
+  labels: Labels;
+  onChoose: (mode: NoiseControlMode) => void;
+}) {
+  const modes = MODE_ORDER.filter((mode) => device.capabilities.noiseControlModes.includes(mode));
+  const filled = pending ?? device.chosenMode;
   return (
-    <div>
-      <div role="radiogroup" aria-label="Noise Control Mode">
-        {device.capabilities.noiseControlModes.map((mode) => (
-          <button
-            key={mode}
-            role="radio"
-            aria-checked={device.chosenMode === mode}
-            aria-busy={pending === mode}
-            disabled={pending !== null || device.chosenMode === mode}
-            onClick={() => choose(mode)}
-            style={{ fontWeight: device.chosenMode === mode ? "bold" : "normal" }}
-          >
-            {labels.modes[mode]}
-            {pending === mode && " …"}
-          </button>
-        ))}
-      </div>
-      {device.effectiveModeReason && <div>{labels.hints[device.effectiveModeReason]}</div>}
-      {error && <div role="alert">{error}</div>}
+    <div
+      className="modes"
+      role="radiogroup"
+      aria-label="Noise Control Mode"
+      style={{ "--count": modes.length } as CSSProperties}
+    >
+      <div className="modes__track" aria-hidden />
+      {modes.map((mode) => (
+        <button
+          key={mode}
+          className="mode"
+          role="radio"
+          data-filled={filled === mode}
+          aria-checked={device.chosenMode === mode}
+          aria-busy={pending === mode}
+          disabled={pending !== null || device.chosenMode === mode}
+          onClick={() => onChoose(mode)}
+        >
+          <span className="mode__circle">
+            <ModeIcon mode={mode} />
+          </span>
+          <span className="mode__label">{labels.modes[mode]}</span>
+        </button>
+      ))}
     </div>
   );
 }
