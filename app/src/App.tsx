@@ -1,7 +1,17 @@
 import type { Battery, Device, Model, NotAttachedReason } from "./deviceList";
 import { useDeviceList } from "./deviceList";
+import { FrameLogSetting } from "./FrameLogSetting";
 
 export function App() {
+  return (
+    <>
+      <DeviceListView />
+      <FrameLogSetting />
+    </>
+  );
+}
+
+function DeviceListView() {
   const deviceList = useDeviceList();
 
   if (deviceList === null) return null;
