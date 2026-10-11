@@ -236,9 +236,7 @@ impl<P: Platform> State<P> {
                     Vendor::Samsung => {
                         run_samsung_session(link, commands_rx, frame_log, on_update).await
                     }
-                    Vendor::Sony => {
-                        run_sony_session(link, commands_rx, frame_log, on_update).await
-                    }
+                    Vendor::Sony => run_sony_session(link, commands_rx, frame_log, on_update).await,
                 },
                 Err(failure) => failure.into(),
             };

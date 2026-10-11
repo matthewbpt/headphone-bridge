@@ -47,7 +47,9 @@ async fn setting_a_mode_resends_focus_on_voice_and_level_and_waits_for_the_devic
     // The ACK is only a receipt. A battery notification after it shows it
     // has been handled.
     link.send.send(ACK_SEQ_0.to_vec()).unwrap();
-    link.send.send(sony_frame(0, &[0x25, 0x00, 68, 0x00])).unwrap();
+    link.send
+        .send(sony_frame(0, &[0x25, 0x00, 68, 0x00]))
+        .unwrap();
     let list = wait_for(&core, |list| {
         list.devices[0].battery == Some(Battery::Headphones { level: 68 })
     })
@@ -76,7 +78,9 @@ async fn setting_a_level_resends_the_mode_and_focus_on_voice_and_waits_for_the_d
         sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
     );
     link.send.send(ACK_SEQ_0.to_vec()).unwrap();
-    link.send.send(sony_frame(0, &[0x25, 0x00, 68, 0x00])).unwrap();
+    link.send
+        .send(sony_frame(0, &[0x25, 0x00, 68, 0x00]))
+        .unwrap();
     let list = wait_for(&core, |list| {
         list.devices[0].battery == Some(Battery::Headphones { level: 68 })
     })
