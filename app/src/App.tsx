@@ -68,20 +68,23 @@ function DevicePills({
 }) {
   return (
     <div className="pills" role="tablist" aria-label="Devices">
-      {devices.map((device) => (
-        <button
-          key={device.address}
-          className="pill"
-          role="tab"
-          aria-selected={device === selected}
-          onClick={() => onPick(device.address)}
-          title={device.address === primary ? "Primary Device" : undefined}
-        >
-          {device.address === primary && <span className="pill__primary" aria-hidden />}
-          {device.name}
-          {device.address === primary && <span className="visually-hidden"> (Primary)</span>}
-        </button>
-      ))}
+      {devices.map((device) => {
+        const isPrimary = device.address === primary;
+        return (
+          <button
+            key={device.address}
+            className="pill"
+            role="tab"
+            aria-selected={device === selected}
+            onClick={() => onPick(device.address)}
+            title={isPrimary ? "Primary Device" : undefined}
+          >
+            {isPrimary && <span className="pill__primary" aria-hidden />}
+            {device.name}
+            {isPrimary && <span className="visually-hidden"> (Primary)</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
