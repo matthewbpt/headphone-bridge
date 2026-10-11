@@ -111,15 +111,11 @@ function GenericHeadphones() {
   );
 }
 
-/** At or below this percentage a battery glyph is drawn as low. */
-const LOW_BATTERY = 20;
-
 /** A small battery filled to `level`, empty while the level is unknown. */
 export function BatteryGlyph({ level }: { level: number | null }) {
   const fill = level === null ? 0 : Math.max(1, (12 * level) / 100);
-  const low = level !== null && level <= LOW_BATTERY;
   return (
-    <svg className={low ? "battery-glyph battery-glyph--low" : "battery-glyph"} viewBox="0 0 18 10" aria-hidden>
+    <svg className="battery-glyph" viewBox="0 0 18 10" aria-hidden>
       <rect x="0.6" y="0.6" width="14.8" height="8.8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
       <rect x="16" y="3.2" width="1.6" height="3.6" rx="0.8" fill="currentColor" />
       <rect className="battery-glyph__fill" x="2" y="2" width={fill} height="6" rx="1" />
