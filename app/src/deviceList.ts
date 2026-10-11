@@ -41,6 +41,7 @@ export type NotAttachedReason =
   | { kind: "serviceNotFound" }
   | { kind: "deviceNotConnected" }
   | { kind: "linkDropped" }
+  | { kind: "noResponse" }
   | { kind: "other"; message: string };
 
 export type NoiseControlMode = "off" | "noiseCancelling" | "ambient" | "adaptive";
@@ -61,6 +62,7 @@ export type Battery =
 export type CommandError =
   | "unknownDevice"
   | "notAttached"
+  | "unsupportedModel"
   | "missingCapability"
   | "outOfRange"
   | { frameLogUnavailable: string };
@@ -68,6 +70,11 @@ export type CommandError =
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
   return invoke("set_noise_control_mode", { address, mode });
+}
+
+/** Tries again to Attach a Connected Device that isn't Attached. */
+export function retryAttach(address: string): Promise<void> {
+  return invoke("retry_attach", { address });
 }
 
 /** Asks the Device to set the Ambient Level, in the Model's own steps. */

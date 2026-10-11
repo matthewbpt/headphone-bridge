@@ -7,7 +7,7 @@ import type {
   NoiseControlMode,
   NotAttachedReason,
 } from "./deviceList";
-import { setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
+import { retryAttach, setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
@@ -48,6 +48,9 @@ function DeviceView({ device }: { device: Device }) {
       <strong>{device.name}</strong>
       {device.model && <div>{MODEL_NAMES[device.model]}</div>}
       <div>{stateText(device)}</div>
+      {device.state.kind === "notAttached" && device.state.reason.kind !== "unsupportedModel" && (
+        <RetryButton address={device.address} />
+      )}
       {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
         <NoiseControlModeButtons device={device} />
       )}
@@ -220,9 +223,28 @@ function reasonText(reason: NotAttachedReason): string {
       return "device not connected";
     case "linkDropped":
       return "control link dropped";
+    case "noResponse":
+      return "the device didn't respond";
     case "other":
       return reason.message;
   }
+}
+
+function RetryButton({ address }: { address: string }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <button
+        onClick={() => {
+          setError(null);
+          retryAttach(address).catch((e) => setError(`Couldn't retry: ${e}`));
+        }}
+      >
+        Retry
+      </button>
+      {error && <div role="alert">{error}</div>}
+    </div>
+  );
 }
 
 function BatteryView({ battery }: { battery: Battery }) {

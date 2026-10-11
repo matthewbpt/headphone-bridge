@@ -215,5 +215,5 @@ async fn a_mode_is_never_sent_to_an_unsupported_model() {
         ))
         .await;
 
-    assert_eq!(result, Err(CommandError::NotAttached));
+    assert_eq!(result, Err(CommandError::UnsupportedModel));
 }

@@ -80,6 +80,8 @@ pub enum NotAttachedReason {
     DeviceNotConnected,
     /// The control link closed while Attached.
     LinkDropped,
+    /// The control link opened, but the Device didn't identify itself in time.
+    NoResponse,
     Other(String),
 }
 

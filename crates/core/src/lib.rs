@@ -13,7 +13,9 @@ mod sony;
 mod update;
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
@@ -90,7 +92,42 @@ struct State<P> {
 /// A Connected Device and its control link session, if any.
 struct Tracked {
     device: Device,
+    vendor: Vendor,
+    /// Includes a session waiting to retry.
     session: Option<LinkSession>,
+    /// Automatic retries since the Device was last Attached.
+    retries: u32,
+}
+
+/// How long a Device has to identify itself once its control link is open.
+const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How many times Attaching is retried automatically before only the retry
+/// command can try again.
+const MAX_RETRIES: u32 = 6;
+
+/// The pause before the automatic retry that follows `retries` earlier ones:
+/// 1 s, doubling up to 30 s.
+fn backoff(retries: u32) -> Duration {
+    Duration::from_secs(1u64 << retries.min(5)).min(Duration::from_secs(30))
+}
+
+impl NotAttachedReason {
+    /// Whether trying again by itself might Attach the Device. Not when only
+    /// the listener can fix the cause, e.g. by quitting the app holding the
+    /// link, and never for an unsupported Model.
+    fn is_transient(&self) -> bool {
+        match self {
+            NotAttachedReason::UnsupportedModel
+            | NotAttachedReason::InUseByAnotherProcess
+            | NotAttachedReason::BluetoothPermissionDenied => false,
+            NotAttachedReason::ServiceNotFound
+            | NotAttachedReason::DeviceNotConnected
+            | NotAttachedReason::LinkDropped
+            | NotAttachedReason::NoResponse
+            | NotAttachedReason::Other(_) => true,
+        }
+    }
 }
 
 /// A running control link session task.
@@ -133,6 +170,8 @@ struct LinkEvent {
 }
 
 enum LinkEventKind {
+    /// A session waiting to retry has started opening the link.
+    Attaching,
     Update(Update),
     /// The session ended: the link couldn't be opened, or it closed.
     Ended(NotAttachedReason),
@@ -206,15 +245,18 @@ impl<P: Platform> State<P> {
                 ambient_level: None,
                 battery: None,
             },
+            vendor,
             session: None,
+            retries: 0,
         };
         if attach {
-            tracked.session = Some(self.attach(&identity.address, vendor));
+            tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
         }
         self.devices.insert(identity.address, tracked);
     }
 
-    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor) -> LinkSession {
+    /// Starts a session that opens the control link after `delay`.
+    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
         let (commands, commands_rx) = mpsc::unbounded_channel();
@@ -230,18 +272,44 @@ impl<P: Platform> State<P> {
                     kind,
                 });
             };
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+                send(LinkEventKind::Attaching);
+            }
             let service = match vendor {
                 Vendor::Samsung => samsung::SERVICE,
                 Vendor::Sony => sony::SERVICE,
             };
-            let on_update = |update| send(LinkEventKind::Update(update));
+            let identified = AtomicBool::new(false);
+            let on_update = |update| {
+                if let Update::Identified(_) = update {
+                    identified.store(true, Ordering::Relaxed);
+                }
+                send(LinkEventKind::Update(update));
+            };
             let reason = match platform.open_control_link(&address, service).await {
-                Ok(link) => match vendor {
-                    Vendor::Samsung => {
-                        run_samsung_session(link, commands_rx, frame_log, on_update).await
+                Ok(link) => {
+                    let session = async {
+                        match vendor {
+                            Vendor::Samsung => {
+                                run_samsung_session(link, commands_rx, frame_log, on_update).await
+                            }
+                            Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
+                        }
+                    };
+                    // A Device that never answers, e.g. because an ACK was
+                    // lost, would otherwise be left Attaching for good.
+                    let unidentified = async {
+                        tokio::time::sleep(IDENTIFY_TIMEOUT).await;
+                        if identified.load(Ordering::Relaxed) {
+                            std::future::pending().await
+                        }
+                    };
+                    tokio::select! {
+                        reason = session => reason,
+                        () = unidentified => NotAttachedReason::NoResponse,
                     }
-                    Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
-                },
+                }
                 Err(failure) => failure.into(),
             };
             send(LinkEventKind::Ended(reason));
@@ -262,10 +330,12 @@ impl<P: Platform> State<P> {
         }
         let device = &mut tracked.device;
         match event.kind {
+            LinkEventKind::Attaching => device.state = DeviceState::Attaching,
             LinkEventKind::Update(Update::Identified(model)) => {
                 device.model = Some(model);
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
+                tracked.retries = 0;
             }
             // The session ends straight after, with that reason.
             LinkEventKind::Update(Update::Unsupported) => {}
@@ -283,6 +353,7 @@ impl<P: Platform> State<P> {
                 device.ambient_level = Some(level);
             }
             LinkEventKind::Ended(reason) => {
+                let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device {
                     address: device.address.clone(),
                     name: device.name.clone(),
@@ -296,6 +367,14 @@ impl<P: Platform> State<P> {
                     battery: None,
                 };
                 tracked.session = None;
+                if retry {
+                    let delay = backoff(tracked.retries);
+                    tracked.retries += 1;
+                    let vendor = tracked.vendor;
+                    let session = self.attach(&event.address, vendor, delay);
+                    let tracked = self.devices.get_mut(&event.address).expect("tracked");
+                    tracked.session = Some(session);
+                }
             }
         }
     }
@@ -320,6 +399,19 @@ impl<P: Platform> State<P> {
                 }
                 session.send(SessionCommand::SetAmbientLevel(level))
             }
+            Command::RetryAttach(address) => {
+                let tracked = self.supported(&address)?;
+                if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
+                    return Ok(());
+                }
+                // Retrying by hand starts over, straight away.
+                let session = self.attach(&address, tracked.vendor, Duration::ZERO);
+                let tracked = self.devices.get_mut(&address).expect("checked above");
+                tracked.device.state = DeviceState::Attaching;
+                tracked.session = Some(session);
+                tracked.retries = 0;
+                Ok(())
+            }
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
@@ -328,16 +420,26 @@ impl<P: Platform> State<P> {
                 self.frame_log.stop();
                 Ok(())
             }
-            _ => Err(CommandError::UnknownDevice),
+        }
+    }
+
+    /// The Device at `address`, unless it's unknown or an unsupported Model.
+    fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
+        let tracked = self
+            .devices
+            .get(address)
+            .ok_or(CommandError::UnknownDevice)?;
+        match tracked.device.state {
+            DeviceState::NotAttached {
+                reason: NotAttachedReason::UnsupportedModel,
+            } => Err(CommandError::UnsupportedModel),
+            _ => Ok(tracked),
         }
     }
 
     /// The Attached Device at `address` and its control link session.
     fn attached(&self, address: &DeviceAddress) -> Result<(&Device, &LinkSession), CommandError> {
-        let tracked = self
-            .devices
-            .get(address)
-            .ok_or(CommandError::UnknownDevice)?;
+        let tracked = self.supported(address)?;
         match (&tracked.device.state, &tracked.session) {
             (DeviceState::Attached, Some(session)) => Ok((&tracked.device, session)),
             _ => Err(CommandError::NotAttached),
