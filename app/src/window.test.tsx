@@ -91,3 +91,86 @@ describe("a Device that isn't Attached", () => {
     expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
   });
 });
+
+describe("the header", () => {
+  it("titles the window with the Device's name and shows its Model when the name differs", async () => {
+    const core = new FakeCore(only(xm5({ name: "Matthew's XM5" })));
+    renderWindow(core);
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/^Matthew's XM5$/);
+    expect(screen.getByText("WH-1000XM5")).toBeVisible();
+  });
+
+  it("shows no Model subtitle when the Device's name is the Model name", async () => {
+    const core = new FakeCore(only(xm5({ name: "WH-1000XM5" })));
+    renderWindow(core);
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/^WH-1000XM5$/);
+    expect(screen.getAllByText("WH-1000XM5")).toHaveLength(1);
+  });
+});
+
+describe("the Device switcher", () => {
+  it("isn't shown with one Device Connected", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    renderWindow(core);
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Matthew's Buds4 Pro");
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("shows a pill per Device with two Connected, marks the Primary and switches on a pick", async () => {
+    const core = new FakeCore({ devices: [buds4Pro(), xm5()], primary: XM5_ADDRESS });
+    renderWindow(core);
+
+    const pills = await screen.findAllByRole("tab");
+    expect(pills.map((pill) => pill.textContent)).toEqual([
+      "Matthew's Buds4 Pro",
+      expect.stringMatching(/^WH-1000XM5.*Primary/),
+    ]);
+    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^WH-1000XM5$/);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Buds4 Pro/ }));
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Matthew's Buds4 Pro$/);
+    expect(screen.getByRole("tab", { name: /Buds4 Pro/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("follows the Primary Device when the OS switches audio output, over a pick", async () => {
+    const core = new FakeCore({ devices: [buds4Pro(), xm5()], primary: BUDS_ADDRESS });
+    renderWindow(core);
+    const title = () => screen.getByRole("heading", { level: 1 });
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/^Matthew's Buds4 Pro$/);
+    await userEvent.click(screen.getByRole("tab", { name: /WH-1000XM5/ }));
+    expect(title()).toHaveTextContent(/^WH-1000XM5$/);
+
+    core.emit({ devices: [buds4Pro(), xm5()], primary: XM5_ADDRESS });
+    expect(title()).toHaveTextContent(/^WH-1000XM5$/);
+    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveTextContent("Primary");
+
+    core.emit({ devices: [buds4Pro(), xm5()], primary: BUDS_ADDRESS });
+    expect(title()).toHaveTextContent(/^Matthew's Buds4 Pro$/);
+    expect(screen.getByRole("tab", { name: /Buds4 Pro/ })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("Settings", () => {
+  it("is collapsed, with the frame log in a further collapsed Developer section", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    renderWindow(core);
+
+    const settings = await screen.findByText("Settings");
+    expect(await screen.findByRole("checkbox", { name: "Launch at login" })).not.toBeVisible();
+    expect(await screen.findByText("Developer")).not.toBeVisible();
+
+    await userEvent.click(settings);
+    expect(screen.getByRole("checkbox", { name: "Launch at login" })).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeVisible();
+
+    await userEvent.click(screen.getByText("Developer"));
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+  });
+});
