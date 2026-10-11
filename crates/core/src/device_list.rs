@@ -28,11 +28,32 @@ pub struct Device {
     /// The Noise Control Mode the listener last selected, by any means.
     /// `None` until the Device first reports it.
     pub chosen_mode: Option<NoiseControlMode>,
+    /// The Noise Control Mode the Device is applying right now: usually the
+    /// Chosen Mode, but it can differ for a while, e.g. while an earbud is out
+    /// of the ear. `None` until the Device first reports it.
+    pub effective_mode: Option<NoiseControlMode>,
+    /// Why the Effective Mode differs from the Chosen Mode. `None` while they
+    /// agree.
+    pub effective_mode_reason: Option<EffectiveModeReason>,
     /// The Ambient Level in the Model's own steps, within
     /// `capabilities.ambient_level`. `None` until the Device first reports it.
     pub ambient_level: Option<u8>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
+}
+
+impl Device {
+    /// Records the mode the Device is applying, and why, if it says. The
+    /// reason shows only while the mode differs from the Chosen Mode.
+    pub(crate) fn set_effective_mode(
+        &mut self,
+        mode: NoiseControlMode,
+        reason: Option<EffectiveModeReason>,
+    ) {
+        self.effective_mode = Some(mode);
+        self.effective_mode_reason = (self.chosen_mode.is_some() && self.chosen_mode != Some(mode))
+            .then(|| reason.unwrap_or(EffectiveModeReason::Unknown));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -72,6 +93,16 @@ impl From<LinkFailure> for NotAttachedReason {
             LinkFailure::Other(message) => NotAttachedReason::Other(message),
         }
     }
+}
+
+/// Why a Device's Effective Mode differs from its Chosen Mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectiveModeReason {
+    /// An earbud is out of the ear, and the Device paused the Chosen Mode.
+    BudOutOfEar,
+    /// The Device didn't say why.
+    Unknown,
 }
 
 /// Battery charge in percent.

@@ -19,7 +19,9 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 pub use command::{Command, CommandError, NoiseControlMode};
-pub use device_list::{Battery, Device, DeviceList, DeviceState, NotAttachedReason};
+pub use device_list::{
+    Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
+};
 use frame_log::{Direction, FrameLog};
 pub use model::{AmbientLevelRange, Capabilities, Model};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
@@ -199,6 +201,8 @@ impl<P: Platform> State<P> {
                 state,
                 capabilities: Capabilities::default(),
                 chosen_mode: None,
+                effective_mode: None,
+                effective_mode_reason: None,
                 ambient_level: None,
                 battery: None,
             },
@@ -270,6 +274,10 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Update(Update::ChosenMode(mode)) => {
                 device.chosen_mode = Some(mode);
+                device.set_effective_mode(mode, None);
+            }
+            LinkEventKind::Update(Update::EffectiveMode(mode, reason)) => {
+                device.set_effective_mode(mode, reason);
             }
             LinkEventKind::Update(Update::AmbientLevel(level)) => {
                 device.ambient_level = Some(level);
@@ -282,6 +290,8 @@ impl<P: Platform> State<P> {
                     state: DeviceState::NotAttached { reason },
                     capabilities: Capabilities::default(),
                     chosen_mode: None,
+                    effective_mode: None,
+                    effective_mode_reason: None,
                     ambient_level: None,
                     battery: None,
                 };
