@@ -29,7 +29,10 @@ fn a_frame_record_is_written_in_the_format_it_is_read_from() {
         assert_eq!(line.parse::<FrameRecord>().unwrap().to_string(), line);
     }
     let leap_day: FrameRecord = "2000-02-29T23:59:59.999Z samsung << dd".parse().unwrap();
-    assert_eq!(leap_day.timestamp, UNIX_EPOCH + Duration::from_millis(951_868_799_999));
+    assert_eq!(
+        leap_day.timestamp,
+        UNIX_EPOCH + Duration::from_millis(951_868_799_999)
+    );
 }
 
 #[test]
