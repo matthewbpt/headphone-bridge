@@ -8,6 +8,7 @@ import {
   useDeviceList,
   useLabels,
 } from "./deviceList";
+import { BatteryGlyph, DevicePicture } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
@@ -46,10 +47,8 @@ function DeviceListView() {
       {devices.length > 1 && (
         <DevicePills devices={devices} selected={selected} primary={primary} onPick={setPicked} />
       )}
-      <section className="card">
-        {/* Keyed, so pending state doesn't carry over to another Device. */}
-        <DeviceView key={selected.address} device={selected} labels={labels} />
-      </section>
+      {/* Keyed, so pending state doesn't carry over to another Device. */}
+      <DeviceView key={selected.address} device={selected} labels={labels} />
     </>
   );
 }
@@ -100,25 +99,50 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   return (
     <>
-      <div>{stateText(device)}</div>
-      {device.state.kind === "notAttached" && (
-        <div>{reasonText(labels, device.state.reason)}</div>
+      <section className="hero">
+        <DevicePicture model={device.model} labels={labels} />
+        <Status device={device} labels={labels} />
+      </section>
+      {device.state.kind === "attached" && (
+        <section className="card">
+          {device.capabilities.noiseControlModes.length > 0 && (
+            <NoiseControlModeButtons device={device} labels={labels} />
+          )}
+          {device.capabilities.ambientLevel && (
+            <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
+          )}
+          {device.effectiveMode && <div>Applying: {labels.modes[device.effectiveMode]}</div>}
+        </section>
       )}
-      {device.state.kind === "notAttached" && device.state.reason.kind !== "unsupportedModel" && (
-        <RetryButton address={device.address} />
-      )}
-      {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
-        <NoiseControlModeButtons device={device} labels={labels} />
-      )}
-      {device.state.kind === "attached" && device.capabilities.ambientLevel && (
-        <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
-      )}
-      {device.state.kind === "attached" && device.effectiveMode && (
-        <div>Applying: {labels.modes[device.effectiveMode]}</div>
-      )}
-      {device.battery && <BatteryView battery={device.battery} />}
     </>
   );
+}
+
+/** Under the picture: the battery once Attached, else why the controls aren't there. */
+function Status({ device, labels }: { device: Device; labels: Labels }) {
+  switch (device.state.kind) {
+    case "attached":
+      return device.battery ? (
+        <BatteryView battery={device.battery} />
+      ) : (
+        <div className="status muted">–</div>
+      );
+    case "attaching":
+      return (
+        <div className="status muted">
+          <span className="spinner" aria-hidden /> Attaching…
+        </div>
+      );
+    case "notAttached":
+      return (
+        <div className="status status--column">
+          <span className="muted">{reasonText(labels, device.state.reason)}</span>
+          {device.state.reason.kind !== "unsupportedModel" && (
+            <RetryButton address={device.address} />
+          )}
+        </div>
+      );
+  }
 }
 
 /** How long a pressed button stays pending if the Device never confirms. */
@@ -237,23 +261,12 @@ function AmbientLevelSlider({
   );
 }
 
-function stateText(device: Device): string {
-  switch (device.state.kind) {
-    case "attaching":
-      return "Connected, Attaching…";
-    case "attached":
-      return "Attached";
-    case "notAttached":
-      return "Connected, not Attached";
-  }
-}
-
-
 function RetryButton({ address }: { address: string }) {
   const [error, setError] = useState<string | null>(null);
   return (
-    <div>
+    <>
       <button
+        className="button"
         onClick={() => {
           setError(null);
           retryAttach(address).catch((e) => setError(`Couldn't retry: ${e}`));
@@ -261,17 +274,37 @@ function RetryButton({ address }: { address: string }) {
       >
         Retry
       </button>
-      {error && <div role="alert">{error}</div>}
-    </div>
+      {error && (
+        <span className="error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   );
 }
 
+/** For buds, L and R merge while they're known and equal; Case shows only while reported. */
 function BatteryView({ battery }: { battery: Battery }) {
-  const percent = (level: number | null) => (level === null ? "–" : `${level}%`);
-  if (battery.kind === "headphones") return <div>Battery: {percent(battery.level)}</div>;
+  const values: { label?: string; level: number | null }[] =
+    battery.kind === "headphones"
+      ? [{ level: battery.level }]
+      : battery.left !== null && battery.left === battery.right
+        ? [{ label: "L·R", level: battery.left }]
+        : [
+            { label: "L", level: battery.left },
+            { label: "R", level: battery.right },
+          ];
+  if (battery.kind === "buds" && battery.case !== null) values.push({ label: "Case", level: battery.case });
   return (
-    <div>
-      Battery: L {percent(battery.left)} · R {percent(battery.right)} · Case {percent(battery.case)}
+    <div className="status battery" role="group" aria-label="Battery">
+      {values.map(({ label, level }, i) => (
+        <span key={label ?? "level"} className="battery__value">
+          {i > 0 && <span className="battery__separator"> · </span>}
+          <BatteryGlyph level={level} />
+          {label && <span className="battery__label">{label} </span>}
+          {level === null ? "–" : `${level}%`}
+        </span>
+      ))}
     </div>
   );
 }
