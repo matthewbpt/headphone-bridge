@@ -13,6 +13,7 @@ mod sony;
 mod update;
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -96,6 +97,9 @@ struct Tracked {
     retries: u32,
 }
 
+/// How long a Device has to identify itself once its control link is open.
+const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// How many times Attaching is retried automatically before only the retry
 /// command can try again.
 const MAX_RETRIES: u32 = 6;
@@ -118,6 +122,7 @@ impl NotAttachedReason {
             NotAttachedReason::ServiceNotFound
             | NotAttachedReason::DeviceNotConnected
             | NotAttachedReason::LinkDropped
+            | NotAttachedReason::NoResponse
             | NotAttachedReason::Other(_) => true,
         }
     }
@@ -261,14 +266,36 @@ impl<P: Platform> State<P> {
                 Vendor::Samsung => samsung::SERVICE,
                 Vendor::Sony => sony::SERVICE,
             };
-            let on_update = |update| send(LinkEventKind::Update(update));
+            let identified = AtomicBool::new(false);
+            let on_update = |update| {
+                if let Update::Identified(_) = update {
+                    identified.store(true, Ordering::Relaxed);
+                }
+                send(LinkEventKind::Update(update));
+            };
             let reason = match platform.open_control_link(&address, service).await {
-                Ok(link) => match vendor {
-                    Vendor::Samsung => {
-                        run_samsung_session(link, commands_rx, frame_log, on_update).await
+                Ok(link) => {
+                    let session = async {
+                        match vendor {
+                            Vendor::Samsung => {
+                                run_samsung_session(link, commands_rx, frame_log, on_update).await
+                            }
+                            Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
+                        }
+                    };
+                    // A Device that never answers, e.g. because an ACK was
+                    // lost, would otherwise be left Attaching for good.
+                    let unidentified = async {
+                        tokio::time::sleep(IDENTIFY_TIMEOUT).await;
+                        if identified.load(Ordering::Relaxed) {
+                            std::future::pending().await
+                        }
+                    };
+                    tokio::select! {
+                        reason = session => reason,
+                        () = unidentified => NotAttachedReason::NoResponse,
                     }
-                    Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
-                },
+                }
                 Err(failure) => failure.into(),
             };
             send(LinkEventKind::Ended(reason));

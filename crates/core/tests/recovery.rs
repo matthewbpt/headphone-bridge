@@ -202,3 +202,30 @@ async fn another_sony_model_is_not_retried() {
         Err(CommandError::UnsupportedModel)
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn an_xm5_that_never_answers_is_given_up_on_and_retried() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    let opened_at = tokio::time::Instant::now();
+    // The protocol info request, whose ACK never comes.
+    link.written.recv().await.unwrap();
+
+    assert_eq!(link.written.recv().await, None, "the link is closed");
+    assert_eq!(opened_at.elapsed(), Duration::from_secs(10));
+    wait_for(&core, |list| {
+        is(list, not_attached(NotAttachedReason::NoResponse))
+    })
+    .await;
+
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| is(list, DeviceState::Attached)).await;
+    tokio::time::sleep(Duration::from_secs(600)).await;
+    assert!(
+        is(&core.device_list(), DeviceState::Attached),
+        "an identified Device stays Attached however long it's quiet"
+    );
+}
