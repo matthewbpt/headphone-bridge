@@ -43,6 +43,8 @@ impl Core {
             devices: BTreeMap::new(),
             link_events,
             next_attempt: 0,
+            next_attach: 0,
+            audio_output: None,
             frame_log: FrameLog::default(),
         };
         tokio::spawn(state.run(commands_rx, link_events_rx));
@@ -82,6 +84,11 @@ struct State<P> {
     /// Tells apart link sessions, so events from a session that has been
     /// replaced are ignored.
     next_attempt: u64,
+    /// Orders Attaches, so the most recently Attached Device can be found.
+    next_attach: u64,
+    /// The Bluetooth Device the OS is playing audio through, if any. It may
+    /// not be Attached, or even Connected yet.
+    audio_output: Option<DeviceAddress>,
     frame_log: FrameLog,
 }
 
@@ -89,6 +96,8 @@ struct State<P> {
 struct Tracked {
     device: Device,
     session: Option<LinkSession>,
+    /// When the Device was last Attached, while it is.
+    attached: Option<u64>,
 }
 
 /// A running control link session task.
@@ -164,7 +173,7 @@ impl<P: Platform> State<P> {
             Observation::DeviceDisconnected(address) => {
                 self.devices.remove(&address);
             }
-            Observation::AudioOutputChanged(_) => {}
+            Observation::AudioOutputChanged(output) => self.audio_output = output,
         }
     }
 
@@ -203,6 +212,7 @@ impl<P: Platform> State<P> {
                 battery: None,
             },
             session: None,
+            attached: None,
         };
         if attach {
             tracked.session = Some(self.attach(&identity.address, vendor));
@@ -262,6 +272,8 @@ impl<P: Platform> State<P> {
                 device.model = Some(model);
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
+                tracked.attached = Some(self.next_attach);
+                self.next_attach += 1;
             }
             // The session ends straight after, with that reason.
             LinkEventKind::Update(Update::Unsupported) => {}
@@ -286,6 +298,7 @@ impl<P: Platform> State<P> {
                     battery: None,
                 };
                 tracked.session = None;
+                tracked.attached = None;
             }
         }
     }
@@ -334,17 +347,38 @@ impl<P: Platform> State<P> {
         }
     }
 
-    fn publish(&self) {
-        let devices = self
-            .devices
+    /// The Attached Device playing audio, or else the most recently Attached
+    /// Device.
+    fn primary(&self) -> Option<DeviceAddress> {
+        let playing = self.audio_output.as_ref().filter(|address| {
+            self.devices
+                .get(address)
+                .is_some_and(|t| t.attached.is_some())
+        });
+        if let Some(address) = playing {
+            return Some(address.clone());
+        }
+        self.devices
             .values()
-            .map(|tracked| tracked.device.clone())
-            .collect();
+            .filter_map(|tracked| Some((tracked.attached?, &tracked.device.address)))
+            .max()
+            .map(|(_, address)| address.clone())
+    }
+
+    fn publish(&self) {
+        let snapshot = DeviceList {
+            devices: self
+                .devices
+                .values()
+                .map(|tracked| tracked.device.clone())
+                .collect(),
+            primary: self.primary(),
+        };
         self.device_list.send_if_modified(|list| {
-            if list.devices == devices {
+            if *list == snapshot {
                 return false;
             }
-            list.devices = devices;
+            *list = snapshot;
             true
         });
     }
