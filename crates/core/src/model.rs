@@ -9,6 +9,8 @@ use crate::command::NoiseControlMode;
 #[serde(rename_all = "camelCase")]
 pub enum Model {
     GalaxyBuds4Pro,
+    #[serde(rename = "wh1000xm5")]
+    Wh1000Xm5,
 }
 
 impl Model {
@@ -16,12 +18,14 @@ impl Model {
     pub fn slug(self) -> &'static str {
         match self {
             Model::GalaxyBuds4Pro => "galaxy-buds4-pro",
+            Model::Wh1000Xm5 => "wh-1000xm5",
         }
     }
 
     pub fn display_name(self) -> &'static str {
         match self {
             Model::GalaxyBuds4Pro => "Galaxy Buds4 Pro",
+            Model::Wh1000Xm5 => "WH-1000XM5",
         }
     }
 
@@ -35,6 +39,14 @@ impl Model {
                     NoiseControlMode::Adaptive,
                 ],
                 ambient_level: Some(AmbientLevelRange { min: 0, max: 4 }),
+            },
+            Model::Wh1000Xm5 => Capabilities {
+                noise_control_modes: vec![
+                    NoiseControlMode::Off,
+                    NoiseControlMode::NoiseCancelling,
+                    NoiseControlMode::Ambient,
+                ],
+                ambient_level: Some(AmbientLevelRange { min: 1, max: 20 }),
             },
         }
     }

@@ -1,7 +1,7 @@
 mod support;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
-use headphone_bridge_core::{Command, CommandError, Core, DeviceState, NoiseControlMode};
+use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState, NoiseControlMode};
 use support::{
     buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
     SAMSUNG_SERVICE,
@@ -61,7 +61,10 @@ async fn setting_a_mode_sends_noise_controls_then_polls_and_the_ack_alone_change
         ))
         .unwrap();
     let list = wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(80))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(80), .. })
+        )
     })
     .await;
     assert_eq!(list.devices[0].chosen_mode, Some(NoiseControlMode::Ambient));
@@ -123,7 +126,10 @@ async fn a_placement_change_alone_does_not_change_the_chosen_mode() {
         .unwrap();
 
     let list = wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(80))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(80), .. })
+        )
     })
     .await;
     assert_eq!(list.devices[0].chosen_mode, Some(NoiseControlMode::Ambient));
