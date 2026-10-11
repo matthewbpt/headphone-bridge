@@ -1,6 +1,7 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { Device } from "./deviceList";
 import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
@@ -138,17 +139,99 @@ describe("Ambient Level", () => {
   });
 });
 
+describe("the Device picture", () => {
+  const picture = () => screen.findByRole("img", { name: /./ });
+
+  it("shows the Galaxy Buds4 Pro for a Buds4 Pro", async () => {
+    renderWindow(new FakeCore(only(buds4Pro())));
+    expect(await picture()).toHaveAccessibleName("Galaxy Buds4 Pro");
+  });
+
+  it("shows the WH-1000XM5 for an XM5", async () => {
+    renderWindow(new FakeCore(only(xm5())));
+    expect(await picture()).toHaveAccessibleName("WH-1000XM5");
+  });
+
+  it("shows a generic headphone for an unidentified Model", async () => {
+    renderWindow(new FakeCore(only(notAttached(xm5({ model: null }), { kind: "attaching" }))));
+    expect(await picture()).toHaveAccessibleName("Headphones");
+  });
+
+  it("shows a generic headphone for an unsupported Model", async () => {
+    renderWindow(
+      new FakeCore(
+        only(notAttached(xm5({ model: null }), { kind: "notAttached", reason: { kind: "unsupportedModel" } })),
+      ),
+    );
+    expect(await picture()).toHaveAccessibleName("Headphones");
+  });
+});
+
+describe("the battery", () => {
+  const battery = (device: Device) => {
+    renderWindow(new FakeCore(only(device)));
+    return screen.findByRole("group", { name: "Battery" });
+  };
+  const buds = (left: number | null, right: number | null, case_: number | null = null) =>
+    buds4Pro({ battery: { kind: "buds", left, right, case: case_ } });
+
+  it("merges equal buds into one L·R value", async () => {
+    expect(await battery(buds(80, 80))).toHaveTextContent(/^L·R 80%$/);
+  });
+
+  it("shows unequal buds separately", async () => {
+    expect(await battery(buds(80, 65))).toHaveTextContent(/^L 80% · R 65%$/);
+  });
+
+  it("shows an unknown bud as a dash", async () => {
+    expect(await battery(buds(null, 65))).toHaveTextContent(/^L – · R 65%$/);
+  });
+
+  it("shows two unknown buds separately", async () => {
+    expect(await battery(buds(null, null))).toHaveTextContent(/^L – · R –$/);
+  });
+
+  it("shows the case while its level is reported", async () => {
+    expect(await battery(buds(80, 80, 45))).toHaveTextContent(/^L·R 80% · Case 45%$/);
+  });
+
+  it("shows one value for headphones", async () => {
+    expect(await battery(xm5({ battery: { kind: "headphones", level: 70 } }))).toHaveTextContent(/^70%$/);
+  });
+});
+
 describe("a Device that isn't Attached", () => {
-  it("tries to Attach again on Retry", async () => {
+  it("shows Attaching… while the app Attaches, with no controls", async () => {
+    renderWindow(new FakeCore(only(notAttached(buds4Pro(), { kind: "attaching" }))));
+
+    expect(await screen.findByText("Attaching…")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
+  });
+
+  it("shows the reason and tries to Attach again on Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
     );
     renderWindow(core);
 
-    expect(await screen.findByText("In use by another app")).toBeInTheDocument();
+    expect(await screen.findByText("In use by another app")).toBeVisible();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
 
     expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
+  });
+
+  it("shows an unsupported Model's reason without Retry", async () => {
+    renderWindow(
+      new FakeCore(
+        only(notAttached(xm5({ model: null }), { kind: "notAttached", reason: { kind: "unsupportedModel" } })),
+      ),
+    );
+
+    expect(await screen.findByText("Unsupported Model")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 });
 
