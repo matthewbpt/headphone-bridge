@@ -14,6 +14,7 @@ mod update;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
@@ -89,7 +90,37 @@ struct State<P> {
 struct Tracked {
     device: Device,
     vendor: Vendor,
+    /// Includes a session waiting to retry.
     session: Option<LinkSession>,
+    /// Automatic retries since the Device was last Attached.
+    retries: u32,
+}
+
+/// How many times Attaching is retried automatically before only the retry
+/// command can try again.
+const MAX_RETRIES: u32 = 6;
+
+/// The pause before the automatic retry that follows `retries` earlier ones:
+/// 1 s, doubling up to 30 s.
+fn backoff(retries: u32) -> Duration {
+    Duration::from_secs(1u64 << retries.min(5)).min(Duration::from_secs(30))
+}
+
+impl NotAttachedReason {
+    /// Whether trying again by itself might Attach the Device. Not when only
+    /// the listener can fix the cause, e.g. by quitting the app holding the
+    /// link, and never for an unsupported Model.
+    fn is_transient(&self) -> bool {
+        match self {
+            NotAttachedReason::UnsupportedModel
+            | NotAttachedReason::InUseByAnotherProcess
+            | NotAttachedReason::BluetoothPermissionDenied => false,
+            NotAttachedReason::ServiceNotFound
+            | NotAttachedReason::DeviceNotConnected
+            | NotAttachedReason::LinkDropped
+            | NotAttachedReason::Other(_) => true,
+        }
+    }
 }
 
 /// A running control link session task.
@@ -123,6 +154,8 @@ struct LinkEvent {
 }
 
 enum LinkEventKind {
+    /// A session waiting to retry has started opening the link.
+    Attaching,
     Update(Update),
     /// The session ended: the link couldn't be opened, or it closed.
     Ended(NotAttachedReason),
@@ -195,14 +228,16 @@ impl<P: Platform> State<P> {
             },
             vendor,
             session: None,
+            retries: 0,
         };
         if attach {
-            tracked.session = Some(self.attach(&identity.address, vendor));
+            tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
         }
         self.devices.insert(identity.address, tracked);
     }
 
-    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor) -> LinkSession {
+    /// Starts a session that opens the control link after `delay`.
+    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
         let (commands, commands_rx) = mpsc::unbounded_channel();
@@ -218,6 +253,10 @@ impl<P: Platform> State<P> {
                     kind,
                 });
             };
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+                send(LinkEventKind::Attaching);
+            }
             let service = match vendor {
                 Vendor::Samsung => samsung::SERVICE,
                 Vendor::Sony => sony::SERVICE,
@@ -250,10 +289,12 @@ impl<P: Platform> State<P> {
         }
         let device = &mut tracked.device;
         match event.kind {
+            LinkEventKind::Attaching => device.state = DeviceState::Attaching,
             LinkEventKind::Update(Update::Identified(model)) => {
                 device.model = Some(model);
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
+                tracked.retries = 0;
             }
             // The session ends straight after, with that reason.
             LinkEventKind::Update(Update::Unsupported) => {}
@@ -264,6 +305,7 @@ impl<P: Platform> State<P> {
                 device.chosen_mode = Some(mode);
             }
             LinkEventKind::Ended(reason) => {
+                let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device {
                     address: device.address.clone(),
                     name: device.name.clone(),
@@ -274,6 +316,14 @@ impl<P: Platform> State<P> {
                     battery: None,
                 };
                 tracked.session = None;
+                if retry {
+                    let delay = backoff(tracked.retries);
+                    tracked.retries += 1;
+                    let vendor = tracked.vendor;
+                    let session = self.attach(&event.address, vendor, delay);
+                    let tracked = self.devices.get_mut(&event.address).expect("tracked");
+                    tracked.session = Some(session);
+                }
             }
         }
     }
@@ -304,10 +354,12 @@ impl<P: Platform> State<P> {
                 if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
                     return Ok(());
                 }
-                let session = self.attach(&address, tracked.vendor);
+                // Retrying by hand starts over, straight away.
+                let session = self.attach(&address, tracked.vendor, Duration::ZERO);
                 let tracked = self.devices.get_mut(&address).expect("checked above");
                 tracked.device.state = DeviceState::Attaching;
                 tracked.session = Some(session);
+                tracked.retries = 0;
                 Ok(())
             }
             Command::SetFrameLog(Some(path)) => self

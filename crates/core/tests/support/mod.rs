@@ -83,7 +83,10 @@ impl FakeOs {
     /// The address of the next Device the core tries to open a control link
     /// to, whether or not that succeeds.
     pub async fn next_attempt(&mut self) -> DeviceAddress {
-        self.attempted.recv().await.expect("fake platform dropped")
+        tokio::time::timeout(Duration::from_secs(600), self.attempted.recv())
+            .await
+            .expect("timed out waiting for the core to open a control link")
+            .expect("fake platform dropped")
     }
 
     /// Whether the core tries to open any control link within `within`.
@@ -95,7 +98,10 @@ impl FakeOs {
 
     /// The next control link the core opens successfully.
     pub async fn next_link(&mut self) -> DeviceLink {
-        self.opened.recv().await.expect("fake platform dropped")
+        tokio::time::timeout(Duration::from_secs(600), self.opened.recv())
+            .await
+            .expect("timed out waiting for the core to open a control link")
+            .expect("fake platform dropped")
     }
 }
 

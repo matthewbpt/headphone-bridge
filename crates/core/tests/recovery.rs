@@ -6,7 +6,7 @@ use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure
 use headphone_bridge_core::{
     Command, CommandError, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
 };
-use support::{buds4pro, fake_platform, fixture, received, wait_for, SAMSUNG_SERVICE};
+use support::{buds4pro, fake_platform, fixture, received, replay, wait_for, xm5, SAMSUNG_SERVICE};
 
 /// Plays the Buds4 Pro's extended status on `link`, which Attaches it.
 fn identify_buds4pro(link: &support::DeviceLink) {
@@ -79,4 +79,30 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
         !os.attempts_within(Duration::from_secs(600)).await,
         "no control link is ever opened to an unsupported Model"
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| list.devices[0].battery.is_some()).await;
+
+    drop(link);
+    let dropped_at = tokio::time::Instant::now();
+
+    let list = wait_for(&core, |list| {
+        is(list, not_attached(NotAttachedReason::LinkDropped))
+    })
+    .await;
+    assert_eq!(list.devices[0].battery, None, "no stale values remain");
+    let mut link = os.next_link().await;
+    assert_eq!(dropped_at.elapsed(), Duration::from_secs(1));
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| {
+        is(list, DeviceState::Attached) && list.devices[0].battery.is_some()
+    })
+    .await;
 }
