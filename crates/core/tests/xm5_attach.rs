@@ -314,7 +314,10 @@ async fn a_frame_log_on_from_the_start_logs_an_attach_at_startup() {
 
     let log = FrameRecord::parse_all(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let bytes = |records: &[FrameRecord]| -> Vec<_> {
-        records.iter().map(|r| (r.direction, r.bytes.clone())).collect()
+        records
+            .iter()
+            .map(|r| (r.direction, r.bytes.clone()))
+            .collect()
     };
     assert_eq!(bytes(&log), bytes(&records));
 }

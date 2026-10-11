@@ -50,7 +50,9 @@ impl Core {
         path: &Path,
     ) -> (Core, Result<(), CommandError>) {
         let frame_log = FrameLog::default();
-        let started = frame_log.start(path).map_err(CommandError::frame_log_unavailable);
+        let started = frame_log
+            .start(path)
+            .map_err(CommandError::frame_log_unavailable);
         (Core::start_logging(platform, frame_log), started)
     }
 

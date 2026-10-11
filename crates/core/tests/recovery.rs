@@ -265,7 +265,11 @@ async fn an_xm5_request_whose_ack_is_lost_is_resent_after_a_second() {
     assert_eq!(written(&mut link).await.unwrap(), off);
     let sent_at = tokio::time::Instant::now();
 
-    assert_eq!(written(&mut link).await.unwrap(), off, "the same frame again");
+    assert_eq!(
+        written(&mut link).await.unwrap(),
+        off,
+        "the same frame again"
+    );
     assert_eq!(sent_at.elapsed(), Duration::from_secs(1));
     // Once it's ACKed, the queued level set goes out.
     link.send.send(ACK_SEQ_0.to_vec()).unwrap();

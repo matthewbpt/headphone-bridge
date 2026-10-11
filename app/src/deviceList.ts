@@ -70,7 +70,36 @@ export type CommandError =
   | "unsupportedModel"
   | "missingCapability"
   | "outOfRange"
+  | "settingsNotReported"
   | { frameLogUnavailable: string };
+
+/**
+ * The labels for a Device's state and settings, shared with the tray menu
+ * (app/src-tauri/src/labels.rs), so the two can't drift apart.
+ */
+export interface Labels {
+  noDevice: string;
+  modes: Record<NoiseControlMode, string>;
+  models: Record<Model, string>;
+  hints: Record<EffectiveModeReason, string>;
+  /** Every reason but "other", whose label is its own message. */
+  reasons: { reason: NotAttachedReason; text: string }[];
+}
+
+/** Why a Device isn't Attached, labelled as the tray labels it. */
+export function reasonText(labels: Labels, reason: NotAttachedReason): string {
+  if (reason.kind === "other") return reason.message;
+  return labels.reasons.find((label) => label.reason.kind === reason.kind)?.text ?? reason.kind;
+}
+
+/** The labels, or null until they arrive. */
+export function useLabels(): Labels | null {
+  const [labels, setLabels] = useState<Labels | null>(null);
+  useEffect(() => {
+    invoke<Labels>("labels").then(setLabels);
+  }, []);
+  return labels;
+}
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {

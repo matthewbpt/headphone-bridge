@@ -113,7 +113,7 @@ impl From<LinkFailure> for NotAttachedReason {
 }
 
 /// Why a Device's Effective Mode differs from its Chosen Mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EffectiveModeReason {
     /// An earbud is out of the ear, and the Device paused the Chosen Mode.

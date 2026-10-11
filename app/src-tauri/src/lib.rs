@@ -2,6 +2,7 @@
 //! its Device list snapshots to the UI as `device-list` events and to the tray
 //! menu, and keeps the app running in the tray while the window is closed.
 
+mod labels;
 mod platform;
 mod tray;
 
@@ -76,6 +77,12 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
             (Core::start(platform), None)
         }
     }
+}
+
+/// Every label the window shows, the same as the tray's.
+#[tauri::command]
+fn labels() -> labels::Labels {
+    labels::all()
 }
 
 #[tauri::command]
@@ -191,6 +198,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            labels,
             device_list,
             set_noise_control_mode,
             set_ambient_level,
