@@ -16,7 +16,8 @@
 //! describes the fixture files.
 //!
 //! The frame log itself is a developer setting, off by default, switched with
-//! [`crate::Command::SetFrameLog`]. While it's on, every control link session
+//! [`crate::Command::SetFrameLog`], or on from the start with
+//! [`crate::Core::start_with_frame_log`]. While it's on, every control link session
 //! records each frame it sends or receives, and a background thread appends
 //! the records to the file, so sessions never wait on disk.
 

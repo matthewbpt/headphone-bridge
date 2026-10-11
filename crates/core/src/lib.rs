@@ -13,6 +13,7 @@ mod sony;
 mod update;
 
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -38,6 +39,22 @@ pub struct Core {
 impl Core {
     /// Starts the core on the current Tokio runtime.
     pub fn start(platform: impl Platform) -> Core {
+        Core::start_logging(platform, FrameLog::default())
+    }
+
+    /// Starts the core with the frame log already on, appending to `path`,
+    /// so Devices Attached at startup are logged too. The core starts even if
+    /// the file can't be opened, with the frame log off.
+    pub fn start_with_frame_log(
+        platform: impl Platform,
+        path: &Path,
+    ) -> (Core, Result<(), CommandError>) {
+        let frame_log = FrameLog::default();
+        let started = frame_log.start(path).map_err(CommandError::frame_log_unavailable);
+        (Core::start_logging(platform, frame_log), started)
+    }
+
+    fn start_logging(platform: impl Platform, frame_log: FrameLog) -> Core {
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
         let (link_events, link_events_rx) = mpsc::unbounded_channel();
@@ -49,7 +66,7 @@ impl Core {
             next_attempt: 0,
             next_attach: 0,
             audio_output: None,
-            frame_log: FrameLog::default(),
+            frame_log,
         };
         tokio::spawn(state.run(commands_rx, link_events_rx));
         Core {
@@ -436,7 +453,7 @@ impl<P: Platform> State<P> {
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
-                .map_err(|error| CommandError::FrameLogUnavailable(error.to_string())),
+                .map_err(CommandError::frame_log_unavailable),
             Command::SetFrameLog(None) => {
                 self.frame_log.stop();
                 Ok(())

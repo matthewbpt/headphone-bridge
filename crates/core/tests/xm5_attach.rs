@@ -293,6 +293,32 @@ async fn every_frame_of_an_attach_is_frame_logged_like_the_fixture() {
     assert_eq!(summary(&log), summary(&records));
 }
 
+#[tokio::test]
+async fn a_frame_log_on_from_the_start_logs_an_attach_at_startup() {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("xm5_attach_at_startup.frames");
+    let _ = std::fs::remove_file(&path);
+    let (platform, mut os) = fake_platform();
+    // The Device is already Connected when the core starts.
+    os.observe(Observation::DeviceConnected(xm5()));
+    let (core, frame_log) = Core::start_with_frame_log(platform, &path);
+    frame_log.unwrap();
+    let mut link = os.next_link().await;
+    let records = fixture("wh-1000xm5/attach");
+
+    replay(&mut link, &records).await;
+    wait_for(&core, |list| {
+        list.devices[0].battery == Some(Battery::Headphones { level: 69 })
+    })
+    .await;
+    core.command(Command::SetFrameLog(None)).await.unwrap();
+
+    let log = FrameRecord::parse_all(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let bytes = |records: &[FrameRecord]| -> Vec<_> {
+        records.iter().map(|r| (r.direction, r.bytes.clone())).collect()
+    };
+    assert_eq!(bytes(&log), bytes(&records));
+}
+
 /// An ACK with sequence number 0: for a frame sent with 1.
 const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
 /// An ACK with sequence number 1: for a frame sent with 0.

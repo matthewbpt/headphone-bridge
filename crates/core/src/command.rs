@@ -38,6 +38,12 @@ pub enum CommandError {
     FrameLogUnavailable(String),
 }
 
+impl CommandError {
+    pub(crate) fn frame_log_unavailable(error: std::io::Error) -> CommandError {
+        CommandError::FrameLogUnavailable(error.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum NoiseControlMode {
