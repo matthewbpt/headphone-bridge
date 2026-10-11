@@ -83,13 +83,20 @@ button {
 /* The window: header, switcher and Device on top, Settings at the bottom. */
 
 .window {
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
   box-sizing: border-box;
   padding: 18px 16px 16px;
   background: radial-gradient(120% 60% at 50% 0%, var(--bg-glow), transparent 70%), var(--bg);
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Only the picture gives way when the column is too tall for the window
+   (two Devices, a hint and the slider); everything else keeps its size. */
+.window > * {
+  flex-shrink: 0;
 }
 
 .card {
@@ -170,11 +177,14 @@ button {
   align-items: center;
   gap: 8px;
   padding: 4px 0 6px;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .device-picture {
+  flex: 0 1 140px;
   width: 190px;
-  height: 140px;
+  min-height: 96px;
 }
 
 .status {
@@ -376,4 +386,128 @@ button {
 .card .error {
   margin: 10px 4px 0;
   text-align: center;
+}
+
+/* Ambient Level: a pill track between − and +, with a notch per step when
+   the Model has few enough steps, else the current value. */
+
+.level {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.level__title {
+  margin: 0 4px 6px;
+}
+
+.level__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.level__step {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.level__step:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.level__step svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.level__track {
+  --thumb: 24px;
+  position: relative;
+  flex: 1;
+  height: var(--thumb);
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.level__notches {
+  position: absolute;
+  inset: 0 calc(var(--thumb) / 2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.level__notch {
+  width: 7px;
+  height: 7px;
+  margin: 0 -3.5px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.level__track input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.level__track input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track[data-pending="true"] input::-webkit-slider-thumb {
+  border-style: dashed;
+}
+
+.level__track[data-pending="true"] input::-moz-range-thumb {
+  border-style: dashed;
+}
+
+.level__track input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.level__value {
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }

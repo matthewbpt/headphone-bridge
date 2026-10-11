@@ -123,6 +123,10 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   };
 
   const attached = device.state.kind === "attached";
+  // A pending mode counts as Chosen, so the slider comes and goes the
+  // moment a mode is clicked, and goes back if the Device refuses.
+  const shownMode = pendingMode ?? device.chosenMode;
+  const ambientLevel = device.capabilities.ambientLevel;
   return (
     <>
       <section className="hero">
@@ -149,8 +153,8 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               )}
             </>
           )}
-          {device.capabilities.ambientLevel && (
-            <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
+          {ambientLevel && shownMode === "ambient" && (
+            <AmbientLevelSlider device={device} range={ambientLevel} />
           )}
         </section>
       )}
@@ -241,6 +245,13 @@ function NoiseControlModeSelector({
   );
 }
 
+/** Above this many steps, notches crowd the track; it shows the value instead. */
+const MAX_NOTCHES = 10;
+
+/**
+ * The Ambient Level, in the Model's own steps. A level set here shows a
+ * dashed thumb until the Device reports it.
+ */
 function AmbientLevelSlider({
   device,
   range,
@@ -265,43 +276,71 @@ function AmbientLevelSlider({
     return () => clearTimeout(timer);
   }, [pending]);
 
+  const shown = pending ?? device.ambientLevel;
   const choose = (level: number) => {
+    level = Math.min(range.max, Math.max(range.min, level));
+    if (level === shown) return;
     setError(null);
     setPending(level === device.ambientLevel ? null : level);
-    if (level === device.ambientLevel && pending === null) return;
     setAmbientLevel(device.address, level).catch((e) => {
       setPending(null);
       setError(`Couldn't set Ambient Level ${level}: ${e}`);
     });
   };
 
-  const shown = pending ?? device.ambientLevel;
-  const listId = `ambient-level-steps-${device.address}`;
+  const steps = range.max - range.min + 1;
+  const notched = steps <= MAX_NOTCHES;
   return (
-    <div>
-      <label>
-        Ambient Level{" "}
-        {/* One notch per step of the Model's own range. */}
-        <input
-          type="range"
-          min={range.min}
-          max={range.max}
-          step={1}
-          list={listId}
-          value={shown ?? range.min}
-          disabled={shown === null}
-          aria-busy={pending !== null}
-          onChange={(e) => choose(Number(e.target.value))}
-        />
-        <datalist id={listId}>
-          {Array.from({ length: range.max - range.min + 1 }, (_, i) => (
-            <option key={i} value={range.min + i} />
-          ))}
-        </datalist>{" "}
-        {shown ?? "–"}
-        {pending !== null && " …"}
-      </label>
-      {error && <div role="alert">{error}</div>}
+    <div className="level">
+      <div className="level__title">Ambient Level</div>
+      <div className="level__row">
+        <button
+          className="level__step"
+          aria-label="Less"
+          disabled={shown === null || shown <= range.min}
+          onClick={() => shown !== null && choose(shown - 1)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <path d="M3 8H13" />
+          </svg>
+        </button>
+        <div className="level__track" data-pending={pending !== null}>
+          {notched && (
+            <div className="level__notches" aria-hidden>
+              {Array.from({ length: steps }, (_, i) => (
+                <span key={i} className="level__notch" data-testid="notch" />
+              ))}
+            </div>
+          )}
+          <input
+            type="range"
+            min={range.min}
+            max={range.max}
+            step={1}
+            value={shown ?? range.min}
+            disabled={shown === null}
+            aria-label="Ambient Level"
+            aria-busy={pending !== null}
+            onChange={(e) => choose(Number(e.target.value))}
+          />
+        </div>
+        <button
+          className="level__step"
+          aria-label="More"
+          disabled={shown === null || shown >= range.max}
+          onClick={() => shown !== null && choose(shown + 1)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <path d="M3 8H13M8 3V13" />
+          </svg>
+        </button>
+        {!notched && <output className="level__value">{shown ?? "–"}</output>}
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
