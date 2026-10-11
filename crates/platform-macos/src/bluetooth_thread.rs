@@ -201,7 +201,7 @@ impl BluetoothThread {
 
     fn handle_device_events(&mut self) {
         loop {
-            let Some(event) = self.events.borrow_mut().pop_front() else {
+            let Some(event) = self.events.lock().pop_front() else {
                 return;
             };
             match event {
@@ -391,7 +391,7 @@ impl BluetoothThread {
     /// events in place.
     fn sdp_query_completed(&self, device: &IOBluetoothDevice) -> bool {
         let address = address_of(device);
-        let mut events = self.events.borrow_mut();
+        let mut events = self.events.lock();
         let position = events.iter().position(
             |event| matches!(event, DeviceEvent::SdpQueryComplete(d) if address_of(d) == address),
         );
