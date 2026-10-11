@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
+import type { AmbientLevelRange, Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import {
   reasonText,
   retryAttach,
@@ -241,13 +241,7 @@ const MAX_NOTCHES = 10;
  * The Ambient Level, in the Model's own steps. A level set here shows a
  * dashed thumb until the Device reports it.
  */
-function AmbientLevelSlider({
-  device,
-  range,
-}: {
-  device: Device;
-  range: { min: number; max: number };
-}) {
+function AmbientLevelSlider({ device, range }: { device: Device; range: AmbientLevelRange }) {
   // The levels asked for, until snapshots report them. Dragging across
   // notches asks for each in turn. Only a change of level confirms one: a
   // snapshot still reporting the old level says nothing about those asked.
