@@ -259,6 +259,48 @@ describe("Ambient Level", () => {
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
 
+  it("keeps a return to the confirmed level pending until the level asked before it has landed", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    expect(core.sent()).toEqual([
+      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 2 } },
+      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 1 } },
+    ]);
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    // A snapshot from before the Device applied either level confirms nothing.
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1, battery: { kind: "headphones", level: 50 } })));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when a return to the confirmed level isn't confirmed within 10 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await screen.findByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("button", { name: "Less" }));
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Ambient Level 1 wasn't confirmed by the Device");
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
   it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
