@@ -111,6 +111,9 @@ struct Tracked {
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long a Sony request waits for its ACK before it is sent again.
+const ACK_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// How many times Attaching is retried automatically before only the retry
 /// command can try again.
 const MAX_RETRIES: u32 = 6;
@@ -309,8 +312,9 @@ impl<P: Platform> State<P> {
                             }
                         }
                     };
-                    // A Device that never answers, e.g. because an ACK was
-                    // lost, would otherwise be left Attaching for good.
+                    // A Device that never identifies itself, e.g. one that
+                    // ACKs but never replies, would otherwise be left
+                    // Attaching for good.
                     let unidentified = async {
                         tokio::time::sleep(IDENTIFY_TIMEOUT).await;
                         if identified.load(Ordering::Relaxed) {
@@ -581,8 +585,28 @@ async fn run_sony_session(
     if !write(&mut session, slug) {
         return NotAttachedReason::LinkDropped;
     }
+    // A request whose ACK is lost is sent again every second, and a Device
+    // that acknowledges none of the tries is given up on, like a dropped link
+    // but retried as one that didn't respond.
+    let ack_timeout = tokio::time::sleep(ACK_TIMEOUT);
+    tokio::pin!(ack_timeout);
+    let mut awaiting_ack = None;
     loop {
+        if session.awaiting_ack() != awaiting_ack {
+            awaiting_ack = session.awaiting_ack();
+            ack_timeout
+                .as_mut()
+                .reset(tokio::time::Instant::now() + ACK_TIMEOUT);
+        }
         tokio::select! {
+            () = &mut ack_timeout, if awaiting_ack.is_some() => {
+                if !session.resend() {
+                    return NotAttachedReason::NoResponse;
+                }
+                if !write(&mut session, slug) {
+                    return NotAttachedReason::LinkDropped;
+                }
+            }
             bytes = link.incoming.recv() => {
                 let Some(bytes) = bytes else {
                     return NotAttachedReason::LinkDropped;

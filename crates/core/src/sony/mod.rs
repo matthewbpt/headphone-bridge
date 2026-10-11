@@ -4,7 +4,8 @@
 //! Every data frame carries a 1-bit sequence number and is acknowledged by the
 //! other side with an ACK whose sequence number is the opposite bit. The app
 //! keeps one request outstanding at a time and sends the next only once the
-//! Device has acknowledged it.
+//! Device has acknowledged it. A request that isn't acknowledged is resent,
+//! up to [`MAX_SENDS`] times in all, as libmdr does.
 
 mod frame;
 
@@ -56,6 +57,9 @@ mod function {
     pub const BATTERY_LEVEL_WITH_THRESHOLD: u8 = 0x28;
 }
 
+/// How many times a request is sent before the Device is given up on.
+pub const MAX_SENDS: u32 = 10;
+
 /// `NcAsmInquiredType` for the WH-1000XM5: noise cancelling and ambient sound
 /// with a level, as its support function `0x6B` declares (libmdr).
 const NCASM_TYPE: u8 = 0x17;
@@ -75,6 +79,14 @@ struct NoiseControl {
     level: u8,
 }
 
+/// A request waiting for its ACK.
+#[derive(Debug)]
+struct InFlight {
+    frame: Vec<u8>,
+    /// How many times it has been sent.
+    sends: u32,
+}
+
 /// One control link session with a Sony Device.
 ///
 /// Attaching only reads: it asks for the protocol info, then the model name,
@@ -85,7 +97,10 @@ pub struct Session {
     deframer: Deframer,
     /// The sequence number of the next data frame the app sends.
     seq: u8,
-    awaiting_ack: bool,
+    /// The request sent and not yet acknowledged, if any.
+    in_flight: Option<InFlight>,
+    /// Data frames sent so far, resends included.
+    sends: u64,
     /// Data frame payloads waiting for the outstanding one to be acknowledged.
     requests: VecDeque<Vec<u8>>,
     outgoing: Vec<Vec<u8>>,
@@ -101,7 +116,8 @@ impl Session {
         let mut session = Session {
             deframer: Deframer::default(),
             seq: 0,
-            awaiting_ack: false,
+            in_flight: None,
+            sends: 0,
             requests: VecDeque::new(),
             outgoing: Vec::new(),
             identified: false,
@@ -114,6 +130,28 @@ impl Session {
     /// Takes the frames to write to the Device, in order.
     pub fn outgoing(&mut self) -> Vec<Vec<u8>> {
         std::mem::take(&mut self.outgoing)
+    }
+
+    /// While a request is waiting for its ACK, a number that changes each
+    /// time it is sent again or another request goes out. `None` while
+    /// nothing is waiting.
+    pub fn awaiting_ack(&self) -> Option<u64> {
+        self.in_flight.as_ref().map(|_| self.sends)
+    }
+
+    /// Sends the request that is waiting for its ACK again. Returns `false`,
+    /// sending nothing, once it has been sent [`MAX_SENDS`] times.
+    pub fn resend(&mut self) -> bool {
+        let Some(in_flight) = &mut self.in_flight else {
+            return true;
+        };
+        if in_flight.sends >= MAX_SENDS {
+            return false;
+        }
+        in_flight.sends += 1;
+        self.sends += 1;
+        self.outgoing.push(in_flight.frame.clone());
+        true
     }
 
     /// Asks the Device to switch to `mode`. The Device confirms with a
@@ -180,11 +218,11 @@ impl Session {
 
     fn acknowledged(&mut self, ack: &Frame) {
         // A stale ACK, for a frame other than the outstanding one, is ignored.
-        if !self.awaiting_ack || ack.seq != 1 - self.seq {
+        if self.in_flight.is_none() || ack.seq != 1 - self.seq {
             return;
         }
         self.seq = ack.seq;
-        self.awaiting_ack = false;
+        self.in_flight = None;
         self.send_next();
     }
 
@@ -268,13 +306,14 @@ impl Session {
     }
 
     fn send_next(&mut self) {
-        if self.awaiting_ack {
+        if self.in_flight.is_some() {
             return;
         }
         if let Some(payload) = self.requests.pop_front() {
-            self.outgoing
-                .push(encode(DataType::Mdr, self.seq, &payload));
-            self.awaiting_ack = true;
+            let frame = encode(DataType::Mdr, self.seq, &payload);
+            self.outgoing.push(frame.clone());
+            self.sends += 1;
+            self.in_flight = Some(InFlight { frame, sends: 1 });
         }
     }
 }
