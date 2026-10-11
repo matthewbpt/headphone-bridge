@@ -6,7 +6,7 @@ use std::sync::{mpsc as std_mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
-use objc2::rc::Retained;
+use objc2::rc::{autoreleasepool, Retained};
 use objc2::{sel, Message};
 use objc2_core_bluetooth::{CBManager, CBManagerAuthorization};
 use objc2_core_foundation::{kCFRunLoopDefaultMode, CFRetained, CFRunLoop, CFRunLoopRunResult};
@@ -136,31 +136,44 @@ impl BluetoothThread {
         }
     }
 
+    /// Every turn runs in its own autorelease pool. This thread has no pool
+    /// of its own, so without one every object IOBluetooth autoreleases would
+    /// live until the thread exits. That includes each RFCOMM channel it
+    /// opens, which stays registered for the Device's connection events: one
+    /// left over from before a disconnect reacts to the reconnect.
     fn run(mut self, commands: std_mpsc::Receiver<Command>) {
-        // Fires for every new baseband connection, and may fire for those that
-        // already exist; Devices already Connected are seeded below either way.
-        self.connect_notification = unsafe {
-            IOBluetoothDevice::registerForConnectNotifications_selector(
-                Some(&self.watcher),
-                Some(sel!(deviceConnected:fromDevice:)),
-            )
-        };
-        for device in paired_devices() {
-            if unsafe { device.isConnected() } {
-                self.device_connected(&device);
-            }
-        }
-        self.check_audio_output();
-        loop {
-            pump();
-            self.handle_device_events();
-            self.sweep_closed_links();
-            loop {
-                match commands.try_recv() {
-                    Ok(command) => self.command(command),
-                    Err(std_mpsc::TryRecvError::Empty) => break,
-                    Err(std_mpsc::TryRecvError::Disconnected) => return self.shut_down(),
+        autoreleasepool(|_| {
+            // Fires for every new baseband connection, and may fire for those
+            // that already exist; Devices already Connected are seeded below
+            // either way.
+            self.connect_notification = unsafe {
+                IOBluetoothDevice::registerForConnectNotifications_selector(
+                    Some(&self.watcher),
+                    Some(sel!(deviceConnected:fromDevice:)),
+                )
+            };
+            for device in paired_devices() {
+                if unsafe { device.isConnected() } {
+                    self.device_connected(&device);
                 }
+            }
+            self.check_audio_output();
+        });
+        while autoreleasepool(|_| self.turn(&commands)) {}
+        autoreleasepool(|_| self.shut_down());
+    }
+
+    /// Pumps the run loop once and handles what happened. False once the
+    /// adapter is dropped.
+    fn turn(&mut self, commands: &std_mpsc::Receiver<Command>) -> bool {
+        pump();
+        self.handle_device_events();
+        self.sweep_closed_links();
+        loop {
+            match commands.try_recv() {
+                Ok(command) => self.command(command),
+                Err(std_mpsc::TryRecvError::Empty) => return true,
+                Err(std_mpsc::TryRecvError::Disconnected) => return false,
             }
         }
     }
@@ -188,7 +201,7 @@ impl BluetoothThread {
 
     fn handle_device_events(&mut self) {
         loop {
-            let Some(event) = self.events.borrow_mut().pop_front() else {
+            let Some(event) = self.events.lock().pop_front() else {
                 return;
             };
             match event {
@@ -330,10 +343,7 @@ impl BluetoothThread {
             let gave_up = error_since.is_some_and(|since| since.elapsed() > OPEN_ERROR_GRACE)
                 || started.elapsed() > OPEN_TIMEOUT;
             if gave_up {
-                unsafe {
-                    channel.setDelegate(None);
-                    channel.closeChannel();
-                }
+                release(&channel);
                 delegate.close();
                 return Err(match last_error {
                     Some(status) => self.open_failure(status),
@@ -381,7 +391,7 @@ impl BluetoothThread {
     /// events in place.
     fn sdp_query_completed(&self, device: &IOBluetoothDevice) -> bool {
         let address = address_of(device);
-        let mut events = self.events.borrow_mut();
+        let mut events = self.events.lock();
         let position = events.iter().position(
             |event| matches!(event, DeviceEvent::SdpQueryComplete(d) if address_of(d) == address),
         );
@@ -423,10 +433,7 @@ impl BluetoothThread {
 
     fn close(&mut self, link: LinkId) {
         if let Some(Link { channel, delegate }) = self.links.remove(&link) {
-            unsafe {
-                channel.setDelegate(None);
-                channel.closeChannel();
-            }
+            release(&channel);
             delegate.close();
         }
     }
@@ -452,6 +459,19 @@ impl BluetoothThread {
         }
         if let Some(notification) = self.connect_notification.take() {
             unsafe { notification.unregister() };
+        }
+    }
+}
+
+/// Stops `channel` calling its delegate, and closes it if it's open.
+/// `closeChannel` closes the Device's RFCOMM channel with the same id whatever
+/// the state of this object, so on one that's closed, or never finished
+/// opening, it could only close another.
+fn release(channel: &IOBluetoothRFCOMMChannel) {
+    unsafe {
+        channel.setDelegate(None);
+        if channel.isOpen() {
+            channel.closeChannel();
         }
     }
 }
