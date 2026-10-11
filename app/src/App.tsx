@@ -19,6 +19,7 @@ export function App() {
 
 const MODEL_NAMES: Record<Model, string> = {
   galaxyBuds4Pro: "Galaxy Buds4 Pro",
+  wh1000xm5: "WH-1000XM5",
 };
 
 function DeviceView({ device }: { device: Device }) {
@@ -64,6 +65,7 @@ function reasonText(reason: NotAttachedReason): string {
 
 function BatteryView({ battery }: { battery: Battery }) {
   const percent = (level: number | null) => (level === null ? "–" : `${level}%`);
+  if (battery.kind === "headphones") return <div>Battery: {percent(battery.level)}</div>;
   return (
     <div>
       Battery: L {percent(battery.left)} · R {percent(battery.right)} · Case {percent(battery.case)}
