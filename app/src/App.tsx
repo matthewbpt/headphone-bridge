@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
 import { setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
+import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
 export function App() {
   return (
     <>
       <DeviceListView />
+      <LaunchAtLoginSetting />
       <FrameLogSetting />
     </>
   );

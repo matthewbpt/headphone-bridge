@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Headphone Bridge",
         "width": 420,
-        "height": 560
+        "height": 560,
+        "visible": false
       }
     ],
     "security": {
