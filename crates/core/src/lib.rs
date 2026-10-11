@@ -18,6 +18,7 @@ use tokio::task::JoinHandle;
 
 pub use command::{Command, CommandError, NoiseControlMode};
 pub use device_list::{Battery, Device, DeviceList, DeviceState, NotAttachedReason};
+use frame_log::{Direction, FrameLog};
 pub use model::{AmbientLevelRange, Capabilities, Model};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 
@@ -39,6 +40,7 @@ impl Core {
             devices: BTreeMap::new(),
             link_events,
             next_attempt: 0,
+            frame_log: FrameLog::default(),
         };
         tokio::spawn(state.run(commands_rx, link_events_rx));
         Core {
@@ -77,6 +79,7 @@ struct State<P> {
     /// Tells apart link sessions, so events from a session that has been
     /// replaced are ignored.
     next_attempt: u64,
+    frame_log: FrameLog,
 }
 
 /// A Connected Device and its control link session, if any.
@@ -182,6 +185,7 @@ impl<P: Platform> State<P> {
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let platform = self.platform.clone();
         let events = self.link_events.clone();
+        let frame_log = self.frame_log.clone();
         let address = address.clone();
         let task = tokio::spawn(async move {
             let send = |kind| {
@@ -193,7 +197,7 @@ impl<P: Platform> State<P> {
             };
             let reason = match platform.open_control_link(&address, samsung::SERVICE).await {
                 Ok(link) => {
-                    run_samsung_session(link, commands_rx, |update| {
+                    run_samsung_session(link, commands_rx, frame_log, |update| {
                         send(LinkEventKind::Update(update))
                     })
                     .await
@@ -270,6 +274,14 @@ impl<P: Platform> State<P> {
                     .send(SessionCommand::SetNoiseControlMode(mode))
                     .map_err(|_| CommandError::NotAttached)
             }
+            Command::SetFrameLog(Some(path)) => self
+                .frame_log
+                .start(&path)
+                .map_err(|error| CommandError::FrameLogUnavailable(error.to_string())),
+            Command::SetFrameLog(None) => {
+                self.frame_log.stop();
+                Ok(())
+            }
             _ => Err(CommandError::UnknownDevice),
         }
     }
@@ -295,9 +307,17 @@ impl<P: Platform> State<P> {
 async fn run_samsung_session(
     mut link: ControlLink,
     mut commands: mpsc::UnboundedReceiver<SessionCommand>,
+    frame_log: FrameLog,
     mut on_update: impl FnMut(samsung::Update),
 ) -> NotAttachedReason {
-    if link.outgoing.send(samsung::Session::handshake()).is_err() {
+    // Frames are logged under the vendor's slug until the Model is identified.
+    let mut slug = "samsung";
+    // Every frame written goes through here, so all of them are logged.
+    let send = |slug: &str, frame: Vec<u8>| {
+        frame_log.record(slug, Direction::Sent, &frame);
+        link.outgoing.send(frame).is_ok()
+    };
+    if !send(slug, samsung::Session::handshake()) {
         return NotAttachedReason::LinkDropped;
     }
     let mut session = samsung::Session::default();
@@ -307,12 +327,21 @@ async fn run_samsung_session(
                 let Some(bytes) = bytes else {
                     return NotAttachedReason::LinkDropped;
                 };
-                for update in session.receive(&bytes) {
-                    let unsupported = update == samsung::Update::Unsupported;
-                    on_update(update);
-                    if unsupported {
-                        // Dropping the link Detaches without writing anything more.
-                        return NotAttachedReason::UnsupportedModel;
+                for frame in session.deframe(&bytes) {
+                    let updates = session.receive(&frame);
+                    for update in &updates {
+                        if let samsung::Update::Identified(model) = update {
+                            slug = model.slug();
+                        }
+                    }
+                    frame_log.record(slug, Direction::Received, &frame.raw);
+                    for update in updates {
+                        let unsupported = update == samsung::Update::Unsupported;
+                        on_update(update);
+                        if unsupported {
+                            // Dropping the link Detaches without writing anything more.
+                            return NotAttachedReason::UnsupportedModel;
+                        }
                     }
                 }
             }
@@ -323,7 +352,7 @@ async fn run_samsung_session(
                     }
                 };
                 for frame in frames {
-                    if link.outgoing.send(frame).is_err() {
+                    if !send(slug, frame) {
                         return NotAttachedReason::LinkDropped;
                     }
                 }

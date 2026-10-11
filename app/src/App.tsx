@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
 import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
 import { setNoiseControlMode, useDeviceList } from "./deviceList";
+import { FrameLogSetting } from "./FrameLogSetting";
 
 export function App() {
+  return (
+    <>
+      <DeviceListView />
+      <FrameLogSetting />
+    </>
+  );
+}
+
+function DeviceListView() {
   const deviceList = useDeviceList();
 
   if (deviceList === null) return null;

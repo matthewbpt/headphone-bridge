@@ -52,7 +52,11 @@ export interface Battery {
 }
 
 /** Why the core rejected a command before sending anything. */
-export type CommandError = "unknownDevice" | "notAttached" | "missingCapability";
+export type CommandError =
+  | "unknownDevice"
+  | "notAttached"
+  | "missingCapability"
+  | { frameLogUnavailable: string };
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {

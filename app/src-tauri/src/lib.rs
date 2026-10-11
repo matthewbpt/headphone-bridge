@@ -3,9 +3,16 @@
 
 mod platform;
 
+use std::path::PathBuf;
+use std::sync::Mutex;
+
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{Command, CommandError, Core, DeviceList, NoiseControlMode};
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+/// The frame log file while the frame log is on. It starts off at every launch.
+#[derive(Default)]
+struct FrameLog(Mutex<Option<PathBuf>>);
 
 #[tauri::command]
 fn device_list(core: State<Core>) -> DeviceList {
@@ -38,6 +45,34 @@ async fn retry_attach(core: State<'_, Core>, address: String) -> Result<(), Comm
         .await
 }
 
+/// The frame log file, or `None` while the frame log is off.
+#[tauri::command]
+fn frame_log(frame_log: State<FrameLog>) -> Option<PathBuf> {
+    frame_log.0.lock().unwrap().clone()
+}
+
+/// Switches the frame log on or off. Returns the log file while it's on.
+#[tauri::command]
+async fn set_frame_log(
+    app: AppHandle,
+    core: State<'_, Core>,
+    frame_log: State<'_, FrameLog>,
+    enabled: bool,
+) -> Result<Option<PathBuf>, CommandError> {
+    let path = if enabled {
+        let unavailable =
+            |error: &dyn std::fmt::Display| CommandError::FrameLogUnavailable(error.to_string());
+        let dir = app.path().app_log_dir().map_err(|e| unavailable(&e))?;
+        std::fs::create_dir_all(&dir).map_err(|e| unavailable(&e))?;
+        Some(dir.join("frame-log.frames"))
+    } else {
+        None
+    };
+    core.command(Command::SetFrameLog(path.clone())).await?;
+    *frame_log.0.lock().unwrap() = path.clone();
+    Ok(path)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -51,13 +86,16 @@ pub fn run() {
                 }
             });
             app.manage(core);
+            app.manage(FrameLog::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             device_list,
             set_noise_control_mode,
             set_ambient_level,
-            retry_attach
+            retry_attach,
+            frame_log,
+            set_frame_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running Headphone Bridge");
