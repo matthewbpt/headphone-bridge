@@ -13,6 +13,9 @@ Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
   scripted fake platform in `crates/core/tests/support`.
 - `crates/platform-macos`: the macOS platform adapter (IOBluetooth). It
   compiles to nothing on other OSes and is tested by hand.
+- `crates/platform-linux`: the Linux platform adapter (BlueZ through `bluer`,
+  and the PulseAudio/PipeWire default sink). Its pure mappings build and are
+  tested on every OS; the rest compiles only on Linux and is tested by hand.
 - `app/src-tauri`: the Tauri v2 shell.
 - `app/src`: the React + TypeScript UI.
 
@@ -40,6 +43,21 @@ npm run open:dev
 This builds a debug, ad-hoc signed `Headphone Bridge.app` at
 `target/debug/bundle/macos/` and opens it. Use `npm run bundle:dev` to build
 without opening. `npm run tauri dev` is still fine for UI-only work.
+
+### Running on Linux
+
+Needs no root or group membership: BlueZ opens the control link and hands it
+over D-Bus. Install the build dependencies (Ubuntu 24.04):
+
+```sh
+sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libxdo-dev libssl-dev libdbus-1-dev libpulse-dev pkg-config file
+```
+
+Then `cd app && npm run tauri dev` runs the app, and
+`npm run tauri build -- --bundles deb,appimage` builds the deb and AppImage
+under `target/release/bundle/`. On GNOME the tray needs the AppIndicator
+extension, which Ubuntu enables by default.
 
 ## Licence
 

@@ -24,3 +24,6 @@ uuid.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 headphone-bridge-platform-macos = { path = "../../crates/platform-macos" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+headphone-bridge-platform-linux = { path = "../../crates/platform-linux" }

@@ -10,14 +10,19 @@ pub fn start() -> headphone_bridge_platform_macos::MacBluetooth {
     headphone_bridge_platform_macos::MacBluetooth::start()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub fn start() -> headphone_bridge_platform_linux::LinuxBluetooth {
+    headphone_bridge_platform_linux::LinuxBluetooth::start()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn start() -> NoBluetooth {
     NoBluetooth
 }
 
 /// Stands in for an OS Bluetooth adapter where none exists yet: it never
 /// observes a Device, so nothing can be Connected.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(dead_code))]
 pub struct NoBluetooth;
 
 impl Platform for NoBluetooth {

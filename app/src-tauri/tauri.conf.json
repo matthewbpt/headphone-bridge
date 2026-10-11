@@ -35,6 +35,11 @@
     ],
     "macOS": {
       "signingIdentity": "-"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["bluez", "libpulse0"]
+      }
     }
   }
 }
