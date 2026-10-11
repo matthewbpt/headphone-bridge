@@ -17,6 +17,8 @@ export interface Device {
   capabilities: Capabilities;
   /** The Noise Control Mode last selected by any means. Null until reported. */
   chosenMode: NoiseControlMode | null;
+  /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
+  ambientLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
 }
@@ -56,6 +58,7 @@ export type CommandError =
   | "notAttached"
   | "unsupportedModel"
   | "missingCapability"
+  | "outOfRange"
   | { frameLogUnavailable: string };
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
@@ -66,6 +69,11 @@ export function setNoiseControlMode(address: string, mode: NoiseControlMode): Pr
 /** Tries again to Attach a Connected Device that isn't Attached. */
 export function retryAttach(address: string): Promise<void> {
   return invoke("retry_attach", { address });
+}
+
+/** Asks the Device to set the Ambient Level, in the Model's own steps. */
+export function setAmbientLevel(address: string, level: number): Promise<void> {
+  return invoke("set_ambient_level", { address, level });
 }
 
 /**

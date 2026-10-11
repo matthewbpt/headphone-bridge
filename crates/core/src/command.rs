@@ -29,6 +29,8 @@ pub enum CommandError {
     UnsupportedModel,
     /// The Device's Model doesn't have the Capability the command needs.
     MissingCapability,
+    /// The value is outside the range the Model's Capabilities declare.
+    OutOfRange,
     /// The frame log file couldn't be opened.
     FrameLogUnavailable(String),
 }

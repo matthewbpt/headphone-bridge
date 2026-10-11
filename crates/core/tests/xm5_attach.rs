@@ -80,6 +80,23 @@ async fn battery_follows_notifications() {
 }
 
 #[tokio::test]
+async fn a_real_xm5_attach_replays_from_its_frame_log() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+
+    // Firmware 2.5.1, battery 57 %.
+    replay(&mut link, &fixture("wh-1000xm5/real-attach")).await;
+
+    let list = wait_for(&core, |list| list.devices[0].battery.is_some()).await;
+    let device = &list.devices[0];
+    assert_eq!(device.state, DeviceState::Attached);
+    assert_eq!(device.model, Some(Model::Wh1000Xm5));
+    assert_eq!(device.battery, Some(Battery::Headphones { level: 57 }));
+}
+
+#[tokio::test]
 async fn another_sony_model_is_detached_having_been_sent_only_reads() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);

@@ -135,6 +135,14 @@ struct LinkSession {
     commands: mpsc::UnboundedSender<SessionCommand>,
 }
 
+impl LinkSession {
+    fn send(&self, command: SessionCommand) -> Result<(), CommandError> {
+        self.commands
+            .send(command)
+            .map_err(|_| CommandError::NotAttached)
+    }
+}
+
 impl Drop for LinkSession {
     fn drop(&mut self) {
         self.task.abort();
@@ -144,6 +152,7 @@ impl Drop for LinkSession {
 /// A command for the Device, already checked against its Capabilities.
 enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
+    SetAmbientLevel(u8),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -229,6 +238,7 @@ impl<P: Platform> State<P> {
                 state,
                 capabilities: Capabilities::default(),
                 chosen_mode: None,
+                ambient_level: None,
                 battery: None,
             },
             vendor,
@@ -331,6 +341,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::ChosenMode(mode)) => {
                 device.chosen_mode = Some(mode);
             }
+            LinkEventKind::Update(Update::AmbientLevel(level)) => {
+                device.ambient_level = Some(level);
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device {
@@ -340,6 +353,7 @@ impl<P: Platform> State<P> {
                     state: DeviceState::NotAttached { reason },
                     capabilities: Capabilities::default(),
                     chosen_mode: None,
+                    ambient_level: None,
                     battery: None,
                 };
                 tracked.session = None;
@@ -358,23 +372,22 @@ impl<P: Platform> State<P> {
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
             Command::SetNoiseControlMode(address, mode) => {
-                let tracked = self.supported(&address)?;
-                let session = match (&tracked.device.state, &tracked.session) {
-                    (DeviceState::Attached, Some(session)) => session,
-                    _ => return Err(CommandError::NotAttached),
-                };
-                if !tracked
-                    .device
-                    .capabilities
-                    .noise_control_modes
-                    .contains(&mode)
-                {
+                let (device, session) = self.attached(&address)?;
+                if !device.capabilities.noise_control_modes.contains(&mode) {
                     return Err(CommandError::MissingCapability);
                 }
-                session
-                    .commands
-                    .send(SessionCommand::SetNoiseControlMode(mode))
-                    .map_err(|_| CommandError::NotAttached)
+                session.send(SessionCommand::SetNoiseControlMode(mode))
+            }
+            Command::SetAmbientLevel(address, level) => {
+                let (device, session) = self.attached(&address)?;
+                let range = device
+                    .capabilities
+                    .ambient_level
+                    .ok_or(CommandError::MissingCapability)?;
+                if !(range.min..=range.max).contains(&level) {
+                    return Err(CommandError::OutOfRange);
+                }
+                session.send(SessionCommand::SetAmbientLevel(level))
             }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
@@ -397,7 +410,6 @@ impl<P: Platform> State<P> {
                 self.frame_log.stop();
                 Ok(())
             }
-            _ => Err(CommandError::UnknownDevice),
         }
     }
 
@@ -412,6 +424,15 @@ impl<P: Platform> State<P> {
                 reason: NotAttachedReason::UnsupportedModel,
             } => Err(CommandError::UnsupportedModel),
             _ => Ok(tracked),
+        }
+    }
+
+    /// The Attached Device at `address` and its control link session.
+    fn attached(&self, address: &DeviceAddress) -> Result<(&Device, &LinkSession), CommandError> {
+        let tracked = self.supported(address)?;
+        match (&tracked.device.state, &tracked.session) {
+            (DeviceState::Attached, Some(session)) => Ok((&tracked.device, session)),
+            _ => Err(CommandError::NotAttached),
         }
     }
 
@@ -479,6 +500,7 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseControlMode(mode) => {
                         session.set_noise_control_mode(mode)
                     }
+                    SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
                 };
                 for frame in frames {
                     if !send(slug, frame) {

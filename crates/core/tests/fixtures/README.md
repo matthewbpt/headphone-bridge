@@ -52,3 +52,4 @@ file.
   mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
   exist from the frame log. No WH-1000XM5 capture exists yet.
   - `attach`: identification by model name, support functions and battery.
+  - `real-attach`: a real Attach from the frame log, WH-1000XM5 firmware 2.5.1.
