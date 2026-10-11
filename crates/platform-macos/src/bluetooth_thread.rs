@@ -17,6 +17,7 @@ use objc2_io_bluetooth::{
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::audio_output;
 use crate::delegates::{DeviceEvent, DeviceEvents, DeviceWatcher, RfcommDelegate};
 use crate::port_address;
 
@@ -38,6 +39,8 @@ pub enum Command {
     Close {
         link: LinkId,
     },
+    /// The default audio output may have changed: read it again.
+    CheckAudioOutput,
 }
 
 /// Wakes the Bluetooth thread's run loop so it handles a command promptly.
@@ -101,6 +104,8 @@ struct BluetoothThread {
     connected: HashMap<String, ConnectedDevice>,
     links: HashMap<LinkId, Link>,
     next_link: LinkId,
+    /// The Device last reported as the audio output.
+    audio_output: Option<DeviceAddress>,
 }
 
 struct ConnectedDevice {
@@ -127,6 +132,7 @@ impl BluetoothThread {
             connected: HashMap::new(),
             links: HashMap::new(),
             next_link: 0,
+            audio_output: None,
         }
     }
 
@@ -144,6 +150,7 @@ impl BluetoothThread {
                 self.device_connected(&device);
             }
         }
+        self.check_audio_output();
         loop {
             pump();
             self.handle_device_events();
@@ -175,6 +182,7 @@ impl BluetoothThread {
             }
             Command::Write { link, bytes } => self.write(link, bytes),
             Command::Close { link } => self.close(link),
+            Command::CheckAudioOutput => self.check_audio_output(),
         }
     }
 
@@ -240,6 +248,8 @@ impl BluetoothThread {
                 name: unsafe { device.name() }.to_string(),
                 service_uuids: service_uuids(device),
             }));
+        // The audio output may have been matched by this Device's name.
+        self.check_audio_output();
     }
 
     fn device_disconnected(&mut self, device: &IOBluetoothDevice) {
@@ -252,6 +262,27 @@ impl BluetoothThread {
             let _ = self
                 .observations
                 .send(Observation::DeviceDisconnected(port_address(&address)));
+            self.check_audio_output();
+        }
+    }
+
+    /// Reports the default audio output if the Device it matches has changed.
+    fn check_audio_output(&mut self) {
+        let output = audio_output::default_output().and_then(|output| {
+            // A UID without an address is matched by name instead.
+            output.address.or_else(|| {
+                let name = output.name?;
+                self.connected
+                    .iter()
+                    .find(|(_, connected)| unsafe { connected.device.name() }.to_string() == name)
+                    .map(|(address, _)| port_address(address))
+            })
+        });
+        if output != self.audio_output {
+            self.audio_output = output.clone();
+            let _ = self
+                .observations
+                .send(Observation::AudioOutputChanged(output));
         }
     }
 

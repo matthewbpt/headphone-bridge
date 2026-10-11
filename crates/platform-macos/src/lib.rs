@@ -1,8 +1,8 @@
 //! The macOS platform adapter: IOBluetooth behind the core's platform port.
 //!
 //! Thin and tested by hand. It knows nothing about vendor protocols: it reports
-//! Devices becoming Connected and disconnected, and opens RFCOMM links by
-//! service UUID. It never connects or disconnects a Device itself.
+//! Devices becoming Connected and disconnected and the default audio output
+//! (CoreAudio), and opens RFCOMM links by service UUID. It never connects or disconnects a Device itself.
 //!
 //! IOBluetooth delivers callbacks on the run loop of the thread that registered
 //! them and isn't thread-safe, so a single thread owns every IOBluetooth object
@@ -12,6 +12,7 @@
 
 #![cfg(target_os = "macos")]
 
+mod audio_output;
 mod bluetooth_thread;
 mod delegates;
 
@@ -38,6 +39,15 @@ impl MacBluetooth {
     pub fn start() -> MacBluetooth {
         let (observations_tx, observations) = mpsc::unbounded_channel();
         let (commands, waker) = bluetooth_thread::spawn(observations_tx);
+        let audio_changes = Mutex::new(commands.clone());
+        let audio_waker = waker.clone();
+        audio_output::watch(move || {
+            let _ = audio_changes
+                .lock()
+                .unwrap()
+                .send(Command::CheckAudioOutput);
+            audio_waker.wake();
+        });
         MacBluetooth {
             commands,
             waker,

@@ -27,4 +27,5 @@ objc2-io-bluetooth = { version = "0.3", default-features = false, features = [
   "IOBluetoothUserLib",
 ] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFRunLoop", "CFDate", "CFString"] }
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
 objc2-core-bluetooth = { version = "0.3", default-features = false, features = ["std", "CBManager"] }
