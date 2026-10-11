@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::command::NoiseControlMode;
+use crate::command::{CommandError, NoiseControlMode};
 use crate::model::{Capabilities, Model};
 use crate::platform::{DeviceAddress, LinkFailure};
 
@@ -57,6 +57,16 @@ impl Device {
         self.effective_mode = Some(mode);
         self.effective_mode_reason = (self.chosen_mode.is_some() && self.chosen_mode != Some(mode))
             .then(|| reason.unwrap_or(EffectiveModeReason::Unknown));
+    }
+
+    /// Fails until the Device has reported its Chosen Mode, which comes with
+    /// the rest of its noise control settings. A set sends some of those back
+    /// unchanged, so it can't be made before then.
+    pub(crate) fn settings_reported(&self) -> Result<(), CommandError> {
+        match self.chosen_mode {
+            Some(_) => Ok(()),
+            None => Err(CommandError::SettingsNotReported),
+        }
     }
 }
 

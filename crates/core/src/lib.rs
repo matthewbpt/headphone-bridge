@@ -401,6 +401,7 @@ impl<P: Platform> State<P> {
                 if !device.capabilities.noise_control_modes.contains(&mode) {
                     return Err(CommandError::MissingCapability);
                 }
+                device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseControlMode(mode))
             }
             Command::SetAmbientLevel(address, level) => {
@@ -412,6 +413,7 @@ impl<P: Platform> State<P> {
                 if !(range.min..=range.max).contains(&level) {
                     return Err(CommandError::OutOfRange);
                 }
+                device.settings_reported()?;
                 session.send(SessionCommand::SetAmbientLevel(level))
             }
             Command::RetryAttach(address) => {

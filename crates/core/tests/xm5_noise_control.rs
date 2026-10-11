@@ -273,3 +273,41 @@ async fn written(link: &mut DeviceLink) -> Vec<u8> {
 
 /// An ACK with sequence number 0: for a frame sent with 1.
 const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
+
+#[tokio::test]
+async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    // Identified and battery read, but its NCASM params not yet asked for.
+    let records = fixture("wh-1000xm5/attach");
+    replay(&mut link, &records[..16]).await;
+    wait_for(&core, |list| list.devices[0].battery.is_some()).await;
+
+    assert_eq!(
+        core.command(Command::SetNoiseControlMode(
+            xm5().address,
+            NoiseControlMode::NoiseCancelling,
+        ))
+        .await,
+        Err(CommandError::SettingsNotReported)
+    );
+    assert_eq!(
+        core.command(Command::SetAmbientLevel(xm5().address, 15))
+            .await,
+        Err(CommandError::SettingsNotReported)
+    );
+
+    // Nothing was sent: the rest of the Attach plays out as recorded, and
+    // the first set after it is the next thing written.
+    replay(&mut link, &records[16..]).await;
+    wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
+    core.command(Command::SetAmbientLevel(xm5().address, 15))
+        .await
+        .unwrap();
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
+    );
+}
