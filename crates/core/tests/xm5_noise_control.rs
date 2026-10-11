@@ -2,6 +2,7 @@ mod support;
 
 use std::time::Duration;
 
+use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{Battery, Command, CommandError, Core, NoiseControlMode};
 use support::{fake_platform, fixture, replay, sony_frame, wait_for, xm5, DeviceLink, FakeOs};
@@ -199,6 +200,67 @@ async fn a_reported_level_outside_1_to_20_is_ignored() {
     })
     .await;
     assert_eq!(list.devices[0].ambient_level, Some(10));
+}
+
+#[tokio::test]
+async fn real_xm5_sets_replay_from_their_frame_log() {
+    use NoiseControlMode::*;
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    let records = fixture("wh-1000xm5/real-noise-control");
+    let address = xm5().address;
+    // Each set as the capture made it, and what the Device then reported.
+    let sets = [
+        (Command::SetNoiseControlMode(address.clone(), Off), Off, 10),
+        (
+            Command::SetNoiseControlMode(address.clone(), NoiseCancelling),
+            NoiseCancelling,
+            10,
+        ),
+        (
+            Command::SetNoiseControlMode(address.clone(), Ambient),
+            Ambient,
+            10,
+        ),
+        (Command::SetAmbientLevel(address.clone(), 15), Ambient, 15),
+        (Command::SetAmbientLevel(address.clone(), 20), Ambient, 20),
+        (Command::SetAmbientLevel(address.clone(), 1), Ambient, 1),
+        (Command::SetAmbientLevel(address.clone(), 10), Ambient, 10),
+        (
+            Command::SetNoiseControlMode(address.clone(), NoiseCancelling),
+            NoiseCancelling,
+            10,
+        ),
+    ];
+    // The capture split before each NCASM_SET_PARAM the app sent.
+    let set_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(7) == Some(&0x68))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(set_at.len(), sets.len());
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    let mut reported = (NoiseCancelling, 10);
+    for (i, (command, mode, level)) in sets.into_iter().enumerate() {
+        wait_for(&core, |list| {
+            (list.devices[0].chosen_mode, list.devices[0].ambient_level)
+                == (Some(reported.0), Some(reported.1))
+        })
+        .await;
+        core.command(command).await.unwrap();
+        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[set_at[i]..end]).await;
+        reported = (mode, level);
+    }
+    wait_for(&core, |list| {
+        (list.devices[0].chosen_mode, list.devices[0].ambient_level)
+            == (Some(NoiseCancelling), Some(10))
+    })
+    .await;
 }
 
 /// The next frame the core writes.
