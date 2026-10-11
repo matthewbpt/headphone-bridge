@@ -1,0 +1,653 @@
+/* PROTOTYPE: the redesigned window's one stylesheet. Follows the OS light or
+   dark scheme; `html[data-theme]` forces one (the prototype bar's toggle). */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f2f2f6;
+  --bg-glow: rgba(70, 120, 190, 0.12);
+  --card: #ffffff;
+  --text: #121214;
+  --muted: #6c6c72;
+  --accent: #2f6bf0;
+  --accent-text: #ffffff;
+  --circle: #e6e6ec;
+  --circle-icon: #6c6c72;
+  --track: #dcdce3;
+  --divider: #e3e3e8;
+  --danger: #c4372f;
+  --low: #d9822b;
+  --art-body: #2d3036;
+  --art-body-shade: #1c1e22;
+  --art-tip: #4a4e56;
+  --art-metal: #c4c8ce;
+  --art-metal-shade: #a2a7ae;
+  --art-grille: #7a7f87;
+  --art-generic: #9a9aa3;
+  --art-line: #2a2a2e;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #050607;
+  --bg-glow: rgba(60, 110, 140, 0.28);
+  --card: #1c1c1e;
+  --text: #f4f4f6;
+  --muted: #9a9aa0;
+  --accent: #3b7cff;
+  --accent-text: #ffffff;
+  --circle: #3a3a3d;
+  --circle-icon: #b8b8be;
+  --track: #2e2e31;
+  --divider: #2e2e31;
+  --danger: #ff6b5f;
+  --low: #f0a24a;
+  --art-body: #33363c;
+  --art-body-shade: #24262a;
+  --art-tip: #4c5058;
+  --art-metal: #b9bdc4;
+  --art-metal-shade: #8e939b;
+  --art-grille: #5d6168;
+  --art-generic: #6e6e76;
+  --art-line: #e4e4ea;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #050607;
+    --bg-glow: rgba(60, 110, 140, 0.28);
+    --card: #1c1c1e;
+    --text: #f4f4f6;
+    --muted: #9a9aa0;
+    --accent: #3b7cff;
+    --accent-text: #ffffff;
+    --circle: #3a3a3d;
+    --circle-icon: #b8b8be;
+    --track: #2e2e31;
+    --divider: #2e2e31;
+    --danger: #ff6b5f;
+    --low: #f0a24a;
+    --art-body: #33363c;
+    --art-body-shade: #24262a;
+    --art-tip: #4c5058;
+    --art-metal: #b9bdc4;
+    --art-metal-shade: #8e939b;
+    --art-grille: #5d6168;
+    --art-generic: #6e6e76;
+    --art-line: #e4e4ea;
+  }
+}
+
+body {
+  margin: 0;
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Ubuntu, sans-serif;
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* The window */
+
+.window {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 18px 16px 16px;
+  background: radial-gradient(120% 60% at 50% 0%, var(--bg-glow), transparent 70%), var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  position: relative;
+  padding: 0 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.title--button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+}
+
+.title--button:hover,
+.title--button[aria-expanded="true"] {
+  background: var(--circle);
+}
+
+.chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.menu {
+  position: absolute;
+  z-index: 2;
+  top: 36px;
+  left: 0;
+  min-width: 240px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--divider);
+}
+
+.menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.menu li:hover {
+  background: var(--circle);
+}
+
+.menu__check {
+  width: 14px;
+  color: var(--accent);
+}
+
+.menu__name {
+  flex: 1;
+}
+
+.tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 2px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--circle);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pill[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.pill__primary {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+
+.device-image {
+  width: 190px;
+  height: 140px;
+}
+
+.device-image .line {
+  fill: none;
+  stroke: var(--art-line);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+  font-weight: 600;
+}
+
+.status--column {
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 400;
+  text-align: center;
+  max-width: 320px;
+}
+
+.muted,
+.reason {
+  color: var(--muted);
+}
+
+.battery__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.battery__sep {
+  color: var(--muted);
+  margin: 0 4px;
+}
+
+.battery__label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.battery-glyph {
+  width: 18px;
+  height: 10px;
+  color: var(--muted);
+}
+
+.battery-glyph__fill {
+  fill: var(--text);
+}
+
+.battery-glyph--low .battery-glyph__fill {
+  fill: var(--low);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--track);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 20px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 22px;
+  padding: 16px 14px;
+}
+
+/* Noise Control Mode selector: round buttons joined by a track. */
+
+.modes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+}
+
+.modes__track {
+  position: absolute;
+  top: 25px;
+  height: 5px;
+  margin-top: -2.5px;
+  left: calc(100% / var(--count) / 2);
+  right: calc(100% / var(--count) / 2);
+  background: var(--track);
+}
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.mode:disabled {
+  cursor: default;
+}
+
+.mode__circle {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  position: relative;
+  background: var(--circle);
+  color: var(--circle-icon);
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode:not(:disabled):hover .mode__circle {
+  filter: brightness(1.08);
+}
+
+.mode-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.mode__label {
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.mode[aria-checked="true"] .mode__circle {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.mode[aria-checked="true"] .mode__label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Asked for, not yet confirmed: a spinning ring around the filled circle. */
+.mode--pending .mode__circle {
+  opacity: 0.75;
+}
+
+.mode--pending .mode__circle::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.hint {
+  margin: 14px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.error {
+  margin: 10px 4px 0;
+  font-size: 13px;
+  color: var(--danger);
+  text-align: center;
+}
+
+/* Ambient Level: notched dots, -/+ buttons. */
+
+.level {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--divider);
+}
+
+.level__title {
+  font-size: 15px;
+  margin: 0 4px 10px;
+}
+
+.level__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.level__step {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.level__step:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.level__step svg {
+  width: 18px;
+  height: 18px;
+}
+
+.level__track {
+  --thumb: 26px;
+  position: relative;
+  flex: 1;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.level__dots {
+  position: absolute;
+  inset: 0 calc(var(--thumb) / 2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.level__dot {
+  width: 7px;
+  height: 7px;
+  margin: 0 -3.5px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.level__track input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.level__track input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track--pending input::-webkit-slider-thumb {
+  border-style: dashed;
+}
+
+.level__track--pending input::-moz-range-thumb {
+  border-style: dashed;
+}
+
+.level__track input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* App settings, collapsed at the bottom. */
+
+.settings {
+  margin-top: auto;
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.settings > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.settings > div,
+.settings > details {
+  margin-top: 10px;
+}
+
+.settings details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* Prototype chrome: not part of the design. */
+
+.proto-stage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 90px;
+  box-sizing: border-box;
+  background: repeating-conic-gradient(#8a8a8a 0 25%, #969696 0 50%) 0 0 / 24px 24px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.proto-scenario {
+  width: 420px;
+  background: #fffbe6;
+  color: #222;
+  border: 2px dashed #b08800;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.proto-scenario p {
+  margin: 6px 0 0;
+}
+
+.proto-frame {
+  width: 420px;
+  height: 560px;
+  overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font-family: system-ui, -apple-system, "Segoe UI", Ubuntu, sans-serif;
+}
+
+.proto-bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #ffe14d;
+  color: #111;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  z-index: 10;
+}
+
+.proto-bar button {
+  border: 0;
+  background: #111;
+  color: #ffe14d;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.proto-bar__label {
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 290px;
+  text-align: center;
+}
+
+.proto-bar__divider {
+  width: 1px;
+  height: 18px;
+  background: #111;
+  opacity: 0.3;
+}

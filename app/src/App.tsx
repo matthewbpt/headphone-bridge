@@ -10,8 +10,11 @@ import {
 } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
+import { PrototypeHost } from "./prototype/PrototypeHost";
 
 export function App() {
+  // PROTOTYPE: the window redesign's variants, only under `npm run prototype`.
+  if (import.meta.env.MODE === "prototype") return <PrototypeHost />;
   return (
     <>
       <DeviceListView />
