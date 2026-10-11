@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
-import { setNoiseControlMode, useDeviceList } from "./deviceList";
+import { setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 
 export function App() {
@@ -41,6 +41,9 @@ function DeviceView({ device }: { device: Device }) {
       <div>{stateText(device)}</div>
       {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
         <NoiseControlModeButtons device={device} />
+      )}
+      {device.state.kind === "attached" && device.capabilities.ambientLevel && (
+        <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
       )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
@@ -99,6 +102,71 @@ function NoiseControlModeButtons({ device }: { device: Device }) {
           </button>
         ))}
       </div>
+      {error && <div role="alert">{error}</div>}
+    </div>
+  );
+}
+
+function AmbientLevelSlider({
+  device,
+  range,
+}: {
+  device: Device;
+  range: { min: number; max: number };
+}) {
+  // The level last asked for, until a snapshot reports it. Dragging across
+  // notches asks for each in turn.
+  const [pending, setPending] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPending((level) => (level === device.ambientLevel ? null : level));
+  }, [device.ambientLevel]);
+  useEffect(() => {
+    if (pending === null) return;
+    const timer = setTimeout(() => {
+      setPending(null);
+      setError(`Ambient Level ${pending} wasn't confirmed by the device`);
+    }, PENDING_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
+
+  const choose = (level: number) => {
+    setError(null);
+    setPending(level === device.ambientLevel ? null : level);
+    if (level === device.ambientLevel && pending === null) return;
+    setAmbientLevel(device.address, level).catch((e) => {
+      setPending(null);
+      setError(`Couldn't set Ambient Level ${level}: ${e}`);
+    });
+  };
+
+  const shown = pending ?? device.ambientLevel;
+  const listId = `ambient-level-steps-${device.address}`;
+  return (
+    <div>
+      <label>
+        Ambient Level{" "}
+        {/* One notch per step of the Model's own range. */}
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={1}
+          list={listId}
+          value={shown ?? range.min}
+          disabled={shown === null}
+          aria-busy={pending !== null}
+          onChange={(e) => choose(Number(e.target.value))}
+        />
+        <datalist id={listId}>
+          {Array.from({ length: range.max - range.min + 1 }, (_, i) => (
+            <option key={i} value={range.min + i} />
+          ))}
+        </datalist>{" "}
+        {shown ?? "–"}
+        {pending !== null && " …"}
+      </label>
       {error && <div role="alert">{error}</div>}
     </div>
   );

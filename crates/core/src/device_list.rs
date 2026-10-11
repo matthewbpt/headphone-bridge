@@ -28,6 +28,9 @@ pub struct Device {
     /// The Noise Control Mode the listener last selected, by any means.
     /// `None` until the Device first reports it.
     pub chosen_mode: Option<NoiseControlMode>,
+    /// The Ambient Level in the Model's own steps, within
+    /// `capabilities.ambient_level`. `None` until the Device first reports it.
+    pub ambient_level: Option<u8>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
 }

@@ -12,4 +12,6 @@ pub enum Update {
     Unsupported,
     Battery(Battery),
     ChosenMode(NoiseControlMode),
+    /// In the Model's own steps, within its Capabilities' range.
+    AmbientLevel(u8),
 }
