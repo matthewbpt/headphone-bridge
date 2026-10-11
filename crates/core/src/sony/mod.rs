@@ -35,6 +35,7 @@ mod command {
     pub const POWER_NTFY_STATUS: u8 = 0x25;
     pub const NCASM_GET_PARAM: u8 = 0x66;
     pub const NCASM_RET_PARAM: u8 = 0x67;
+    pub const NCASM_SET_PARAM: u8 = 0x68;
     pub const NCASM_NTFY_PARAM: u8 = 0x69;
 }
 
@@ -58,6 +59,21 @@ mod function {
 /// `NcAsmInquiredType` for the WH-1000XM5: noise cancelling and ambient sound
 /// with a level, as its support function `0x6B` declares (libmdr).
 const NCASM_TYPE: u8 = 0x17;
+/// `ValueChangeStatus::CHANGED`: a set that is final, not a slider mid-drag.
+const CHANGED: u8 = 0x01;
+
+/// NCASM params as the Device reports and takes them, bytes 3–6 of a 0x17
+/// RET, NTFY or SET.
+#[derive(Debug, Clone, Copy)]
+struct NoiseControl {
+    /// `00` off, `01` on: Off when off, whatever the mode byte says.
+    effect: u8,
+    /// `00` noise cancelling, `01` ambient.
+    mode: u8,
+    /// Not exposed by the app, so always sent back as last reported.
+    focus_on_voice: u8,
+    level: u8,
+}
 
 /// One control link session with a Sony Device.
 ///
@@ -74,6 +90,10 @@ pub struct Session {
     requests: VecDeque<Vec<u8>>,
     outgoing: Vec<Vec<u8>>,
     identified: bool,
+    /// The NCASM params last reported, or since sent. Every set changes one
+    /// field of these and sends the rest back as they were. `None` until the
+    /// Device first reports them.
+    noise_control: Option<NoiseControl>,
 }
 
 impl Session {
@@ -85,6 +105,7 @@ impl Session {
             requests: VecDeque::new(),
             outgoing: Vec::new(),
             identified: false,
+            noise_control: None,
         };
         session.request(vec![command::CONNECT_GET_PROTOCOL_INFO, FIXED_VALUE]);
         session
@@ -93,6 +114,45 @@ impl Session {
     /// Takes the frames to write to the Device, in order.
     pub fn outgoing(&mut self) -> Vec<Vec<u8>> {
         std::mem::take(&mut self.outgoing)
+    }
+
+    /// Asks the Device to switch to `mode`. The Device confirms with a
+    /// notification of the new params. Does nothing until the Device has
+    /// reported its params, as there is nothing to keep unchanged yet.
+    pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) {
+        let Some(mut params) = self.noise_control else {
+            return;
+        };
+        (params.effect, params.mode) = match mode {
+            NoiseControlMode::Off => (0x00, params.mode),
+            NoiseControlMode::NoiseCancelling => (0x01, 0x00),
+            NoiseControlMode::Ambient => (0x01, 0x01),
+            NoiseControlMode::Adaptive => return,
+        };
+        self.set_noise_control(params);
+    }
+
+    /// Asks the Device to set the Ambient Level, in the Model's own steps.
+    /// Like a mode set, it waits for the Device's params first.
+    pub fn set_ambient_level(&mut self, level: u8) {
+        let Some(mut params) = self.noise_control else {
+            return;
+        };
+        params.level = level;
+        self.set_noise_control(params);
+    }
+
+    fn set_noise_control(&mut self, params: NoiseControl) {
+        self.noise_control = Some(params);
+        self.request(vec![
+            command::NCASM_SET_PARAM,
+            NCASM_TYPE,
+            CHANGED,
+            params.effect,
+            params.mode,
+            params.focus_on_voice,
+            params.level,
+        ]);
     }
 
     /// Feeds bytes received from the Device, in chunks of any size, and
@@ -177,9 +237,15 @@ impl Session {
                 }
                 vec![Update::Battery(Battery::Headphones { level })]
             }
-            [command::NCASM_RET_PARAM | command::NCASM_NTFY_PARAM, NCASM_TYPE, _status, effect, mode, _focus_on_voice, level]
+            [command::NCASM_RET_PARAM | command::NCASM_NTFY_PARAM, NCASM_TYPE, _status, effect, mode, focus_on_voice, level]
                 if self.identified =>
             {
+                self.noise_control = Some(NoiseControl {
+                    effect,
+                    mode,
+                    focus_on_voice,
+                    level,
+                });
                 let mode = match (effect, mode) {
                     (0x00, _) => NoiseControlMode::Off,
                     (_, 0x00) => NoiseControlMode::NoiseCancelling,

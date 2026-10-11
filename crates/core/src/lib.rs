@@ -236,7 +236,9 @@ impl<P: Platform> State<P> {
                     Vendor::Samsung => {
                         run_samsung_session(link, commands_rx, frame_log, on_update).await
                     }
-                    Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
+                    Vendor::Sony => {
+                        run_sony_session(link, commands_rx, frame_log, on_update).await
+                    }
                 },
                 Err(failure) => failure.into(),
             };
@@ -414,6 +416,7 @@ async fn run_samsung_session(
 /// Device turns out to be an unsupported Model. Returns why it ended.
 async fn run_sony_session(
     mut link: ControlLink,
+    mut commands: mpsc::UnboundedReceiver<SessionCommand>,
     frame_log: FrameLog,
     mut on_update: impl FnMut(Update),
 ) -> NotAttachedReason {
@@ -430,26 +433,43 @@ async fn run_sony_session(
     if !write(&mut session, slug) {
         return NotAttachedReason::LinkDropped;
     }
-    while let Some(bytes) = link.incoming.recv().await {
-        for frame in session.deframe(&bytes) {
-            let updates = session.receive(&frame);
-            for update in &updates {
-                if let Update::Identified(model) = update {
-                    slug = model.slug();
+    loop {
+        tokio::select! {
+            bytes = link.incoming.recv() => {
+                let Some(bytes) = bytes else {
+                    return NotAttachedReason::LinkDropped;
+                };
+                for frame in session.deframe(&bytes) {
+                    let updates = session.receive(&frame);
+                    for update in &updates {
+                        if let Update::Identified(model) = update {
+                            slug = model.slug();
+                        }
+                    }
+                    frame_log.record(slug, Direction::Received, &frame.raw);
+                    if updates.contains(&Update::Unsupported) {
+                        on_update(Update::Unsupported);
+                        // Dropping the link Detaches without writing anything more.
+                        return NotAttachedReason::UnsupportedModel;
+                    }
+                    // Write first, so ACKs are out before the update is reported.
+                    if !write(&mut session, slug) {
+                        return NotAttachedReason::LinkDropped;
+                    }
+                    updates.into_iter().for_each(&mut on_update);
                 }
             }
-            frame_log.record(slug, Direction::Received, &frame.raw);
-            if updates.contains(&Update::Unsupported) {
-                on_update(Update::Unsupported);
-                // Dropping the link Detaches without writing anything more.
-                return NotAttachedReason::UnsupportedModel;
+            Some(command) = commands.recv() => {
+                match command {
+                    SessionCommand::SetNoiseControlMode(mode) => {
+                        session.set_noise_control_mode(mode)
+                    }
+                    SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
+                }
+                if !write(&mut session, slug) {
+                    return NotAttachedReason::LinkDropped;
+                }
             }
-            // Write first, so ACKs are out before the update is reported.
-            if !write(&mut session, slug) {
-                return NotAttachedReason::LinkDropped;
-            }
-            updates.into_iter().for_each(&mut on_update);
         }
     }
-    NotAttachedReason::LinkDropped
 }
