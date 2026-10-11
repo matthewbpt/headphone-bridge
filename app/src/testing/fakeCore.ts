@@ -123,7 +123,7 @@ interface Call extends SentCommand {
 }
 
 /** The core's labels, copied from app/src-tauri/src/labels.rs. */
-const LABELS: Labels = {
+export const LABELS: Labels = {
   noDevice: "No Device",
   modes: {
     off: "Off",
