@@ -121,6 +121,7 @@ use headphone_bridge_core::{Core, DeviceList};
 use uuid::uuid;
 
 pub const SAMSUNG_SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
+pub const SONY_SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
 
 /// A Galaxy Buds4 Pro as the OS reports it.
 pub fn buds4pro() -> DeviceIdentity {
@@ -128,6 +129,15 @@ pub fn buds4pro() -> DeviceIdentity {
         address: DeviceAddress("A1:B2:C3:D4:E5:F6".into()),
         name: "Galaxy Buds4 Pro (A1B2)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
+    }
+}
+
+/// A WH-1000XM5 as the OS reports it.
+pub fn xm5() -> DeviceIdentity {
+    DeviceIdentity {
+        address: DeviceAddress("AC:80:0A:11:22:33".into()),
+        name: "WH-1000XM5".into(),
+        service_uuids: vec![SONY_SERVICE],
     }
 }
 
@@ -148,6 +158,22 @@ pub fn received(records: &[FrameRecord]) -> Vec<Vec<u8>> {
         .filter(|record| record.direction == Direction::Received)
         .map(|record| record.bytes.clone())
         .collect()
+}
+
+/// Plays a recorded session on `link`: delivers each received frame to the
+/// core, and checks each sent frame is the next one the core writes.
+pub async fn replay(link: &mut DeviceLink, records: &[FrameRecord]) {
+    for record in records {
+        match record.direction {
+            Direction::Received => link.send.send(record.bytes.clone()).unwrap(),
+            Direction::Sent => {
+                let written = tokio::time::timeout(Duration::from_secs(5), link.written.recv())
+                    .await
+                    .unwrap_or_else(|_| panic!("timed out waiting for the core to write {record}"));
+                assert_eq!(written.as_ref(), Some(&record.bytes), "expected {record}");
+            }
+        }
+    }
 }
 
 /// Waits for a Device list snapshot that satisfies `condition`, and returns it.
