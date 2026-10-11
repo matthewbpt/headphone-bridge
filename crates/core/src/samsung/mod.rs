@@ -9,6 +9,7 @@ use uuid::{uuid, Uuid};
 use crate::command::NoiseControlMode;
 use crate::device_list::Battery;
 use crate::model::Model;
+pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, Deframer};
 
@@ -30,18 +31,6 @@ pub fn candidate_model(name: &str) -> Option<Model> {
     name.to_lowercase()
         .contains("buds4 pro")
         .then_some(Model::GalaxyBuds4Pro)
-}
-
-/// What a control link session learned from the Device.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Update {
-    Identified(Model),
-    /// The Device isn't a supported Model: the session must end without
-    /// writing anything else.
-    Unsupported,
-    Battery(Battery),
-    ChosenMode(NoiseControlMode),
-    AmbientLevel(u8),
 }
 
 /// One control link session with a Samsung Device.
@@ -251,7 +240,7 @@ impl Buds {
     }
 
     fn battery(&self) -> Battery {
-        Battery {
+        Battery::Buds {
             left: self.left,
             right: self.right,
             case: if self.docked {

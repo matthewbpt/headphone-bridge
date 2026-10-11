@@ -9,6 +9,8 @@ pub mod frame_log;
 mod model;
 pub mod platform;
 mod samsung;
+mod sony;
+mod update;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ pub use device_list::{Battery, Device, DeviceList, DeviceState, NotAttachedReaso
 use frame_log::{Direction, FrameLog};
 pub use model::{AmbientLevelRange, Capabilities, Model};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
+use update::Update;
 
 /// A running core. Dropping it stops the core.
 pub struct Core {
@@ -115,6 +118,12 @@ enum SessionCommand {
     SetAmbientLevel(u8),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Vendor {
+    Samsung,
+    Sony,
+}
+
 struct LinkEvent {
     address: DeviceAddress,
     attempt: u64,
@@ -122,7 +131,7 @@ struct LinkEvent {
 }
 
 enum LinkEventKind {
-    Update(samsung::Update),
+    Update(Update),
     /// The session ended: the link couldn't be opened, or it closed.
     Ended(NotAttachedReason),
 }
@@ -160,15 +169,27 @@ impl<P: Platform> State<P> {
     }
 
     fn connected(&mut self, identity: DeviceIdentity) {
-        if !identity.service_uuids.contains(&samsung::SERVICE) {
+        let has_service = |service| identity.service_uuids.contains(&service);
+        let vendor = if has_service(samsung::SERVICE) {
+            Vendor::Samsung
+        } else if has_service(sony::SERVICE) {
+            Vendor::Sony
+        } else {
             return;
-        }
-        let candidate = samsung::candidate_model(&identity.name);
-        let state = match candidate {
-            Some(_) => DeviceState::Attaching,
-            None => DeviceState::NotAttached {
+        };
+        // A Sony Device reveals its Model in reply to reads alone, so every one
+        // is Attached to identify it. A Samsung Device needs a write first, so
+        // only those whose name points at the allowlist are (ADR-0003).
+        let attach = match vendor {
+            Vendor::Samsung => samsung::candidate_model(&identity.name).is_some(),
+            Vendor::Sony => true,
+        };
+        let state = if attach {
+            DeviceState::Attaching
+        } else {
+            DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
-            },
+            }
         };
         let mut tracked = Tracked {
             device: Device {
@@ -183,13 +204,13 @@ impl<P: Platform> State<P> {
             },
             session: None,
         };
-        if candidate.is_some() {
-            tracked.session = Some(self.attach(&identity.address));
+        if attach {
+            tracked.session = Some(self.attach(&identity.address, vendor));
         }
         self.devices.insert(identity.address, tracked);
     }
 
-    fn attach(&mut self, address: &DeviceAddress) -> LinkSession {
+    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
         let (commands, commands_rx) = mpsc::unbounded_channel();
@@ -205,13 +226,18 @@ impl<P: Platform> State<P> {
                     kind,
                 });
             };
-            let reason = match platform.open_control_link(&address, samsung::SERVICE).await {
-                Ok(link) => {
-                    run_samsung_session(link, commands_rx, frame_log, |update| {
-                        send(LinkEventKind::Update(update))
-                    })
-                    .await
-                }
+            let service = match vendor {
+                Vendor::Samsung => samsung::SERVICE,
+                Vendor::Sony => sony::SERVICE,
+            };
+            let on_update = |update| send(LinkEventKind::Update(update));
+            let reason = match platform.open_control_link(&address, service).await {
+                Ok(link) => match vendor {
+                    Vendor::Samsung => {
+                        run_samsung_session(link, commands_rx, frame_log, on_update).await
+                    }
+                    Vendor::Sony => run_sony_session(link, frame_log, on_update).await,
+                },
                 Err(failure) => failure.into(),
             };
             send(LinkEventKind::Ended(reason));
@@ -232,20 +258,20 @@ impl<P: Platform> State<P> {
         }
         let device = &mut tracked.device;
         match event.kind {
-            LinkEventKind::Update(samsung::Update::Identified(model)) => {
+            LinkEventKind::Update(Update::Identified(model)) => {
                 device.model = Some(model);
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
             }
             // The session ends straight after, with that reason.
-            LinkEventKind::Update(samsung::Update::Unsupported) => {}
-            LinkEventKind::Update(samsung::Update::Battery(battery)) => {
+            LinkEventKind::Update(Update::Unsupported) => {}
+            LinkEventKind::Update(Update::Battery(battery)) => {
                 device.battery = Some(battery);
             }
-            LinkEventKind::Update(samsung::Update::ChosenMode(mode)) => {
+            LinkEventKind::Update(Update::ChosenMode(mode)) => {
                 device.chosen_mode = Some(mode);
             }
-            LinkEventKind::Update(samsung::Update::AmbientLevel(level)) => {
+            LinkEventKind::Update(Update::AmbientLevel(level)) => {
                 device.ambient_level = Some(level);
             }
             LinkEventKind::Ended(reason) => {
@@ -330,7 +356,7 @@ async fn run_samsung_session(
     mut link: ControlLink,
     mut commands: mpsc::UnboundedReceiver<SessionCommand>,
     frame_log: FrameLog,
-    mut on_update: impl FnMut(samsung::Update),
+    mut on_update: impl FnMut(Update),
 ) -> NotAttachedReason {
     // Frames are logged under the vendor's slug until the Model is identified.
     let mut slug = "samsung";
@@ -352,13 +378,13 @@ async fn run_samsung_session(
                 for frame in session.deframe(&bytes) {
                     let updates = session.receive(&frame);
                     for update in &updates {
-                        if let samsung::Update::Identified(model) = update {
+                        if let Update::Identified(model) = update {
                             slug = model.slug();
                         }
                     }
                     frame_log.record(slug, Direction::Received, &frame.raw);
                     for update in updates {
-                        let unsupported = update == samsung::Update::Unsupported;
+                        let unsupported = update == Update::Unsupported;
                         on_update(update);
                         if unsupported {
                             // Dropping the link Detaches without writing anything more.
@@ -382,4 +408,48 @@ async fn run_samsung_session(
             }
         }
     }
+}
+
+/// Runs a Sony control link session until the link closes, or until the
+/// Device turns out to be an unsupported Model. Returns why it ended.
+async fn run_sony_session(
+    mut link: ControlLink,
+    frame_log: FrameLog,
+    mut on_update: impl FnMut(Update),
+) -> NotAttachedReason {
+    // Frames are logged under the vendor's slug until the Model is identified.
+    let mut slug = "sony";
+    let mut session = sony::Session::new();
+    // Every frame the session sends goes out, and into the log, through here.
+    let write = |session: &mut sony::Session, slug: &str| {
+        session.outgoing().into_iter().all(|frame| {
+            frame_log.record(slug, Direction::Sent, &frame);
+            link.outgoing.send(frame).is_ok()
+        })
+    };
+    if !write(&mut session, slug) {
+        return NotAttachedReason::LinkDropped;
+    }
+    while let Some(bytes) = link.incoming.recv().await {
+        for frame in session.deframe(&bytes) {
+            let updates = session.receive(&frame);
+            for update in &updates {
+                if let Update::Identified(model) = update {
+                    slug = model.slug();
+                }
+            }
+            frame_log.record(slug, Direction::Received, &frame.raw);
+            if updates.contains(&Update::Unsupported) {
+                on_update(Update::Unsupported);
+                // Dropping the link Detaches without writing anything more.
+                return NotAttachedReason::UnsupportedModel;
+            }
+            // Write first, so ACKs are out before the update is reported.
+            if !write(&mut session, slug) {
+                return NotAttachedReason::LinkDropped;
+            }
+            updates.into_iter().for_each(&mut on_update);
+        }
+    }
+    NotAttachedReason::LinkDropped
 }

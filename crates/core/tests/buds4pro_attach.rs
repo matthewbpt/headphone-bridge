@@ -57,7 +57,7 @@ async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
     );
     assert_eq!(
         device.battery,
-        Some(Battery {
+        Some(Battery::Buds {
             left: Some(100),
             right: Some(97),
             case: Some(100)
@@ -80,7 +80,7 @@ async fn battery_follows_status_updates() {
 
     wait_for(&core, |list| {
         list.devices[0].battery
-            == Some(Battery {
+            == Some(Battery::Buds {
                 left: Some(100),
                 right: Some(98),
                 case: None,
@@ -112,7 +112,7 @@ async fn a_charging_bud_counts_as_docked_before_its_placement_says_so() {
 
     wait_for(&core, |list| {
         list.devices[0].battery
-            == Some(Battery {
+            == Some(Battery::Buds {
                 left: Some(100),
                 right: Some(98),
                 case: Some(100),
@@ -140,7 +140,10 @@ async fn the_case_level_is_only_read_while_a_bud_is_docked() {
         ))
         .unwrap();
     wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.case.is_none())
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { case: None, .. })
+        )
     })
     .await;
     link.send
@@ -152,7 +155,7 @@ async fn the_case_level_is_only_read_while_a_bud_is_docked() {
 
     wait_for(&core, |list| {
         list.devices[0].battery
-            == Some(Battery {
+            == Some(Battery::Buds {
                 left: Some(100),
                 right: Some(97),
                 case: Some(100),
@@ -345,7 +348,7 @@ async fn frames_are_reassembled_from_any_fragmentation() {
 
         let list = wait_for(&core, |list| {
             list.devices[0].battery
-                == Some(Battery {
+                == Some(Battery::Buds {
                     left: Some(98),
                     right: Some(94),
                     case: None,

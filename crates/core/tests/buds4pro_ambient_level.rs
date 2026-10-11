@@ -1,7 +1,7 @@
 mod support;
 
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{AmbientLevelRange, Command, CommandError, Core, DeviceState};
+use headphone_bridge_core::{AmbientLevelRange, Battery, Command, CommandError, Core, DeviceState};
 use support::{
     buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
@@ -63,7 +63,10 @@ async fn setting_a_level_sends_ambient_volume_and_changes_nothing_until_the_devi
         ))
         .unwrap();
     let list = wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(80))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(80), .. })
+        )
     })
     .await;
     assert_eq!(list.devices[0].ambient_level, Some(2));
@@ -127,7 +130,10 @@ async fn an_ack_alone_does_not_change_the_level() {
         .unwrap();
 
     let list = wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(80))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(80), .. })
+        )
     })
     .await;
     assert_eq!(list.devices[0].ambient_level, Some(2));
@@ -173,7 +179,10 @@ async fn a_level_outside_the_models_range_from_the_device_is_ignored() {
         .unwrap();
 
     let list = wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(80))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(80), .. })
+        )
     })
     .await;
     assert_eq!(list.devices[0].ambient_level, Some(2));

@@ -23,7 +23,7 @@ export interface Device {
   battery: Battery | null;
 }
 
-export type Model = "galaxyBuds4Pro";
+export type Model = "galaxyBuds4Pro" | "wh1000xm5";
 
 export type DeviceState =
   | { kind: "attaching" }
@@ -46,12 +46,10 @@ export interface Capabilities {
   ambientLevel: { min: number; max: number } | null;
 }
 
-/** Percentages; null where the level is unknown. */
-export interface Battery {
-  left: number | null;
-  right: number | null;
-  case: number | null;
-}
+/** Percentages; for buds, null where the level is unknown. */
+export type Battery =
+  | { kind: "buds"; left: number | null; right: number | null; case: number | null }
+  | { kind: "headphones"; level: number };
 
 /** Why the core rejected a command before sending anything. */
 export type CommandError =

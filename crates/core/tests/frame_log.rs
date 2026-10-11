@@ -139,7 +139,7 @@ async fn a_recorded_log_replays_through_the_fake_platform() {
     for frame in frames {
         link.send.send(frame).unwrap();
     }
-    let ended = Some(Battery {
+    let ended = Some(Battery::Buds {
         left: Some(42),
         right: Some(43),
         case: None,
@@ -189,7 +189,10 @@ async fn frames_after_the_log_is_switched_off_are_not_logged() {
         ))
         .unwrap();
     wait_for(&core, |list| {
-        list.devices[0].battery.is_some_and(|b| b.left == Some(42))
+        matches!(
+            list.devices[0].battery,
+            Some(Battery::Buds { left: Some(42), .. })
+        )
     })
     .await;
 

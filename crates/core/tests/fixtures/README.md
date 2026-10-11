@@ -48,3 +48,7 @@ file.
     holds three link sessions, so it is split into three files.
   - `raw-1`: 27 frames with their original wire bytes, including the header's
     sequence and unknown flag bits.
+- `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
+  mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
+  exist from the frame log. No WH-1000XM5 capture exists yet.
+  - `attach`: identification by model name, support functions and battery.

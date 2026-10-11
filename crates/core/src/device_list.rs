@@ -74,12 +74,17 @@ impl From<LinkFailure> for NotAttachedReason {
     }
 }
 
-/// Battery charge in percent. A part is `None` when its level is unknown,
-/// e.g. a bud that isn't connected, or a case with no bud docked in it.
+/// Battery charge in percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Battery {
-    pub left: Option<u8>,
-    pub right: Option<u8>,
-    pub case: Option<u8>,
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Battery {
+    /// Earbuds. A part is `None` when its level is unknown, e.g. a bud that
+    /// isn't connected, or a case with no bud docked in it.
+    Buds {
+        left: Option<u8>,
+        right: Option<u8>,
+        case: Option<u8>,
+    },
+    /// Over-ear headphones, with a single battery.
+    Headphones { level: u8 },
 }
