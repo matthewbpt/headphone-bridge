@@ -1,0 +1,9 @@
+.DS_Store
+
+# Rust
+/target/
+**/target/
+
+# Node / frontend
+node_modules/
+dist/
