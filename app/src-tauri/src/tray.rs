@@ -1,5 +1,6 @@
 //! The native tray menu. It shows the Primary Device's name and battery, its
-//! Noise Control Mode as radio items, "Open Headphone Bridge" and "Quit".
+//! Chosen Mode as radio items with a hint while the Device has paused it,
+//! "Open Headphone Bridge" and "Quit".
 //!
 //! Tray actions only use menu items, never tray click events, because Linux
 //! doesn't emit them.
@@ -7,7 +8,9 @@
 use std::sync::Mutex;
 
 use headphone_bridge_core::platform::DeviceAddress;
-use headphone_bridge_core::{Battery, Command, Core, DeviceList, DeviceState, NoiseControlMode};
+use headphone_bridge_core::{
+    Battery, Command, Core, DeviceList, DeviceState, EffectiveModeReason, NoiseControlMode,
+};
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager};
@@ -160,6 +163,8 @@ pub struct TrayMenu {
     /// The Primary Device's name, or "No device".
     pub title: String,
     pub battery: Option<String>,
+    /// Why the Device isn't applying the Chosen Mode, while it isn't.
+    pub hint: Option<String>,
     /// The Primary Device, while one is Attached.
     pub device: Option<DeviceAddress>,
     /// Limited to the Primary Device's Capabilities.
@@ -186,6 +191,7 @@ impl TrayMenu {
             return TrayMenu {
                 title: "No device".into(),
                 battery: None,
+                hint: None,
                 device: None,
                 modes: vec![],
             };
@@ -193,6 +199,9 @@ impl TrayMenu {
         TrayMenu {
             title: device.name.clone(),
             battery: device.battery.map(battery_text),
+            hint: device
+                .effective_mode_reason
+                .map(|reason| hint_text(reason).into()),
             device: Some(device.address.clone()),
             modes: device
                 .capabilities
@@ -221,6 +230,13 @@ fn battery_text(battery: Battery) -> String {
     }
 }
 
+fn hint_text(reason: EffectiveModeReason) -> &'static str {
+    match reason {
+        EffectiveModeReason::BudOutOfEar => "Paused: bud out of ear",
+        EffectiveModeReason::Unknown => "Paused by the device",
+    }
+}
+
 fn mode_label(mode: NoiseControlMode) -> &'static str {
     match mode {
         NoiseControlMode::Off => "Off",
@@ -232,7 +248,7 @@ fn mode_label(mode: NoiseControlMode) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use headphone_bridge_core::{Device, Model};
+    use headphone_bridge_core::{Device, EffectiveModeReason, Model};
 
     use super::*;
 
@@ -243,6 +259,7 @@ mod tests {
             TrayMenu {
                 title: "No device".into(),
                 battery: None,
+                hint: None,
                 device: None,
                 modes: vec![],
             }
@@ -257,6 +274,8 @@ mod tests {
             state,
             capabilities: Model::GalaxyBuds4Pro.capabilities(),
             chosen_mode: Some(NoiseControlMode::Ambient),
+            effective_mode: Some(NoiseControlMode::Ambient),
+            effective_mode_reason: None,
             ambient_level: None,
             battery: Some(Battery::Buds {
                 left: Some(80),
@@ -284,6 +303,7 @@ mod tests {
             TrayMenu {
                 title: "Matt's Buds4 Pro".into(),
                 battery: Some("Battery: L 80% · R 75% · Case –".into()),
+                hint: None,
                 device: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
@@ -314,6 +334,8 @@ mod tests {
                 state: DeviceState::Attached,
                 capabilities: Model::Wh1000Xm5.capabilities(),
                 chosen_mode: Some(NoiseControlMode::NoiseCancelling),
+                effective_mode: Some(NoiseControlMode::NoiseCancelling),
+                effective_mode_reason: None,
                 ambient_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
             }],
@@ -323,6 +345,7 @@ mod tests {
             TrayMenu {
                 title: "WH-1000XM5".into(),
                 battery: Some("Battery: 70%".into()),
+                hint: None,
                 device: Some(DeviceAddress("11:22:33:44:55:66".into())),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
@@ -330,6 +353,23 @@ mod tests {
                     mode(NoiseControlMode::Ambient, "Ambient", false),
                 ],
             }
+        );
+    }
+
+    #[test]
+    fn keeps_the_chosen_mode_checked_with_a_hint_while_a_bud_is_out() {
+        let list = DeviceList {
+            devices: vec![Device {
+                effective_mode: Some(NoiseControlMode::Off),
+                effective_mode_reason: Some(EffectiveModeReason::BudOutOfEar),
+                ..buds(DeviceState::Attached)
+            }],
+        };
+        let menu = TrayMenu::new(&list);
+        assert_eq!(menu.hint.as_deref(), Some("Paused: bud out of ear"));
+        assert_eq!(
+            menu.modes[2],
+            mode(NoiseControlMode::Ambient, "Ambient", true)
         );
     }
 }

@@ -17,6 +17,10 @@ export interface Device {
   capabilities: Capabilities;
   /** The Noise Control Mode last selected by any means. Null until reported. */
   chosenMode: NoiseControlMode | null;
+  /** The Noise Control Mode the Device is applying right now. Null until reported. */
+  effectiveMode: NoiseControlMode | null;
+  /** Why the Effective Mode differs from the Chosen Mode. Null while they agree. */
+  effectiveModeReason: EffectiveModeReason | null;
   /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
   ambientLevel: number | null;
   /** Null until the Device first reports it. */
@@ -40,6 +44,8 @@ export type NotAttachedReason =
   | { kind: "other"; message: string };
 
 export type NoiseControlMode = "off" | "noiseCancelling" | "ambient" | "adaptive";
+
+export type EffectiveModeReason = "budOutOfEar" | "unknown";
 
 export interface Capabilities {
   noiseControlModes: NoiseControlMode[];

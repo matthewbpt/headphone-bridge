@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
+import type {
+  Battery,
+  Device,
+  EffectiveModeReason,
+  Model,
+  NoiseControlMode,
+  NotAttachedReason,
+} from "./deviceList";
 import { setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
@@ -46,6 +53,9 @@ function DeviceView({ device }: { device: Device }) {
       )}
       {device.state.kind === "attached" && device.capabilities.ambientLevel && (
         <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
+      )}
+      {device.state.kind === "attached" && device.effectiveMode && (
+        <div>Applying: {MODE_NAMES[device.effectiveMode]}</div>
       )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
@@ -104,9 +114,20 @@ function NoiseControlModeButtons({ device }: { device: Device }) {
           </button>
         ))}
       </div>
+      {device.effectiveModeReason && <div>{hintText(device.effectiveModeReason)}</div>}
       {error && <div role="alert">{error}</div>}
     </div>
   );
+}
+
+/** Why the Device isn't applying the Chosen Mode (mirrored in the tray). */
+function hintText(reason: EffectiveModeReason): string {
+  switch (reason) {
+    case "budOutOfEar":
+      return "Paused: bud out of ear";
+    case "unknown":
+      return "Paused by the device";
+  }
 }
 
 function AmbientLevelSlider({
