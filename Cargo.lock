@@ -1566,6 +1566,7 @@ name = "headphone-bridge"
 version = "0.1.0"
 dependencies = [
  "headphone-bridge-core",
+ "headphone-bridge-platform-linux",
  "headphone-bridge-platform-macos",
  "serde",
  "tauri",
