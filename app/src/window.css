@@ -83,13 +83,20 @@ button {
 /* The window: header, switcher and Device on top, Settings at the bottom. */
 
 .window {
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
   box-sizing: border-box;
   padding: 18px 16px 16px;
   background: radial-gradient(120% 60% at 50% 0%, var(--bg-glow), transparent 70%), var(--bg);
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Only the picture gives way when the column is too tall for the window
+   (two Devices, a hint and the slider); everything else keeps its size. */
+.window > * {
+  flex-shrink: 0;
 }
 
 .card {
@@ -170,11 +177,14 @@ button {
   align-items: center;
   gap: 8px;
   padding: 4px 0 6px;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .device-picture {
+  flex: 0 1 140px;
   width: 190px;
-  height: 140px;
+  min-height: 96px;
 }
 
 .status {
@@ -382,14 +392,13 @@ button {
    the Model has few enough steps, else the current value. */
 
 .level {
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--divider);
 }
 
 .level__title {
-  font-size: 15px;
-  margin: 0 4px 10px;
+  margin: 0 4px 6px;
 }
 
 .level__row {
@@ -401,8 +410,8 @@ button {
 .level__step {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   background: none;
@@ -426,7 +435,7 @@ button {
 }
 
 .level__track {
-  --thumb: 26px;
+  --thumb: 24px;
   position: relative;
   flex: 1;
   height: var(--thumb);
