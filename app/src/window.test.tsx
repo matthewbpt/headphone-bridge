@@ -8,6 +8,17 @@ import { renderWindow } from "./testing/renderWindow";
 
 const mode = (name: string) => screen.findByRole("radio", { name: new RegExp(`^${name}`) });
 
+/**
+ * Fakes the clock from here on, frozen: only the test moves it. Called once
+ * the window is up, as `findBy…` queries and `userEvent` wait on timers;
+ * click with `fireEvent` after it. (With `shouldAdvanceTime` the clock also
+ * follows real time, so on a slow runner a 10 s timeout fired before the
+ * test had advanced 10 s.)
+ */
+function freezeClock() {
+  vi.useFakeTimers();
+}
+
 describe("Noise Control Mode", () => {
   const modeNames = async () =>
     (await screen.findAllByRole("radio")).map((radio) => radio.textContent);
@@ -60,23 +71,21 @@ describe("Noise Control Mode", () => {
   });
 
   it("clears a pending mode and shows an error when the Device doesn't confirm it within 10 s", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
     renderWindow(core);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const ambient = await mode("Ambient");
+    freezeClock();
 
-    await user.click(await mode("Ambient"));
+    fireEvent.click(ambient);
     act(() => vi.advanceTimersByTime(9_900));
-    expect(await mode("Ambient")).toHaveAttribute("aria-busy", "true");
+    expect(ambient).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(100));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Ambient wasn't confirmed by the Device",
-    );
-    expect(await mode("Ambient")).toHaveAttribute("aria-busy", "false");
-    expect(await mode("Noise Cancelling")).toBeChecked();
+    expect(screen.getByRole("alert")).toHaveTextContent("Ambient wasn't confirmed by the Device");
+    expect(ambient).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("radio", { name: /^Noise Cancelling/ })).toBeChecked();
   });
 
   it("moves the selection when the mode changes on the Device", async () => {
@@ -175,12 +184,12 @@ describe("Ambient Level", () => {
   });
 
   it("goes back to the confirmed Chosen Mode when the Device doesn't confirm within 10 s", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
     renderWindow(core);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const ambient = await mode("Ambient");
+    freezeClock();
 
-    await user.click(await mode("Ambient"));
+    fireEvent.click(ambient);
     act(() => vi.advanceTimersByTime(9_900));
     expect(slider()).toBeInTheDocument();
 
@@ -286,13 +295,13 @@ describe("Ambient Level", () => {
   });
 
   it("shows an error when a return to the confirmed level isn't confirmed within 10 s", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
     renderWindow(core);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const more = await screen.findByRole("button", { name: "More" });
+    freezeClock();
 
-    await user.click(await screen.findByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("button", { name: "Less" }));
+    fireEvent.click(more);
+    fireEvent.click(screen.getByRole("button", { name: "Less" }));
     core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
 
     act(() => vi.advanceTimersByTime(10_000));
@@ -302,12 +311,12 @@ describe("Ambient Level", () => {
   });
 
   it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
     renderWindow(core);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const more = await screen.findByRole("button", { name: "More" });
+    freezeClock();
 
-    await user.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(more);
     act(() => vi.advanceTimersByTime(9_900));
     expect(slider()).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
