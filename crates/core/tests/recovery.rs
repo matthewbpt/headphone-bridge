@@ -106,3 +106,99 @@ async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
     })
     .await;
 }
+
+#[tokio::test(start_paused = true)]
+async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.fail_links(&buds4pro().address, LinkFailure::ServiceNotFound);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    os.next_attempt().await;
+    let start = tokio::time::Instant::now();
+
+    let mut attempts = Vec::new();
+    while os.attempts_within(Duration::from_secs(600)).await {
+        attempts.push(start.elapsed().as_secs());
+    }
+
+    assert_eq!(attempts, [1, 3, 7, 15, 31, 61]);
+    assert!(is(
+        &core.device_list(),
+        not_attached(NotAttachedReason::ServiceNotFound)
+    ));
+    os.allow_links(&buds4pro().address);
+    core.command(Command::RetryAttach(buds4pro().address))
+        .await
+        .unwrap();
+    let link = os.next_link().await;
+    identify_buds4pro(&link);
+    wait_for(&core, |list| is(list, DeviceState::Attached)).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn failures_only_the_listener_can_fix_are_not_retried_automatically() {
+    for failure in [
+        LinkFailure::InUseByAnotherProcess,
+        LinkFailure::BluetoothPermissionDenied,
+    ] {
+        let (platform, mut os) = fake_platform();
+        let _core = Core::start(platform);
+        os.fail_links(&buds4pro().address, failure.clone());
+        os.observe(Observation::DeviceConnected(buds4pro()));
+        os.next_attempt().await;
+
+        assert!(
+            !os.attempts_within(Duration::from_secs(600)).await,
+            "{failure:?} was retried"
+        );
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straight_away() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    let address = buds4pro().address;
+    os.fail_links(&address, LinkFailure::DeviceNotConnected);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    os.next_attempt().await;
+
+    os.observe(Observation::DeviceDisconnected(address.clone()));
+    wait_for(&core, |list| list.devices.is_empty()).await;
+    assert!(!os.attempts_within(Duration::from_secs(600)).await);
+
+    os.allow_links(&address);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let link = os.next_link().await;
+    identify_buds4pro(&link);
+    let list = wait_for(&core, |list| is(list, DeviceState::Attached)).await;
+    assert!(list.devices[0].battery.is_some());
+}
+
+#[tokio::test(start_paused = true)]
+async fn another_sony_model_is_not_retried() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    let wh1000xm6 = DeviceIdentity {
+        address: DeviceAddress("AC:80:0A:44:55:66".into()),
+        name: "WH-1000XM6".into(),
+        service_uuids: vec![support::SONY_SERVICE],
+    };
+    os.observe(Observation::DeviceConnected(wh1000xm6.clone()));
+    os.next_attempt().await;
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")[..5]).await;
+    link.send
+        .send(support::sony_frame(1, b"\x05\x01\x0aWH-1000XM6"))
+        .unwrap();
+    wait_for(&core, |list| {
+        is(list, not_attached(NotAttachedReason::UnsupportedModel))
+    })
+    .await;
+
+    assert!(!os.attempts_within(Duration::from_secs(600)).await);
+    assert_eq!(
+        core.command(Command::RetryAttach(wh1000xm6.address)).await,
+        Err(CommandError::UnsupportedModel)
+    );
+}
