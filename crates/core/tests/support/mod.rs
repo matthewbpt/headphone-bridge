@@ -18,6 +18,7 @@ use uuid::Uuid;
 pub struct FakePlatform {
     observations: Mutex<Option<Observations>>,
     failures: Arc<Mutex<HashMap<DeviceAddress, LinkFailure>>>,
+    attempted: mpsc::UnboundedSender<DeviceAddress>,
     opened: mpsc::UnboundedSender<DeviceLink>,
 }
 
@@ -25,6 +26,7 @@ pub struct FakePlatform {
 pub struct FakeOs {
     observations: mpsc::UnboundedSender<Observation>,
     failures: Arc<Mutex<HashMap<DeviceAddress, LinkFailure>>>,
+    attempted: mpsc::UnboundedReceiver<DeviceAddress>,
     opened: mpsc::UnboundedReceiver<DeviceLink>,
 }
 
@@ -40,16 +42,19 @@ pub struct DeviceLink {
 
 pub fn fake_platform() -> (FakePlatform, FakeOs) {
     let (observations_tx, observations_rx) = mpsc::unbounded_channel();
+    let (attempted_tx, attempted_rx) = mpsc::unbounded_channel();
     let (opened_tx, opened_rx) = mpsc::unbounded_channel();
     let failures = Arc::new(Mutex::new(HashMap::new()));
     let platform = FakePlatform {
         observations: Mutex::new(Some(observations_rx)),
         failures: failures.clone(),
+        attempted: attempted_tx,
         opened: opened_tx,
     };
     let os = FakeOs {
         observations: observations_tx,
         failures,
+        attempted: attempted_rx,
         opened: opened_rx,
     };
     (platform, os)
@@ -75,6 +80,19 @@ impl FakeOs {
         self.failures.lock().unwrap().remove(address);
     }
 
+    /// The address of the next Device the core tries to open a control link
+    /// to, whether or not that succeeds.
+    pub async fn next_attempt(&mut self) -> DeviceAddress {
+        self.attempted.recv().await.expect("fake platform dropped")
+    }
+
+    /// Whether the core tries to open any control link within `within`.
+    pub async fn attempts_within(&mut self, within: Duration) -> bool {
+        tokio::time::timeout(within, self.attempted.recv())
+            .await
+            .is_ok()
+    }
+
     /// The next control link the core opens successfully.
     pub async fn next_link(&mut self) -> DeviceLink {
         self.opened.recv().await.expect("fake platform dropped")
@@ -95,6 +113,7 @@ impl Platform for FakePlatform {
         address: &DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
+        let _ = self.attempted.send(address.clone());
         if let Some(failure) = self.failures.lock().unwrap().get(address) {
             return Err(failure.clone());
         }

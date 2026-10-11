@@ -25,6 +25,8 @@ pub enum CommandError {
     UnknownDevice,
     /// The Device is Connected but not Attached, so the app can't change it.
     NotAttached,
+    /// The Device's Model isn't on the allowlist, so the app won't control it.
+    UnsupportedModel,
     /// The Device's Model doesn't have the Capability the command needs.
     MissingCapability,
     /// The frame log file couldn't be opened.

@@ -88,6 +88,7 @@ struct State<P> {
 /// A Connected Device and its control link session, if any.
 struct Tracked {
     device: Device,
+    vendor: Vendor,
     session: Option<LinkSession>,
 }
 
@@ -192,6 +193,7 @@ impl<P: Platform> State<P> {
                 chosen_mode: None,
                 battery: None,
             },
+            vendor,
             session: None,
         };
         if attach {
@@ -279,10 +281,7 @@ impl<P: Platform> State<P> {
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
             Command::SetNoiseControlMode(address, mode) => {
-                let tracked = self
-                    .devices
-                    .get(&address)
-                    .ok_or(CommandError::UnknownDevice)?;
+                let tracked = self.supported(&address)?;
                 let session = match (&tracked.device.state, &tracked.session) {
                     (DeviceState::Attached, Some(session)) => session,
                     _ => return Err(CommandError::NotAttached),
@@ -300,6 +299,17 @@ impl<P: Platform> State<P> {
                     .send(SessionCommand::SetNoiseControlMode(mode))
                     .map_err(|_| CommandError::NotAttached)
             }
+            Command::RetryAttach(address) => {
+                let tracked = self.supported(&address)?;
+                if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
+                    return Ok(());
+                }
+                let session = self.attach(&address, tracked.vendor);
+                let tracked = self.devices.get_mut(&address).expect("checked above");
+                tracked.device.state = DeviceState::Attaching;
+                tracked.session = Some(session);
+                Ok(())
+            }
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
@@ -309,6 +319,20 @@ impl<P: Platform> State<P> {
                 Ok(())
             }
             _ => Err(CommandError::UnknownDevice),
+        }
+    }
+
+    /// The Device at `address`, unless it's unknown or an unsupported Model.
+    fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
+        let tracked = self
+            .devices
+            .get(address)
+            .ok_or(CommandError::UnknownDevice)?;
+        match tracked.device.state {
+            DeviceState::NotAttached {
+                reason: NotAttachedReason::UnsupportedModel,
+            } => Err(CommandError::UnsupportedModel),
+            _ => Ok(tracked),
         }
     }
 
