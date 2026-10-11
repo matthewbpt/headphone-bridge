@@ -17,6 +17,8 @@ export interface Device {
   capabilities: Capabilities;
   /** The Noise Control Mode last selected by any means. Null until reported. */
   chosenMode: NoiseControlMode | null;
+  /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
+  ambientLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
 }
@@ -56,11 +58,17 @@ export type CommandError =
   | "unknownDevice"
   | "notAttached"
   | "missingCapability"
+  | "outOfRange"
   | { frameLogUnavailable: string };
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
   return invoke("set_noise_control_mode", { address, mode });
+}
+
+/** Asks the Device to set the Ambient Level, in the Model's own steps. */
+export function setAmbientLevel(address: string, level: number): Promise<void> {
+  return invoke("set_ambient_level", { address, level });
 }
 
 /**
