@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use crate::command::NoiseControlMode;
 use crate::model::{Capabilities, Model};
 use crate::platform::{DeviceAddress, LinkFailure};
 
@@ -24,6 +25,9 @@ pub struct Device {
     pub model: Option<Model>,
     pub state: DeviceState,
     pub capabilities: Capabilities,
+    /// The Noise Control Mode the listener last selected, by any means.
+    /// `None` until the Device first reports it.
+    pub chosen_mode: Option<NoiseControlMode>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
 }

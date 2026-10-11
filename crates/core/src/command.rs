@@ -19,6 +19,10 @@ pub enum Command {
 pub enum CommandError {
     /// No Connected Device has that address.
     UnknownDevice,
+    /// The Device is Connected but not Attached, so the app can't change it.
+    NotAttached,
+    /// The Device's Model doesn't have the Capability the command needs.
+    MissingCapability,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
