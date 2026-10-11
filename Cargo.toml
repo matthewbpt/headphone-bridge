@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/core"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/matthewbpt/headphone-bridge"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+uuid = { version = "1", features = ["serde"] }
