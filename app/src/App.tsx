@@ -13,11 +13,14 @@ import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
 export function App() {
   return (
-    <>
+    <main className="window">
       <DeviceListView />
-      <LaunchAtLoginSetting />
-      <FrameLogSetting />
-    </>
+      <details className="card settings">
+        <summary>Settings</summary>
+        <LaunchAtLoginSetting />
+        <FrameLogSetting />
+      </details>
+    </main>
   );
 }
 
@@ -31,7 +34,7 @@ function DeviceListView() {
   useEffect(() => setPicked(null), [primary]);
 
   if (deviceList === null || labels === null) return null;
-  if (deviceList.devices.length === 0) return <p>{labels.noDevice}</p>;
+  if (deviceList.devices.length === 0) return <p className="empty">{labels.noDevice}</p>;
   const { devices } = deviceList;
   const selected =
     devices.find((device) => device.address === picked) ??
@@ -39,33 +42,64 @@ function DeviceListView() {
     devices[0];
   return (
     <>
-      <div role="tablist" aria-label="Devices">
-        {devices.map((device) => (
-          <button
-            key={device.address}
-            role="tab"
-            aria-selected={device === selected}
-            onClick={() => setPicked(device.address)}
-            style={{ fontWeight: device === selected ? "bold" : "normal" }}
-          >
-            {device.name}
-            {device.address === primary && " (Primary)"}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel">
+      <Header device={selected} labels={labels} />
+      {devices.length > 1 && (
+        <DevicePills devices={devices} selected={selected} primary={primary} onPick={setPicked} />
+      )}
+      <section className="card">
         {/* Keyed, so pending state doesn't carry over to another Device. */}
         <DeviceView key={selected.address} device={selected} labels={labels} />
-      </div>
+      </section>
     </>
+  );
+}
+
+/** A pill per Connected Device, to pick the one the window shows. */
+function DevicePills({
+  devices,
+  selected,
+  primary,
+  onPick,
+}: {
+  devices: Device[];
+  selected: Device;
+  primary: string | null;
+  onPick: (address: string) => void;
+}) {
+  return (
+    <div className="pills" role="tablist" aria-label="Devices">
+      {devices.map((device) => (
+        <button
+          key={device.address}
+          className="pill"
+          role="tab"
+          aria-selected={device === selected}
+          onClick={() => onPick(device.address)}
+          title={device.address === primary ? "Primary Device" : undefined}
+        >
+          {device.address === primary && <span className="pill__primary" aria-hidden />}
+          {device.name}
+          {device.address === primary && <span className="visually-hidden"> (Primary)</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The Device's OS name, and its Model when that says something the name doesn't. */
+function Header({ device, labels }: { device: Device; labels: Labels }) {
+  const model = device.model && labels.models[device.model];
+  return (
+    <header className="header">
+      <h1 className="title">{device.name}</h1>
+      {model && model !== device.name && <div className="subtitle">{model}</div>}
+    </header>
   );
 }
 
 function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   return (
     <>
-      <strong>{device.name}</strong>
-      {device.model && <div>{labels.models[device.model]}</div>}
       <div>{stateText(device)}</div>
       {device.state.kind === "notAttached" && (
         <div>{reasonText(labels, device.state.reason)}</div>
