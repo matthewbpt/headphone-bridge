@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
-import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
-import { setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
+import type {
+  Battery,
+  Device,
+  EffectiveModeReason,
+  Model,
+  NoiseControlMode,
+  NotAttachedReason,
+} from "./deviceList";
+import { retryAttach, setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
@@ -16,17 +23,40 @@ export function App() {
 
 function DeviceListView() {
   const deviceList = useDeviceList();
+  // The Device picked in the window. Cleared whenever the Primary Device
+  // changes, so the selection follows the OS's audio output.
+  const [picked, setPicked] = useState<string | null>(null);
+  const primary = deviceList?.primary ?? null;
+  useEffect(() => setPicked(null), [primary]);
 
   if (deviceList === null) return null;
   if (deviceList.devices.length === 0) return <p>No device</p>;
+  const { devices } = deviceList;
+  const selected =
+    devices.find((device) => device.address === picked) ??
+    devices.find((device) => device.address === primary) ??
+    devices[0];
   return (
-    <ul>
-      {deviceList.devices.map((device) => (
-        <li key={device.address}>
-          <DeviceView device={device} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <div role="tablist" aria-label="Devices">
+        {devices.map((device) => (
+          <button
+            key={device.address}
+            role="tab"
+            aria-selected={device === selected}
+            onClick={() => setPicked(device.address)}
+            style={{ fontWeight: device === selected ? "bold" : "normal" }}
+          >
+            {device.name}
+            {device.address === primary && " (Primary)"}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel">
+        {/* Keyed, so pending state doesn't carry over to another Device. */}
+        <DeviceView key={selected.address} device={selected} />
+      </div>
+    </>
   );
 }
 
@@ -41,11 +71,17 @@ function DeviceView({ device }: { device: Device }) {
       <strong>{device.name}</strong>
       {device.model && <div>{MODEL_NAMES[device.model]}</div>}
       <div>{stateText(device)}</div>
+      {device.state.kind === "notAttached" && device.state.reason.kind !== "unsupportedModel" && (
+        <RetryButton address={device.address} />
+      )}
       {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
         <NoiseControlModeButtons device={device} />
       )}
       {device.state.kind === "attached" && device.capabilities.ambientLevel && (
         <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
+      )}
+      {device.state.kind === "attached" && device.effectiveMode && (
+        <div>Applying: {MODE_NAMES[device.effectiveMode]}</div>
       )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
@@ -104,9 +140,20 @@ function NoiseControlModeButtons({ device }: { device: Device }) {
           </button>
         ))}
       </div>
+      {device.effectiveModeReason && <div>{hintText(device.effectiveModeReason)}</div>}
       {error && <div role="alert">{error}</div>}
     </div>
   );
+}
+
+/** Why the Device isn't applying the Chosen Mode (mirrored in the tray). */
+function hintText(reason: EffectiveModeReason): string {
+  switch (reason) {
+    case "budOutOfEar":
+      return "Paused: bud out of ear";
+    case "unknown":
+      return "Paused by the device";
+  }
 }
 
 function AmbientLevelSlider({
@@ -199,9 +246,28 @@ function reasonText(reason: NotAttachedReason): string {
       return "device not connected";
     case "linkDropped":
       return "control link dropped";
+    case "noResponse":
+      return "the device didn't respond";
     case "other":
       return reason.message;
   }
+}
+
+function RetryButton({ address }: { address: string }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <button
+        onClick={() => {
+          setError(null);
+          retryAttach(address).catch((e) => setError(`Couldn't retry: ${e}`));
+        }}
+      >
+        Retry
+      </button>
+      {error && <div role="alert">{error}</div>}
+    </div>
+  );
 }
 
 function BatteryView({ battery }: { battery: Battery }) {

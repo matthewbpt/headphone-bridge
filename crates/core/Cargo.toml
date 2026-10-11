@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 serde.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 uuid.workspace = true
 
 [dev-dependencies]

@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 // Mirrors the core's Device list snapshot (crates/core/src/device_list.rs).
 export interface DeviceList {
   devices: Device[];
+  /**
+   * The Primary Device's address: the Attached Device the OS plays audio
+   * through, else the most recently Attached. Null while none is Attached.
+   */
+  primary: string | null;
 }
 
 export interface Device {
@@ -17,6 +22,10 @@ export interface Device {
   capabilities: Capabilities;
   /** The Noise Control Mode last selected by any means. Null until reported. */
   chosenMode: NoiseControlMode | null;
+  /** The Noise Control Mode the Device is applying right now. Null until reported. */
+  effectiveMode: NoiseControlMode | null;
+  /** Why the Effective Mode differs from the Chosen Mode. Null while they agree. */
+  effectiveModeReason: EffectiveModeReason | null;
   /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
   ambientLevel: number | null;
   /** Null until the Device first reports it. */
@@ -37,9 +46,12 @@ export type NotAttachedReason =
   | { kind: "serviceNotFound" }
   | { kind: "deviceNotConnected" }
   | { kind: "linkDropped" }
+  | { kind: "noResponse" }
   | { kind: "other"; message: string };
 
 export type NoiseControlMode = "off" | "noiseCancelling" | "ambient" | "adaptive";
+
+export type EffectiveModeReason = "budOutOfEar" | "unknown";
 
 export interface Capabilities {
   noiseControlModes: NoiseControlMode[];
@@ -55,6 +67,7 @@ export type Battery =
 export type CommandError =
   | "unknownDevice"
   | "notAttached"
+  | "unsupportedModel"
   | "missingCapability"
   | "outOfRange"
   | { frameLogUnavailable: string };
@@ -62,6 +75,11 @@ export type CommandError =
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
   return invoke("set_noise_control_mode", { address, mode });
+}
+
+/** Tries again to Attach a Connected Device that isn't Attached. */
+export function retryAttach(address: string): Promise<void> {
+  return invoke("retry_attach", { address });
 }
 
 /** Asks the Device to set the Ambient Level, in the Model's own steps. */
