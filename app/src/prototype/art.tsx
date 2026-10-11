@@ -21,7 +21,7 @@ function Bud({ style }: { style: ArtStyle }) {
       <g className="line">
         <path d="M-14 12 C-24 10 -29 20 -27 28 C-25 36 -16 38 -12 33" />
         <path d="M-12 33 C-20 26 -19 6 0 3 C14 1 21 12 19 22 C18 30 12 34 8 35" />
-        <path d="M-8 18 L-8 88 C-8 96 8 96 8 88 L8 18" />
+        <path d="M-8 18 L-8 62 C-8 70 8 70 8 62 L8 18" />
         <ellipse cx="0" cy="18" rx="8" ry="5" />
         <path d="M-4 18 L4 18" />
       </g>
@@ -35,8 +35,8 @@ function Bud({ style }: { style: ArtStyle }) {
         fill="var(--art-body)"
       />
       <path d="M6 4 C16 4 22 13 20 23 C18 30 12 35 6 36 Z" fill="var(--art-body-shade)" />
-      <rect x="-8" y="12" width="16" height="84" rx="8" fill="var(--art-metal)" />
-      <rect x="1" y="12" width="7" height="84" rx="3.5" fill="var(--art-metal-shade)" />
+      <rect x="-8" y="12" width="16" height="58" rx="8" fill="var(--art-metal)" />
+      <rect x="1" y="12" width="7" height="58" rx="3.5" fill="var(--art-metal-shade)" />
       <ellipse cx="0" cy="18" rx="6" ry="4.5" fill="var(--art-metal-shade)" />
       <ellipse cx="0" cy="18" rx="3.5" ry="2.5" fill="var(--art-grille)" />
     </g>
@@ -46,10 +46,10 @@ function Bud({ style }: { style: ArtStyle }) {
 function Buds4Pro({ style }: { style: ArtStyle }) {
   return (
     <>
-      <g transform="translate(68 16) scale(1.12) rotate(-3)">
+      <g transform="translate(64 24) scale(1.4) rotate(-3)">
         <Bud style={style} />
       </g>
-      <g transform="translate(132 16) scale(-1.12 1.12) rotate(-3)">
+      <g transform="translate(136 24) scale(-1.4 1.4) rotate(-3)">
         <Bud style={style} />
       </g>
     </>
