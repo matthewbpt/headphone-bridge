@@ -19,3 +19,6 @@ serde.workspace = true
 tauri = { version = "2", features = [] }
 tokio.workspace = true
 uuid.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+headphone-bridge-platform-macos = { path = "../../crates/platform-macos" }

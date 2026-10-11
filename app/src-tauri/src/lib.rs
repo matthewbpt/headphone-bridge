@@ -41,7 +41,7 @@ async fn retry_attach(core: State<'_, Core>, address: String) -> Result<(), Comm
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let core = tauri::async_runtime::block_on(async { Core::start(platform::NoBluetooth) });
+            let core = tauri::async_runtime::block_on(async { Core::start(platform::start()) });
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

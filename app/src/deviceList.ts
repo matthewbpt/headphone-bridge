@@ -9,7 +9,44 @@ export interface DeviceList {
 
 export interface Device {
   address: string;
+  /** The name the OS reports. */
   name: string;
+  /** Null until identified, and for unsupported Models. */
+  model: Model | null;
+  state: DeviceState;
+  capabilities: Capabilities;
+  /** Null until the Device first reports it. */
+  battery: Battery | null;
+}
+
+export type Model = "galaxyBuds4Pro";
+
+export type DeviceState =
+  | { kind: "attaching" }
+  | { kind: "attached" }
+  | { kind: "notAttached"; reason: NotAttachedReason };
+
+export type NotAttachedReason =
+  | { kind: "unsupportedModel" }
+  | { kind: "inUseByAnotherProcess" }
+  | { kind: "bluetoothPermissionDenied" }
+  | { kind: "serviceNotFound" }
+  | { kind: "deviceNotConnected" }
+  | { kind: "linkDropped" }
+  | { kind: "other"; message: string };
+
+export type NoiseControlMode = "off" | "noiseCancelling" | "ambient" | "adaptive";
+
+export interface Capabilities {
+  noiseControlModes: NoiseControlMode[];
+  ambientLevel: { min: number; max: number } | null;
+}
+
+/** Percentages; null where the level is unknown. */
+export interface Battery {
+  left: number | null;
+  right: number | null;
+  case: number | null;
 }
 
 /**
