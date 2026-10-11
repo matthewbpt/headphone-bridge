@@ -193,12 +193,11 @@ pub struct ModeItem {
 
 impl TrayMenu {
     pub fn new(list: &DeviceList) -> TrayMenu {
-        // Until Primary Device selection lands, the Primary Device is the one
-        // Attached Device.
-        let primary = list
-            .devices
-            .iter()
-            .find(|device| device.state == DeviceState::Attached);
+        let primary = list.primary.as_ref().and_then(|primary| {
+            list.devices
+                .iter()
+                .find(|device| device.address == *primary && device.state == DeviceState::Attached)
+        });
         let Some(device) = primary else {
             // Failing that, a supported Device that couldn't be Attached, and why.
             let not_attached = list.devices.iter().find_map(|device| match &device.state {
@@ -340,6 +339,7 @@ mod tests {
     fn shows_the_attached_device_with_its_chosen_mode_checked() {
         let list = DeviceList {
             devices: vec![buds(DeviceState::Attached)],
+            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -363,6 +363,7 @@ mod tests {
     fn reads_no_device_while_the_only_device_is_not_attached() {
         let list = DeviceList {
             devices: vec![buds(DeviceState::Attaching)],
+            primary: None,
         };
         assert_eq!(TrayMenu::new(&list).title, "No device");
         assert_eq!(TrayMenu::new(&list).modes, vec![]);
@@ -382,6 +383,7 @@ mod tests {
         ] {
             let list = DeviceList {
                 devices: vec![buds(DeviceState::NotAttached { reason })],
+                primary: None,
             };
             assert_eq!(
                 TrayMenu::new(&list),
@@ -403,6 +405,7 @@ mod tests {
             devices: vec![buds(DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             })],
+            primary: None,
         };
         assert_eq!(TrayMenu::new(&list).title, "No device");
         assert_eq!(TrayMenu::new(&list).status, None);
@@ -423,6 +426,7 @@ mod tests {
                 ambient_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
             }],
+            primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -449,6 +453,7 @@ mod tests {
                 effective_mode_reason: Some(EffectiveModeReason::BudOutOfEar),
                 ..buds(DeviceState::Attached)
             }],
+            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
         };
         let menu = TrayMenu::new(&list);
         assert_eq!(menu.hint.as_deref(), Some("Paused: bud out of ear"));
@@ -456,5 +461,33 @@ mod tests {
             menu.modes[2],
             mode(NoiseControlMode::Ambient, "Ambient", true)
         );
+    }
+
+    fn xm5() -> Device {
+        Device {
+            address: DeviceAddress("11:22:33:44:55:66".into()),
+            name: "WH-1000XM5".into(),
+            model: Some(Model::Wh1000Xm5),
+            state: DeviceState::Attached,
+            capabilities: Model::Wh1000Xm5.capabilities(),
+            chosen_mode: Some(NoiseControlMode::NoiseCancelling),
+            effective_mode: Some(NoiseControlMode::NoiseCancelling),
+            effective_mode_reason: None,
+            ambient_level: None,
+            battery: Some(Battery::Headphones { level: 70 }),
+        }
+    }
+
+    #[test]
+    fn shows_the_primary_device_when_two_are_attached() {
+        let mut list = DeviceList {
+            devices: vec![buds(DeviceState::Attached), xm5()],
+            primary: Some(xm5().address),
+        };
+        assert_eq!(TrayMenu::new(&list).title, "WH-1000XM5");
+        assert_eq!(TrayMenu::new(&list).device, Some(xm5().address));
+
+        list.primary = Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into()));
+        assert_eq!(TrayMenu::new(&list).title, "Matt's Buds4 Pro");
     }
 }

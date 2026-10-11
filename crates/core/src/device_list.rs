@@ -12,6 +12,10 @@ use crate::platform::{DeviceAddress, LinkFailure};
 #[serde(rename_all = "camelCase")]
 pub struct DeviceList {
     pub devices: Vec<Device>,
+    /// The Primary Device: the Attached Device the OS is playing audio
+    /// through or, if it isn't playing through one, the most recently Attached
+    /// Device. `None` while no Device is Attached.
+    pub primary: Option<DeviceAddress>,
 }
 
 /// A Connected Device of a vendor the app knows.

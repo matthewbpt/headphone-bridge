@@ -23,17 +23,40 @@ export function App() {
 
 function DeviceListView() {
   const deviceList = useDeviceList();
+  // The Device picked in the window. Cleared whenever the Primary Device
+  // changes, so the selection follows the OS's audio output.
+  const [picked, setPicked] = useState<string | null>(null);
+  const primary = deviceList?.primary ?? null;
+  useEffect(() => setPicked(null), [primary]);
 
   if (deviceList === null) return null;
   if (deviceList.devices.length === 0) return <p>No device</p>;
+  const { devices } = deviceList;
+  const selected =
+    devices.find((device) => device.address === picked) ??
+    devices.find((device) => device.address === primary) ??
+    devices[0];
   return (
-    <ul>
-      {deviceList.devices.map((device) => (
-        <li key={device.address}>
-          <DeviceView device={device} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <div role="tablist" aria-label="Devices">
+        {devices.map((device) => (
+          <button
+            key={device.address}
+            role="tab"
+            aria-selected={device === selected}
+            onClick={() => setPicked(device.address)}
+            style={{ fontWeight: device === selected ? "bold" : "normal" }}
+          >
+            {device.name}
+            {device.address === primary && " (Primary)"}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel">
+        {/* Keyed, so pending state doesn't carry over to another Device. */}
+        <DeviceView key={selected.address} device={selected} />
+      </div>
+    </>
   );
 }
 

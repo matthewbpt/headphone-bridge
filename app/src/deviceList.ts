@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 // Mirrors the core's Device list snapshot (crates/core/src/device_list.rs).
 export interface DeviceList {
   devices: Device[];
+  /**
+   * The Primary Device's address: the Attached Device the OS plays audio
+   * through, else the most recently Attached. Null while none is Attached.
+   */
+  primary: string | null;
 }
 
 export interface Device {
