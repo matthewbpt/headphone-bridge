@@ -12,6 +12,7 @@
   --accent: #2f6bf0;
   --accent-text: #ffffff;
   --circle: #e6e6ec;
+  --circle-icon: #6c6c72;
   --track: #dcdce3;
   --divider: #e3e3e8;
   --danger: #c4372f;
@@ -27,6 +28,7 @@
     --accent: #3b7cff;
     --accent-text: #ffffff;
     --circle: #3a3a3d;
+    --circle-icon: #b8b8be;
     --track: #2e2e31;
     --divider: #2e2e31;
     --danger: #ff6b5f;
@@ -161,4 +163,113 @@ button {
 .settings > div,
 .settings > details {
   margin-top: 10px;
+}
+
+/* Noise Control Mode: round icon buttons joined by a track. The filled
+   circle is the Chosen Mode, or the pending mode, dimmed and ringed, until
+   the Device confirms it. */
+
+.modes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+}
+
+.modes__track {
+  position: absolute;
+  top: 25px;
+  height: 5px;
+  margin-top: -2.5px;
+  left: calc(100% / var(--count) / 2);
+  right: calc(100% / var(--count) / 2);
+  background: var(--track);
+}
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0 2px;
+  background: none;
+  cursor: pointer;
+}
+
+.mode:disabled {
+  cursor: default;
+}
+
+.mode__circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--circle);
+  color: var(--circle-icon);
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode:not(:disabled):hover .mode__circle {
+  filter: brightness(1.08);
+}
+
+.mode-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.mode__label {
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.mode[data-filled="true"] .mode__circle {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.mode[data-filled="true"] .mode__label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mode[aria-busy="true"] .mode__circle {
+  opacity: 0.6;
+}
+
+.mode[aria-busy="true"] .mode__circle::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hint {
+  margin: 14px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.error {
+  margin: 10px 4px 0;
+  font-size: 13px;
+  color: var(--danger);
+  text-align: center;
 }

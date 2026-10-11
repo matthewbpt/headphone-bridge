@@ -8,6 +8,21 @@ import { renderWindow } from "./testing/renderWindow";
 const mode = (name: string) => screen.findByRole("radio", { name: new RegExp(`^${name}`) });
 
 describe("Noise Control Mode", () => {
+  const modeNames = async () =>
+    (await screen.findAllByRole("radio")).map((radio) => radio.textContent);
+
+  it("lists the Buds4 Pro's modes from hearing everything to hearing nothing", async () => {
+    renderWindow(new FakeCore(only(buds4Pro())));
+
+    expect(await modeNames()).toEqual(["Off", "Ambient", "Adaptive", "Noise Cancelling"]);
+  });
+
+  it("lists only the modes the XM5 supports, in the same order", async () => {
+    renderWindow(new FakeCore(only(xm5())));
+
+    expect(await modeNames()).toEqual(["Off", "Ambient", "Noise Cancelling"]);
+  });
+
   it("shows a clicked mode pending until a snapshot confirms it", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
     renderWindow(core);
@@ -61,6 +76,51 @@ describe("Noise Control Mode", () => {
     );
     expect(await mode("Ambient")).toHaveAttribute("aria-busy", "false");
     expect(await mode("Noise Cancelling")).toBeChecked();
+  });
+
+  it("moves the selection when the mode changes on the Device", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    renderWindow(core);
+    expect(await mode("Noise Cancelling")).toBeChecked();
+
+    core.emit(only(buds4Pro({ chosenMode: "adaptive", effectiveMode: "adaptive" })));
+
+    expect(await mode("Adaptive")).toBeChecked();
+    expect(await mode("Noise Cancelling")).not.toBeChecked();
+  });
+
+  it("drops a pending mode when the Device moves to another mode first", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    renderWindow(core);
+
+    await userEvent.click(await mode("Ambient"));
+    expect(await mode("Ambient")).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "off", effectiveMode: "off" })));
+
+    expect(await mode("Off")).toBeChecked();
+    expect(await mode("Ambient")).toHaveAttribute("aria-busy", "false");
+    expect(await mode("Ambient")).toBeEnabled();
+  });
+
+  it("explains under the selector why the Device isn't applying the Chosen Mode", async () => {
+    const core = new FakeCore(
+      only(
+        buds4Pro({
+          chosenMode: "noiseCancelling",
+          effectiveMode: "off",
+          effectiveModeReason: "budOutOfEar",
+        }),
+      ),
+    );
+    renderWindow(core);
+
+    expect(await screen.findByText("Paused: an earbud is out of the ear")).toBeVisible();
+    expect(screen.queryByText(/Applying/)).not.toBeInTheDocument();
+
+    core.emit(only(buds4Pro({ chosenMode: "noiseCancelling", effectiveMode: "noiseCancelling" })));
+
+    expect(screen.queryByText("Paused: an earbud is out of the ear")).not.toBeInTheDocument();
   });
 });
 
