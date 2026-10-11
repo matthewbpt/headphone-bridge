@@ -4,8 +4,20 @@ use headphone_bridge_core::platform::{
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-/// Stands in for an OS Bluetooth adapter until one exists: it never observes
-/// a Device, so nothing can be Connected.
+/// The platform adapter for this OS.
+#[cfg(target_os = "macos")]
+pub fn start() -> headphone_bridge_platform_macos::MacBluetooth {
+    headphone_bridge_platform_macos::MacBluetooth::start()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn start() -> NoBluetooth {
+    NoBluetooth
+}
+
+/// Stands in for an OS Bluetooth adapter where none exists yet: it never
+/// observes a Device, so nothing can be Connected.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub struct NoBluetooth;
 
 impl Platform for NoBluetooth {

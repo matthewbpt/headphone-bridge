@@ -112,3 +112,77 @@ impl Platform for FakePlatform {
         })
     }
 }
+
+use std::time::Duration;
+
+use headphone_bridge_core::frame_log::{Direction, FrameRecord};
+use headphone_bridge_core::platform::DeviceIdentity;
+use headphone_bridge_core::{Core, DeviceList};
+use uuid::uuid;
+
+pub const SAMSUNG_SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
+
+/// A Galaxy Buds4 Pro as the OS reports it.
+pub fn buds4pro() -> DeviceIdentity {
+    DeviceIdentity {
+        address: DeviceAddress("A1:B2:C3:D4:E5:F6".into()),
+        name: "Galaxy Buds4 Pro (A1B2)".into(),
+        service_uuids: vec![SAMSUNG_SERVICE],
+    }
+}
+
+/// Loads `tests/fixtures/<name>.frames`.
+pub fn fixture(name: &str) -> Vec<FrameRecord> {
+    let path = format!(
+        "{}/tests/fixtures/{name}.frames",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    FrameRecord::parse_all(&text).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// The frames the Device sent, in order.
+pub fn received(records: &[FrameRecord]) -> Vec<Vec<u8>> {
+    records
+        .iter()
+        .filter(|record| record.direction == Direction::Received)
+        .map(|record| record.bytes.clone())
+        .collect()
+}
+
+/// Waits for a Device list snapshot that satisfies `condition`, and returns it.
+pub async fn wait_for(core: &Core, condition: impl Fn(&DeviceList) -> bool) -> DeviceList {
+    let mut snapshots = core.subscribe();
+    let wait = async {
+        snapshots
+            .wait_for(|list| condition(list))
+            .await
+            .map(|list| list.clone())
+    };
+    match tokio::time::timeout(Duration::from_secs(5), wait).await {
+        Ok(Ok(list)) => list,
+        _ => panic!("timed out; last snapshot: {:#?}", core.device_list()),
+    }
+}
+
+/// Encodes a Samsung frame the way a Device would, with all header flags
+/// clear. Only for frames no fixture has; the CRC is CRC-16/XMODEM.
+pub fn samsung_frame(id: u8, payload: &[u8]) -> Vec<u8> {
+    let mut body = vec![id];
+    body.extend_from_slice(payload);
+    let crc = body.iter().fold(0u16, |crc, &byte| {
+        (0..8).fold(crc ^ (u16::from(byte) << 8), |crc, _| {
+            if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            }
+        })
+    });
+    let mut frame = vec![0xfd];
+    frame.extend_from_slice(&((body.len() + 2) as u16).to_le_bytes());
+    frame.extend(body);
+    frame.extend_from_slice(&crc.to_le_bytes());
+    frame.push(0xdd);
+    frame
+}
