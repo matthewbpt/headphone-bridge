@@ -125,6 +125,169 @@ describe("Noise Control Mode", () => {
 });
 
 describe("Ambient Level", () => {
+  const slider = () => screen.queryByRole("slider", { name: "Ambient Level" });
+
+  it("is shown only while Ambient is the Chosen Mode", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    renderWindow(core);
+
+    expect(await mode("Noise Cancelling")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient" })));
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("appears the moment Ambient is clicked, before the Device confirms", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await mode("Ambient"));
+
+    expect(await mode("Ambient")).not.toBeChecked();
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("disappears the moment another mode is clicked, before the Device confirms", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+    expect(await screen.findByRole("slider", { name: "Ambient Level" })).toBeInTheDocument();
+
+    await userEvent.click(await mode("Off"));
+
+    expect(await mode("Ambient")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  it("goes back to the confirmed Chosen Mode when the core rejects the change", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await mode("Noise Cancelling"));
+    expect(slider()).not.toBeInTheDocument();
+
+    await core.release("set_noise_control_mode", { reject: "notAttached" });
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("goes back to the confirmed Chosen Mode when the Device doesn't confirm within 10 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    renderWindow(core);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await mode("Ambient"));
+    act(() => vi.advanceTimersByTime(9_900));
+    expect(slider()).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(slider()).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Ambient wasn't confirmed by the Device");
+  });
+
+  it("follows a switch to or from Ambient made on the Device", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "off", effectiveMode: "off" })));
+    renderWindow(core);
+    expect(await mode("Off")).toBeChecked();
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", effectiveMode: "ambient" })));
+    expect(slider()).toBeInTheDocument();
+
+    core.emit(only(buds4Pro({ chosenMode: "adaptive", effectiveMode: "adaptive" })));
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  it("shows a notch per step of the Buds4 Pro's 5 steps, and no value", async () => {
+    renderWindow(new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 3 }))));
+
+    expect(await screen.findByRole("slider", { name: "Ambient Level" })).toHaveValue("3");
+    expect(screen.getAllByTestId("notch")).toHaveLength(5);
+    expect(screen.queryByText("3")).not.toBeInTheDocument();
+  });
+
+  it("shows the XM5's 20 steps as a plain track with the current value", async () => {
+    renderWindow(new FakeCore(only(xm5({ chosenMode: "ambient", ambientLevel: 12 }))));
+
+    expect(await screen.findByRole("slider", { name: "Ambient Level" })).toHaveValue("12");
+    expect(screen.queryByTestId("notch")).not.toBeInTheDocument();
+    expect(screen.getByText("12")).toBeVisible();
+  });
+
+  it("moves one step on − and +", async () => {
+    const core = new FakeCore(only(xm5({ chosenMode: "ambient", ambientLevel: 12 })));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    core.emit(only(xm5({ chosenMode: "ambient", ambientLevel: 13 })));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+
+    expect(core.sent()).toEqual([
+      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 13 } },
+      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 12 } },
+      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 11 } },
+    ]);
+  });
+
+  it("stops − and + at the Model's range limits", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 0 })));
+    renderWindow(core);
+
+    expect(await screen.findByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeEnabled();
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 4 })));
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeEnabled();
+    expect(core.sent()).toEqual([]);
+  });
+
+  it("shows a level pending until a snapshot confirms it", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await screen.findByRole("button", { name: "More" }));
+    act(() => vi.advanceTimersByTime(9_900));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByRole("alert")).toHaveTextContent("Ambient Level 2 wasn't confirmed by the Device");
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the core rejects a level", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    core.answer("set_ambient_level", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Less" }));
+    await core.release("set_ambient_level", { reject: "notAttached" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Ambient Level 0: notAttached");
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
   it("sends the chosen level to the Device", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
     renderWindow(core);
