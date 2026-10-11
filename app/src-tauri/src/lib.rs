@@ -2,6 +2,7 @@
 //! its Device list snapshots to the UI as `device-list` events.
 
 mod platform;
+mod tray;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
