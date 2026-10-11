@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import type {
-  Battery,
-  Device,
-  EffectiveModeReason,
-  Model,
-  NoiseControlMode,
-  NotAttachedReason,
+import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
+import {
+  reasonText,
+  retryAttach,
+  setAmbientLevel,
+  setNoiseControlMode,
+  useDeviceList,
+  useLabels,
 } from "./deviceList";
-import { retryAttach, setAmbientLevel, setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 
@@ -23,14 +23,15 @@ export function App() {
 
 function DeviceListView() {
   const deviceList = useDeviceList();
+  const labels = useLabels();
   // The Device picked in the window. Cleared whenever the Primary Device
   // changes, so the selection follows the OS's audio output.
   const [picked, setPicked] = useState<string | null>(null);
   const primary = deviceList?.primary ?? null;
   useEffect(() => setPicked(null), [primary]);
 
-  if (deviceList === null) return null;
-  if (deviceList.devices.length === 0) return <p>No device</p>;
+  if (deviceList === null || labels === null) return null;
+  if (deviceList.devices.length === 0) return <p>{labels.noDevice}</p>;
   const { devices } = deviceList;
   const selected =
     devices.find((device) => device.address === picked) ??
@@ -54,51 +55,42 @@ function DeviceListView() {
       </div>
       <div role="tabpanel">
         {/* Keyed, so pending state doesn't carry over to another Device. */}
-        <DeviceView key={selected.address} device={selected} />
+        <DeviceView key={selected.address} device={selected} labels={labels} />
       </div>
     </>
   );
 }
 
-const MODEL_NAMES: Record<Model, string> = {
-  galaxyBuds4Pro: "Galaxy Buds4 Pro",
-  wh1000xm5: "WH-1000XM5",
-};
-
-function DeviceView({ device }: { device: Device }) {
+function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   return (
     <>
       <strong>{device.name}</strong>
-      {device.model && <div>{MODEL_NAMES[device.model]}</div>}
+      {device.model && <div>{labels.models[device.model]}</div>}
       <div>{stateText(device)}</div>
+      {device.state.kind === "notAttached" && (
+        <div>{reasonText(labels, device.state.reason)}</div>
+      )}
       {device.state.kind === "notAttached" && device.state.reason.kind !== "unsupportedModel" && (
         <RetryButton address={device.address} />
       )}
       {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
-        <NoiseControlModeButtons device={device} />
+        <NoiseControlModeButtons device={device} labels={labels} />
       )}
       {device.state.kind === "attached" && device.capabilities.ambientLevel && (
         <AmbientLevelSlider device={device} range={device.capabilities.ambientLevel} />
       )}
       {device.state.kind === "attached" && device.effectiveMode && (
-        <div>Applying: {MODE_NAMES[device.effectiveMode]}</div>
+        <div>Applying: {labels.modes[device.effectiveMode]}</div>
       )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
   );
 }
 
-const MODE_NAMES: Record<NoiseControlMode, string> = {
-  off: "Off",
-  noiseCancelling: "Noise Cancelling",
-  ambient: "Ambient",
-  adaptive: "Adaptive",
-};
-
 /** How long a pressed button stays pending if the Device never confirms. */
 const PENDING_TIMEOUT_MS = 10_000;
 
-function NoiseControlModeButtons({ device }: { device: Device }) {
+function NoiseControlModeButtons({ device, labels }: { device: Device; labels: Labels }) {
   // The mode asked for, until the next snapshot moves the Chosen Mode.
   const [pending, setPending] = useState<NoiseControlMode | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,17 +100,17 @@ function NoiseControlModeButtons({ device }: { device: Device }) {
     if (pending === null) return;
     const timer = setTimeout(() => {
       setPending(null);
-      setError(`${MODE_NAMES[pending]} wasn't confirmed by the device`);
+      setError(`${labels.modes[pending]} wasn't confirmed by the Device`);
     }, PENDING_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [pending]);
+  }, [pending, labels]);
 
   const choose = (mode: NoiseControlMode) => {
     setError(null);
     setPending(mode);
     setNoiseControlMode(device.address, mode).catch((e) => {
       setPending(null);
-      setError(`Couldn't set ${MODE_NAMES[mode]}: ${e}`);
+      setError(`Couldn't set ${labels.modes[mode]}: ${e}`);
     });
   };
 
@@ -135,25 +127,15 @@ function NoiseControlModeButtons({ device }: { device: Device }) {
             onClick={() => choose(mode)}
             style={{ fontWeight: device.chosenMode === mode ? "bold" : "normal" }}
           >
-            {MODE_NAMES[mode]}
+            {labels.modes[mode]}
             {pending === mode && " …"}
           </button>
         ))}
       </div>
-      {device.effectiveModeReason && <div>{hintText(device.effectiveModeReason)}</div>}
+      {device.effectiveModeReason && <div>{labels.hints[device.effectiveModeReason]}</div>}
       {error && <div role="alert">{error}</div>}
     </div>
   );
-}
-
-/** Why the Device isn't applying the Chosen Mode (mirrored in the tray). */
-function hintText(reason: EffectiveModeReason): string {
-  switch (reason) {
-    case "budOutOfEar":
-      return "Paused: bud out of ear";
-    case "unknown":
-      return "Paused by the device";
-  }
 }
 
 function AmbientLevelSlider({
@@ -175,7 +157,7 @@ function AmbientLevelSlider({
     if (pending === null) return;
     const timer = setTimeout(() => {
       setPending(null);
-      setError(`Ambient Level ${pending} wasn't confirmed by the device`);
+      setError(`Ambient Level ${pending} wasn't confirmed by the Device`);
     }, PENDING_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [pending]);
@@ -224,34 +206,14 @@ function AmbientLevelSlider({
 function stateText(device: Device): string {
   switch (device.state.kind) {
     case "attaching":
-      return "Connected, attaching…";
+      return "Connected, Attaching…";
     case "attached":
       return "Attached";
     case "notAttached":
-      return `Connected, not attached: ${reasonText(device.state.reason)}`;
+      return "Connected, not Attached";
   }
 }
 
-function reasonText(reason: NotAttachedReason): string {
-  switch (reason.kind) {
-    case "unsupportedModel":
-      return "unsupported";
-    case "inUseByAnotherProcess":
-      return "in use by another app";
-    case "bluetoothPermissionDenied":
-      return "Bluetooth permission denied. Enable it in System Settings › Privacy & Security › Bluetooth";
-    case "serviceNotFound":
-      return "control service not found";
-    case "deviceNotConnected":
-      return "device not connected";
-    case "linkDropped":
-      return "control link dropped";
-    case "noResponse":
-      return "the device didn't respond";
-    case "other":
-      return reason.message;
-  }
-}
 
 function RetryButton({ address }: { address: string }) {
   const [error, setError] = useState<string | null>(null);

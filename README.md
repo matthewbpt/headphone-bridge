@@ -59,6 +59,16 @@ Then `cd app && npm run tauri dev` runs the app, and
 under `target/release/bundle/`. On GNOME the tray needs the AppIndicator
 extension, which Ubuntu enables by default.
 
+### Frame log
+
+The Developer section of the window switches on the frame log, which appends
+every frame sent to or received from a Device to `frame-log.frames` in the
+app's log directory, in the test fixture format. The setting stays on across
+launches, so Devices already Connected at startup have their Attach logged.
+Setting `HEADPHONE_BRIDGE_FRAME_LOG` (to anything) also starts the app with it
+on, e.g. `HEADPHONE_BRIDGE_FRAME_LOG=1 "target/debug/bundle/macos/Headphone
+Bridge.app/Contents/MacOS/headphone-bridge"`.
+
 ## Licence
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your

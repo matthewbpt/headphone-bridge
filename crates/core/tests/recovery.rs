@@ -6,7 +6,9 @@ use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure
 use headphone_bridge_core::{
     Command, CommandError, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
 };
-use support::{buds4pro, fake_platform, fixture, received, replay, wait_for, xm5, SAMSUNG_SERVICE};
+use support::{
+    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, SAMSUNG_SERVICE,
+};
 
 /// Plays the Buds4 Pro's extended status on `link`, which Attaches it.
 fn identify_buds4pro(link: &support::DeviceLink) {
@@ -210,8 +212,10 @@ async fn an_xm5_that_never_answers_is_given_up_on_and_retried() {
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     let opened_at = tokio::time::Instant::now();
-    // The protocol info request, whose ACK never comes.
-    link.written.recv().await.unwrap();
+    // The protocol info request, whose ACK never comes, sent 10 times.
+    for _ in 0..10 {
+        link.written.recv().await.unwrap();
+    }
 
     assert_eq!(link.written.recv().await, None, "the link is closed");
     assert_eq!(opened_at.elapsed(), Duration::from_secs(10));
@@ -228,4 +232,83 @@ async fn an_xm5_that_never_answers_is_given_up_on_and_retried() {
         is(&core.device_list(), DeviceState::Attached),
         "an identified Device stays Attached however long it's quiet"
     );
+}
+
+/// An ACK with sequence number 0: for a frame sent with 1.
+const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
+
+/// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
+async fn attached_xm5() -> (Core, support::FakeOs, support::DeviceLink) {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
+    (core, os, link)
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_xm5_request_whose_ack_is_lost_is_resent_after_a_second() {
+    let (core, _os, mut link) = attached_xm5().await;
+    let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
+
+    core.command(Command::SetNoiseControlMode(
+        xm5().address,
+        NoiseControlMode::Off,
+    ))
+    .await
+    .unwrap();
+    core.command(Command::SetAmbientLevel(xm5().address, 3))
+        .await
+        .unwrap();
+    assert_eq!(written(&mut link).await.unwrap(), off);
+    let sent_at = tokio::time::Instant::now();
+
+    assert_eq!(
+        written(&mut link).await.unwrap(),
+        off,
+        "the same frame again"
+    );
+    assert_eq!(sent_at.elapsed(), Duration::from_secs(1));
+    // Once it's ACKed, the queued level set goes out.
+    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    assert_eq!(
+        written(&mut link).await.unwrap(),
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_xm5_that_stops_acking_is_detached_after_10_tries_and_re_attached() {
+    let (core, mut os, mut link) = attached_xm5().await;
+    let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
+
+    core.command(Command::SetNoiseControlMode(
+        xm5().address,
+        NoiseControlMode::Off,
+    ))
+    .await
+    .unwrap();
+    let sent_at = tokio::time::Instant::now();
+    for _ in 0..10 {
+        assert_eq!(written(&mut link).await.unwrap(), off);
+    }
+
+    assert_eq!(written(&mut link).await, None, "the link is closed");
+    assert_eq!(sent_at.elapsed(), Duration::from_secs(10));
+    wait_for(&core, |list| {
+        is(list, not_attached(NotAttachedReason::NoResponse))
+    })
+    .await;
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| is(list, DeviceState::Attached)).await;
+}
+
+/// The next frame the core writes, or `None` once the link is closed.
+async fn written(link: &mut support::DeviceLink) -> Option<Vec<u8>> {
+    tokio::time::timeout(Duration::from_secs(60), link.written.recv())
+        .await
+        .expect("timed out waiting for the core to write")
 }

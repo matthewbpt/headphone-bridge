@@ -31,8 +31,17 @@ pub enum CommandError {
     MissingCapability,
     /// The value is outside the range the Model's Capabilities declare.
     OutOfRange,
+    /// The Device is Attached but hasn't reported its Noise Control Mode and
+    /// Ambient Level yet, so a set couldn't keep the other unchanged.
+    SettingsNotReported,
     /// The frame log file couldn't be opened.
     FrameLogUnavailable(String),
+}
+
+impl CommandError {
+    pub(crate) fn frame_log_unavailable(error: std::io::Error) -> CommandError {
+        CommandError::FrameLogUnavailable(error.to_string())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

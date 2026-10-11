@@ -1,4 +1,4 @@
-//! The native tray menu. It shows the Primary Device's name and battery, its
+//! The native tray menu, labelled from [`crate::labels`]. It shows the Primary Device's name and battery, its
 //! Chosen Mode as radio items with a hint while the Device has paused it,
 //! "Open Headphone Bridge" and "Quit".
 //!
@@ -9,12 +9,13 @@ use std::sync::Mutex;
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Core, DeviceList, DeviceState, EffectiveModeReason, NoiseControlMode,
-    NotAttachedReason,
+    Battery, Command, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
 };
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager};
+
+use crate::labels;
 
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
@@ -27,7 +28,7 @@ struct Tray {
     menu: Mutex<TrayMenu>,
 }
 
-/// Adds the tray icon, showing "No device" until the first snapshot.
+/// Adds the tray icon, showing "No Device" until the first snapshot.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let menu = TrayMenu::new(&DeviceList::default());
     let mut builder = TrayIconBuilder::with_id("main")
@@ -109,6 +110,9 @@ fn build(app: &AppHandle, menu: &TrayMenu) -> tauri::Result<Menu<tauri::Wry>> {
                 None::<&str>,
             )?);
         }
+        if let Some(hint) = &menu.hint {
+            builder = builder.item(&MenuItem::with_id(app, "hint", hint, false, None::<&str>)?);
+        }
     }
     builder
         .separator()
@@ -170,7 +174,7 @@ fn mode_from_id(id: &str) -> Option<NoiseControlMode> {
 /// rebuilt only when this changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayMenu {
-    /// The Primary Device's name, or "No device".
+    /// The Primary Device's name, or "No Device".
     pub title: String,
     pub battery: Option<String>,
     /// Why the Device isn't applying the Chosen Mode, while it isn't.
@@ -201,14 +205,17 @@ impl TrayMenu {
         let Some(device) = primary else {
             // Failing that, a supported Device that couldn't be Attached, and why.
             let not_attached = list.devices.iter().find_map(|device| match &device.state {
-                DeviceState::NotAttached { reason } => {
-                    reason_text(reason).map(|status| (device.name.clone(), status))
+                // An unsupported Model is left out.
+                DeviceState::NotAttached { reason }
+                    if *reason != NotAttachedReason::UnsupportedModel =>
+                {
+                    Some((device.name.clone(), labels::reason(reason)))
                 }
                 _ => None,
             });
             let (title, status) = match not_attached {
                 Some((name, status)) => (name, Some(status)),
-                None => ("No device".into(), None),
+                None => (labels::NO_DEVICE.into(), None),
             };
             return TrayMenu {
                 title,
@@ -224,7 +231,7 @@ impl TrayMenu {
             battery: device.battery.map(battery_text),
             hint: device
                 .effective_mode_reason
-                .map(|reason| hint_text(reason).into()),
+                .map(|reason| labels::hint(reason).into()),
             status: None,
             device: Some(device.address.clone()),
             modes: device
@@ -233,29 +240,12 @@ impl TrayMenu {
                 .iter()
                 .map(|&mode| ModeItem {
                     mode,
-                    label: mode_label(mode),
+                    label: labels::mode(mode),
                     checked: device.chosen_mode == Some(mode),
                 })
                 .collect(),
         }
     }
-}
-
-/// Why a Device isn't Attached, or `None` for an unsupported Model, which the
-/// tray leaves out.
-fn reason_text(reason: &NotAttachedReason) -> Option<String> {
-    Some(match reason {
-        NotAttachedReason::UnsupportedModel => return None,
-        NotAttachedReason::InUseByAnotherProcess => "In use by another app".into(),
-        NotAttachedReason::BluetoothPermissionDenied => {
-            "Bluetooth permission denied: enable it in System Settings".into()
-        }
-        NotAttachedReason::ServiceNotFound => "Control service not found".into(),
-        NotAttachedReason::DeviceNotConnected => "Not connected".into(),
-        NotAttachedReason::LinkDropped => "Control link dropped".into(),
-        NotAttachedReason::NoResponse => "The device didn't respond".into(),
-        NotAttachedReason::Other(message) => message.clone(),
-    })
 }
 
 fn battery_text(battery: Battery) -> String {
@@ -271,22 +261,6 @@ fn battery_text(battery: Battery) -> String {
     }
 }
 
-fn hint_text(reason: EffectiveModeReason) -> &'static str {
-    match reason {
-        EffectiveModeReason::BudOutOfEar => "Paused: bud out of ear",
-        EffectiveModeReason::Unknown => "Paused by the device",
-    }
-}
-
-fn mode_label(mode: NoiseControlMode) -> &'static str {
-    match mode {
-        NoiseControlMode::Off => "Off",
-        NoiseControlMode::NoiseCancelling => "Noise Cancelling",
-        NoiseControlMode::Ambient => "Ambient",
-        NoiseControlMode::Adaptive => "Adaptive",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use headphone_bridge_core::{Device, EffectiveModeReason, Model};
@@ -298,7 +272,7 @@ mod tests {
         assert_eq!(
             TrayMenu::new(&DeviceList::default()),
             TrayMenu {
-                title: "No device".into(),
+                title: "No Device".into(),
                 battery: None,
                 hint: None,
                 status: None,
@@ -365,7 +339,7 @@ mod tests {
             devices: vec![buds(DeviceState::Attaching)],
             primary: None,
         };
-        assert_eq!(TrayMenu::new(&list).title, "No device");
+        assert_eq!(TrayMenu::new(&list).title, "No Device");
         assert_eq!(TrayMenu::new(&list).modes, vec![]);
     }
 
@@ -378,7 +352,7 @@ mod tests {
             ),
             (
                 NotAttachedReason::BluetoothPermissionDenied,
-                "Bluetooth permission denied: enable it in System Settings",
+                "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth",
             ),
         ] {
             let list = DeviceList {
@@ -407,7 +381,7 @@ mod tests {
             })],
             primary: None,
         };
-        assert_eq!(TrayMenu::new(&list).title, "No device");
+        assert_eq!(TrayMenu::new(&list).title, "No Device");
         assert_eq!(TrayMenu::new(&list).status, None);
     }
 
@@ -456,7 +430,10 @@ mod tests {
             primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
         };
         let menu = TrayMenu::new(&list);
-        assert_eq!(menu.hint.as_deref(), Some("Paused: bud out of ear"));
+        assert_eq!(
+            menu.hint.as_deref(),
+            Some("Paused: an earbud is out of the ear")
+        );
         assert_eq!(
             menu.modes[2],
             mode(NoiseControlMode::Ambient, "Ambient", true)

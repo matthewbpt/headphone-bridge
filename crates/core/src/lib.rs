@@ -13,6 +13,7 @@ mod sony;
 mod update;
 
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -38,6 +39,24 @@ pub struct Core {
 impl Core {
     /// Starts the core on the current Tokio runtime.
     pub fn start(platform: impl Platform) -> Core {
+        Core::start_logging(platform, FrameLog::default())
+    }
+
+    /// Starts the core with the frame log already on, appending to `path`,
+    /// so Devices Attached at startup are logged too. The core starts even if
+    /// the file can't be opened, with the frame log off.
+    pub fn start_with_frame_log(
+        platform: impl Platform,
+        path: &Path,
+    ) -> (Core, Result<(), CommandError>) {
+        let frame_log = FrameLog::default();
+        let started = frame_log
+            .start(path)
+            .map_err(CommandError::frame_log_unavailable);
+        (Core::start_logging(platform, frame_log), started)
+    }
+
+    fn start_logging(platform: impl Platform, frame_log: FrameLog) -> Core {
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
         let (link_events, link_events_rx) = mpsc::unbounded_channel();
@@ -49,7 +68,7 @@ impl Core {
             next_attempt: 0,
             next_attach: 0,
             audio_output: None,
-            frame_log: FrameLog::default(),
+            frame_log,
         };
         tokio::spawn(state.run(commands_rx, link_events_rx));
         Core {
@@ -104,12 +123,15 @@ struct Tracked {
     session: Option<LinkSession>,
     /// Automatic retries since the Device was last Attached.
     retries: u32,
-    /// When the Device was last Attached, while it is.
-    attached: Option<u64>,
+    /// The Device's place in the order of Attaches, while it is Attached.
+    attach_order: Option<u64>,
 }
 
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a Sony request waits for its ACK before it is sent again.
+const ACK_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// How many times Attaching is retried automatically before only the retry
 /// command can try again.
@@ -242,22 +264,11 @@ impl<P: Platform> State<P> {
             }
         };
         let mut tracked = Tracked {
-            device: Device {
-                address: identity.address.clone(),
-                name: identity.name,
-                model: None,
-                state,
-                capabilities: Capabilities::default(),
-                chosen_mode: None,
-                effective_mode: None,
-                effective_mode_reason: None,
-                ambient_level: None,
-                battery: None,
-            },
+            device: Device::unidentified(identity.address.clone(), identity.name, state),
             vendor,
             session: None,
             retries: 0,
-            attached: None,
+            attach_order: None,
         };
         if attach {
             tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
@@ -309,8 +320,9 @@ impl<P: Platform> State<P> {
                             }
                         }
                     };
-                    // A Device that never answers, e.g. because an ACK was
-                    // lost, would otherwise be left Attaching for good.
+                    // A Device that never identifies itself, e.g. one that
+                    // ACKs but never replies, would otherwise be left
+                    // Attaching for good.
                     let unidentified = async {
                         tokio::time::sleep(IDENTIFY_TIMEOUT).await;
                         if identified.load(Ordering::Relaxed) {
@@ -348,7 +360,7 @@ impl<P: Platform> State<P> {
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
                 tracked.retries = 0;
-                tracked.attached = Some(self.next_attach);
+                tracked.attach_order = Some(self.next_attach);
                 self.next_attach += 1;
             }
             // The session ends straight after, with that reason.
@@ -368,20 +380,13 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                *device = Device {
-                    address: device.address.clone(),
-                    name: device.name.clone(),
-                    model: None,
-                    state: DeviceState::NotAttached { reason },
-                    capabilities: Capabilities::default(),
-                    chosen_mode: None,
-                    effective_mode: None,
-                    effective_mode_reason: None,
-                    ambient_level: None,
-                    battery: None,
-                };
+                *device = Device::unidentified(
+                    device.address.clone(),
+                    device.name.clone(),
+                    DeviceState::NotAttached { reason },
+                );
                 tracked.session = None;
-                tracked.attached = None;
+                tracked.attach_order = None;
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -401,6 +406,7 @@ impl<P: Platform> State<P> {
                 if !device.capabilities.noise_control_modes.contains(&mode) {
                     return Err(CommandError::MissingCapability);
                 }
+                device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseControlMode(mode))
             }
             Command::SetAmbientLevel(address, level) => {
@@ -412,6 +418,7 @@ impl<P: Platform> State<P> {
                 if !(range.min..=range.max).contains(&level) {
                     return Err(CommandError::OutOfRange);
                 }
+                device.settings_reported()?;
                 session.send(SessionCommand::SetAmbientLevel(level))
             }
             Command::RetryAttach(address) => {
@@ -430,7 +437,7 @@ impl<P: Platform> State<P> {
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
-                .map_err(|error| CommandError::FrameLogUnavailable(error.to_string())),
+                .map_err(CommandError::frame_log_unavailable),
             Command::SetFrameLog(None) => {
                 self.frame_log.stop();
                 Ok(())
@@ -467,14 +474,14 @@ impl<P: Platform> State<P> {
         let playing = self.audio_output.as_ref().filter(|address| {
             self.devices
                 .get(address)
-                .is_some_and(|t| t.attached.is_some())
+                .is_some_and(|t| t.attach_order.is_some())
         });
         if let Some(address) = playing {
             return Some(address.clone());
         }
         self.devices
             .values()
-            .filter_map(|tracked| Some((tracked.attached?, &tracked.device.address)))
+            .filter_map(|tracked| Some((tracked.attach_order?, &tracked.device.address)))
             .max()
             .map(|(_, address)| address.clone())
     }
@@ -579,8 +586,28 @@ async fn run_sony_session(
     if !write(&mut session, slug) {
         return NotAttachedReason::LinkDropped;
     }
+    // A request whose ACK is lost is sent again every second, and a Device
+    // that acknowledges none of the tries is given up on, like a dropped link
+    // but retried as one that didn't respond.
+    let ack_timeout = tokio::time::sleep(ACK_TIMEOUT);
+    tokio::pin!(ack_timeout);
+    let mut awaiting_ack = None;
     loop {
+        if session.awaiting_ack() != awaiting_ack {
+            awaiting_ack = session.awaiting_ack();
+            ack_timeout
+                .as_mut()
+                .reset(tokio::time::Instant::now() + ACK_TIMEOUT);
+        }
         tokio::select! {
+            () = &mut ack_timeout, if awaiting_ack.is_some() => {
+                if !session.resend() {
+                    return NotAttachedReason::NoResponse;
+                }
+                if !write(&mut session, slug) {
+                    return NotAttachedReason::LinkDropped;
+                }
+            }
             bytes = link.incoming.recv() => {
                 let Some(bytes) = bytes else {
                     return NotAttachedReason::LinkDropped;

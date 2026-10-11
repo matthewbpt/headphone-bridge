@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::command::NoiseControlMode;
+use crate::command::{CommandError, NoiseControlMode};
 use crate::model::{Capabilities, Model};
 use crate::platform::{DeviceAddress, LinkFailure};
 
@@ -47,6 +47,23 @@ pub struct Device {
 }
 
 impl Device {
+    /// A Device whose Model isn't known, nor anything it reports: when it is
+    /// first Connected, and again whenever it is Detached.
+    pub(crate) fn unidentified(address: DeviceAddress, name: String, state: DeviceState) -> Device {
+        Device {
+            address,
+            name,
+            model: None,
+            state,
+            capabilities: Capabilities::default(),
+            chosen_mode: None,
+            effective_mode: None,
+            effective_mode_reason: None,
+            ambient_level: None,
+            battery: None,
+        }
+    }
+
     /// Records the mode the Device is applying, and why, if it says. The
     /// reason shows only while the mode differs from the Chosen Mode.
     pub(crate) fn set_effective_mode(
@@ -57,6 +74,16 @@ impl Device {
         self.effective_mode = Some(mode);
         self.effective_mode_reason = (self.chosen_mode.is_some() && self.chosen_mode != Some(mode))
             .then(|| reason.unwrap_or(EffectiveModeReason::Unknown));
+    }
+
+    /// Fails until the Device has reported its Chosen Mode, which comes with
+    /// the rest of its noise control settings. A set sends some of those back
+    /// unchanged, so it can't be made before then.
+    pub(crate) fn settings_reported(&self) -> Result<(), CommandError> {
+        match self.chosen_mode {
+            Some(_) => Ok(()),
+            None => Err(CommandError::SettingsNotReported),
+        }
     }
 }
 
@@ -84,7 +111,8 @@ pub enum NotAttachedReason {
     DeviceNotConnected,
     /// The control link closed while Attached.
     LinkDropped,
-    /// The control link opened, but the Device didn't identify itself in time.
+    /// The control link opened, but the Device didn't identify itself in time,
+    /// or stopped acknowledging what the app sent.
     NoResponse,
     Other(String),
 }
@@ -102,7 +130,7 @@ impl From<LinkFailure> for NotAttachedReason {
 }
 
 /// Why a Device's Effective Mode differs from its Chosen Mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EffectiveModeReason {
     /// An earbud is out of the ear, and the Device paused the Chosen Mode.
