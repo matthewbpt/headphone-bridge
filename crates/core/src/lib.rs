@@ -95,6 +95,14 @@ struct LinkSession {
     commands: mpsc::UnboundedSender<SessionCommand>,
 }
 
+impl LinkSession {
+    fn send(&self, command: SessionCommand) -> Result<(), CommandError> {
+        self.commands
+            .send(command)
+            .map_err(|_| CommandError::NotAttached)
+    }
+}
+
 impl Drop for LinkSession {
     fn drop(&mut self) {
         self.task.abort();
@@ -104,6 +112,7 @@ impl Drop for LinkSession {
 /// A command for the Device, already checked against its Capabilities.
 enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
+    SetAmbientLevel(u8),
 }
 
 struct LinkEvent {
@@ -169,6 +178,7 @@ impl<P: Platform> State<P> {
                 state,
                 capabilities: Capabilities::default(),
                 chosen_mode: None,
+                ambient_level: None,
                 battery: None,
             },
             session: None,
@@ -235,6 +245,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(samsung::Update::ChosenMode(mode)) => {
                 device.chosen_mode = Some(mode);
             }
+            LinkEventKind::Update(samsung::Update::AmbientLevel(level)) => {
+                device.ambient_level = Some(level);
+            }
             LinkEventKind::Ended(reason) => {
                 *device = Device {
                     address: device.address.clone(),
@@ -243,6 +256,7 @@ impl<P: Platform> State<P> {
                     state: DeviceState::NotAttached { reason },
                     capabilities: Capabilities::default(),
                     chosen_mode: None,
+                    ambient_level: None,
                     battery: None,
                 };
                 tracked.session = None;
@@ -253,26 +267,22 @@ impl<P: Platform> State<P> {
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
             Command::SetNoiseControlMode(address, mode) => {
-                let tracked = self
-                    .devices
-                    .get(&address)
-                    .ok_or(CommandError::UnknownDevice)?;
-                let session = match (&tracked.device.state, &tracked.session) {
-                    (DeviceState::Attached, Some(session)) => session,
-                    _ => return Err(CommandError::NotAttached),
-                };
-                if !tracked
-                    .device
-                    .capabilities
-                    .noise_control_modes
-                    .contains(&mode)
-                {
+                let (device, session) = self.attached(&address)?;
+                if !device.capabilities.noise_control_modes.contains(&mode) {
                     return Err(CommandError::MissingCapability);
                 }
-                session
-                    .commands
-                    .send(SessionCommand::SetNoiseControlMode(mode))
-                    .map_err(|_| CommandError::NotAttached)
+                session.send(SessionCommand::SetNoiseControlMode(mode))
+            }
+            Command::SetAmbientLevel(address, level) => {
+                let (device, session) = self.attached(&address)?;
+                let range = device
+                    .capabilities
+                    .ambient_level
+                    .ok_or(CommandError::MissingCapability)?;
+                if !(range.min..=range.max).contains(&level) {
+                    return Err(CommandError::OutOfRange);
+                }
+                session.send(SessionCommand::SetAmbientLevel(level))
             }
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
@@ -283,6 +293,18 @@ impl<P: Platform> State<P> {
                 Ok(())
             }
             _ => Err(CommandError::UnknownDevice),
+        }
+    }
+
+    /// The Attached Device at `address` and its control link session.
+    fn attached(&self, address: &DeviceAddress) -> Result<(&Device, &LinkSession), CommandError> {
+        let tracked = self
+            .devices
+            .get(address)
+            .ok_or(CommandError::UnknownDevice)?;
+        match (&tracked.device.state, &tracked.session) {
+            (DeviceState::Attached, Some(session)) => Ok((&tracked.device, session)),
+            _ => Err(CommandError::NotAttached),
         }
     }
 
@@ -350,6 +372,7 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseControlMode(mode) => {
                         session.set_noise_control_mode(mode)
                     }
+                    SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
                 };
                 for frame in frames {
                     if !send(slug, frame) {

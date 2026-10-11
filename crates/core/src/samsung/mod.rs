@@ -20,6 +20,7 @@ mod id {
     pub const EXTENDED_STATUS_UPDATED: u8 = 97;
     pub const NOISE_CONTROLS_UPDATE: u8 = 119;
     pub const NOISE_CONTROLS: u8 = 120;
+    pub const AMBIENT_VOLUME: u8 = 132;
     pub const MANAGER_INFO: u8 = 136;
 }
 
@@ -40,13 +41,15 @@ pub enum Update {
     Unsupported,
     Battery(Battery),
     ChosenMode(NoiseControlMode),
+    AmbientLevel(u8),
 }
 
 /// One control link session with a Samsung Device.
 #[derive(Debug, Default)]
 pub struct Session {
     deframer: Deframer,
-    identified: bool,
+    /// `None` until the extended status identifies the Model.
+    model: Option<Model>,
     buds: Buds,
     /// The mode the app last asked for, until the Device confirms it.
     pending_mode: Option<NoiseControlMode>,
@@ -72,10 +75,28 @@ impl Session {
         ]
     }
 
+    /// The frames that ask the Device to set the Ambient Level, in the
+    /// Model's own steps. No capture shows how a Buds4 Pro confirms this, so
+    /// like a mode set it is followed by `MANAGER_INFO`, whose extended status
+    /// reports the level.
+    pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
+        vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
+    }
+
     fn confirm(&mut self, mode: NoiseControlMode) {
         if self.pending_mode == Some(mode) {
             self.pending_mode = None;
         }
+    }
+
+    /// The Ambient Level a Device reports as `value`, if it is in the
+    /// identified Model's range.
+    fn ambient_level(&self, value: Option<&u8>) -> Option<Update> {
+        let range = self.model?.capabilities().ambient_level?;
+        let level = *value?;
+        (range.min..=range.max)
+            .contains(&level)
+            .then_some(Update::AmbientLevel(level))
     }
 
     /// Feeds bytes received from the Device, in chunks of any size, and
@@ -90,14 +111,14 @@ impl Session {
         let mut updates = Vec::new();
         match frame.id {
             id::EXTENDED_STATUS_UPDATED if p.len() > 17 => {
-                if !self.identified {
+                if self.model.is_none() {
                     let device_id = |at: usize| u16::from_le_bytes([p[at], p[at + 1]]);
                     match [device_id(14), device_id(16)]
                         .into_iter()
                         .find_map(model_for_device_id)
                     {
                         Some(model) => {
-                            self.identified = true;
+                            self.model = Some(model);
                             updates.push(Update::Identified(model));
                         }
                         None => return vec![Update::Unsupported],
@@ -109,8 +130,10 @@ impl Session {
                     self.confirm(mode);
                     updates.push(Update::ChosenMode(mode));
                 }
+                updates.extend(self.ambient_level(p.get(23)));
             }
-            id::NOISE_CONTROLS_UPDATE if self.identified && !p.is_empty() => {
+            id::AMBIENT_VOLUME => return self.ambient_level(p.first()).into_iter().collect(),
+            id::NOISE_CONTROLS_UPDATE if self.model.is_some() && !p.is_empty() => {
                 let Some(mode) = noise_control_mode(p[0]) else {
                     return Vec::new();
                 };
@@ -131,7 +154,7 @@ impl Session {
             }
             _ => return Vec::new(),
         }
-        if self.identified {
+        if self.model.is_some() {
             updates.push(Update::Battery(self.buds.battery()));
         }
         updates
