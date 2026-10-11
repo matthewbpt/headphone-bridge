@@ -50,3 +50,11 @@ not Attached with reason + Retry; unsupported Model (generic glyph); two Devices
 ## Handoff
 Commit everything on `prototype/ui` (never main). Don't push or open a PR. When done, report the run command,
 URLs/variant keys, and a summary; the design-session agent will collect the user's verdict and write the spec.
+
+## Verdict (2026-10-11)
+- **Variant A wins**: flat two/three-tone silhouettes, Device switcher as a pills row above the image.
+- **Mode order**: Samsung's (Off, Ambient, Adaptive, Noise Cancelling) in the window, not the core's Capability order.
+- **Ambient Level notches**: dots only when the Model has 10 or fewer steps (Buds4 Pro: 5); otherwise a plain track
+  showing the current value (WH-1000XM5: 20).
+- Accepted as prototyped: pending look (dimmed fill + spinning ring; dashed slider thumb), collapsed Settings card with
+  the frame log in a nested Developer section, no Retry for an unsupported Model.
