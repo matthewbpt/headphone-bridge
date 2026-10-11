@@ -15,6 +15,8 @@ export interface Device {
   model: Model | null;
   state: DeviceState;
   capabilities: Capabilities;
+  /** The Noise Control Mode last selected by any means. Null until reported. */
+  chosenMode: NoiseControlMode | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
 }
@@ -47,6 +49,18 @@ export interface Battery {
   left: number | null;
   right: number | null;
   case: number | null;
+}
+
+/** Why the core rejected a command before sending anything. */
+export type CommandError =
+  | "unknownDevice"
+  | "notAttached"
+  | "missingCapability"
+  | { frameLogUnavailable: string };
+
+/** Asks the Device to switch mode. Resolves once the core accepts the command. */
+export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
+  return invoke("set_noise_control_mode", { address, mode });
 }
 
 /**

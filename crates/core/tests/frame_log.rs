@@ -211,3 +211,47 @@ async fn a_frame_log_that_cannot_be_opened_is_reported() {
         "{result:?}"
     );
 }
+
+#[tokio::test]
+async fn frames_sent_by_a_command_are_logged_under_the_model() {
+    let path = log_path("frames_sent_by_a_command_are_logged");
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    core.command(Command::SetFrameLog(Some(path.clone())))
+        .await
+        .unwrap();
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let mut link = os.next_link().await;
+    link.send
+        .send(received(&fixture("galaxy-buds4-pro/capture-3"))[0].clone())
+        .unwrap();
+    wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
+
+    core.command(Command::SetNoiseControlMode(
+        buds4pro().address,
+        headphone_bridge_core::NoiseControlMode::Off,
+    ))
+    .await
+    .unwrap();
+    for _ in 0..3 {
+        link.written.recv().await.unwrap();
+    }
+    core.command(Command::SetFrameLog(None)).await.unwrap();
+
+    let sent: Vec<(String, Vec<u8>)> = read_log(&path)
+        .into_iter()
+        .filter(|r| r.direction == Direction::Sent)
+        .map(|r| (r.model, r.bytes))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            ("samsung".into(), MANAGER_INFO.to_vec()),
+            (
+                "galaxy-buds4-pro".into(),
+                vec![0xfd, 0x04, 0x00, 0x78, 0x00, 0xf0, 0x81, 0xdd]
+            ),
+            ("galaxy-buds4-pro".into(), MANAGER_INFO.to_vec()),
+        ]
+    );
+}

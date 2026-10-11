@@ -1,5 +1,6 @@
-import type { Battery, Device, Model, NotAttachedReason } from "./deviceList";
-import { useDeviceList } from "./deviceList";
+import { useEffect, useState } from "react";
+import type { Battery, Device, Model, NoiseControlMode, NotAttachedReason } from "./deviceList";
+import { setNoiseControlMode, useDeviceList } from "./deviceList";
 import { FrameLogSetting } from "./FrameLogSetting";
 
 export function App() {
@@ -37,8 +38,68 @@ function DeviceView({ device }: { device: Device }) {
       <strong>{device.name}</strong>
       {device.model && <div>{MODEL_NAMES[device.model]}</div>}
       <div>{stateText(device)}</div>
+      {device.state.kind === "attached" && device.capabilities.noiseControlModes.length > 0 && (
+        <NoiseControlModeButtons device={device} />
+      )}
       {device.battery && <BatteryView battery={device.battery} />}
     </>
+  );
+}
+
+const MODE_NAMES: Record<NoiseControlMode, string> = {
+  off: "Off",
+  noiseCancelling: "Noise Cancelling",
+  ambient: "Ambient",
+  adaptive: "Adaptive",
+};
+
+/** How long a pressed button stays pending if the Device never confirms. */
+const PENDING_TIMEOUT_MS = 10_000;
+
+function NoiseControlModeButtons({ device }: { device: Device }) {
+  // The mode asked for, until the next snapshot moves the Chosen Mode.
+  const [pending, setPending] = useState<NoiseControlMode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setPending(null), [device.chosenMode]);
+  useEffect(() => {
+    if (pending === null) return;
+    const timer = setTimeout(() => {
+      setPending(null);
+      setError(`${MODE_NAMES[pending]} wasn't confirmed by the device`);
+    }, PENDING_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
+
+  const choose = (mode: NoiseControlMode) => {
+    setError(null);
+    setPending(mode);
+    setNoiseControlMode(device.address, mode).catch((e) => {
+      setPending(null);
+      setError(`Couldn't set ${MODE_NAMES[mode]}: ${e}`);
+    });
+  };
+
+  return (
+    <div>
+      <div role="radiogroup" aria-label="Noise Control Mode">
+        {device.capabilities.noiseControlModes.map((mode) => (
+          <button
+            key={mode}
+            role="radio"
+            aria-checked={device.chosenMode === mode}
+            aria-busy={pending === mode}
+            disabled={pending !== null || device.chosenMode === mode}
+            onClick={() => choose(mode)}
+            style={{ fontWeight: device.chosenMode === mode ? "bold" : "normal" }}
+          >
+            {MODE_NAMES[mode]}
+            {pending === mode && " …"}
+          </button>
+        ))}
+      </div>
+      {error && <div role="alert">{error}</div>}
+    </div>
   );
 }
 

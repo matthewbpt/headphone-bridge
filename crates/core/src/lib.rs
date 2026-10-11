@@ -85,15 +85,25 @@ struct State<P> {
 /// A Connected Device and its control link session, if any.
 struct Tracked {
     device: Device,
-    session: Option<(u64, JoinHandle<()>)>,
+    session: Option<LinkSession>,
 }
 
-impl Drop for Tracked {
+/// A running control link session task.
+struct LinkSession {
+    attempt: u64,
+    task: JoinHandle<()>,
+    commands: mpsc::UnboundedSender<SessionCommand>,
+}
+
+impl Drop for LinkSession {
     fn drop(&mut self) {
-        if let Some((_, task)) = &self.session {
-            task.abort();
-        }
+        self.task.abort();
     }
+}
+
+/// A command for the Device, already checked against its Capabilities.
+enum SessionCommand {
+    SetNoiseControlMode(NoiseControlMode),
 }
 
 struct LinkEvent {
@@ -158,6 +168,7 @@ impl<P: Platform> State<P> {
                 model: None,
                 state,
                 capabilities: Capabilities::default(),
+                chosen_mode: None,
                 battery: None,
             },
             session: None,
@@ -168,9 +179,10 @@ impl<P: Platform> State<P> {
         self.devices.insert(identity.address, tracked);
     }
 
-    fn attach(&mut self, address: &DeviceAddress) -> (u64, JoinHandle<()>) {
+    fn attach(&mut self, address: &DeviceAddress) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
+        let (commands, commands_rx) = mpsc::unbounded_channel();
         let platform = self.platform.clone();
         let events = self.link_events.clone();
         let frame_log = self.frame_log.clone();
@@ -185,7 +197,7 @@ impl<P: Platform> State<P> {
             };
             let reason = match platform.open_control_link(&address, samsung::SERVICE).await {
                 Ok(link) => {
-                    run_samsung_session(link, frame_log, |update| {
+                    run_samsung_session(link, commands_rx, frame_log, |update| {
                         send(LinkEventKind::Update(update))
                     })
                     .await
@@ -194,14 +206,18 @@ impl<P: Platform> State<P> {
             };
             send(LinkEventKind::Ended(reason));
         });
-        (attempt, task)
+        LinkSession {
+            attempt,
+            task,
+            commands,
+        }
     }
 
     fn link_event(&mut self, event: LinkEvent) {
         let Some(tracked) = self.devices.get_mut(&event.address) else {
             return;
         };
-        if tracked.session.as_ref().map(|(attempt, _)| *attempt) != Some(event.attempt) {
+        if tracked.session.as_ref().map(|session| session.attempt) != Some(event.attempt) {
             return;
         }
         let device = &mut tracked.device;
@@ -216,6 +232,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(samsung::Update::Battery(battery)) => {
                 device.battery = Some(battery);
             }
+            LinkEventKind::Update(samsung::Update::ChosenMode(mode)) => {
+                device.chosen_mode = Some(mode);
+            }
             LinkEventKind::Ended(reason) => {
                 *device = Device {
                     address: device.address.clone(),
@@ -223,6 +242,7 @@ impl<P: Platform> State<P> {
                     model: None,
                     state: DeviceState::NotAttached { reason },
                     capabilities: Capabilities::default(),
+                    chosen_mode: None,
                     battery: None,
                 };
                 tracked.session = None;
@@ -232,6 +252,28 @@ impl<P: Platform> State<P> {
 
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
+            Command::SetNoiseControlMode(address, mode) => {
+                let tracked = self
+                    .devices
+                    .get(&address)
+                    .ok_or(CommandError::UnknownDevice)?;
+                let session = match (&tracked.device.state, &tracked.session) {
+                    (DeviceState::Attached, Some(session)) => session,
+                    _ => return Err(CommandError::NotAttached),
+                };
+                if !tracked
+                    .device
+                    .capabilities
+                    .noise_control_modes
+                    .contains(&mode)
+                {
+                    return Err(CommandError::MissingCapability);
+                }
+                session
+                    .commands
+                    .send(SessionCommand::SetNoiseControlMode(mode))
+                    .map_err(|_| CommandError::NotAttached)
+            }
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
@@ -264,35 +306,57 @@ impl<P: Platform> State<P> {
 /// Device turns out to be an unsupported Model. Returns why it ended.
 async fn run_samsung_session(
     mut link: ControlLink,
+    mut commands: mpsc::UnboundedReceiver<SessionCommand>,
     frame_log: FrameLog,
     mut on_update: impl FnMut(samsung::Update),
 ) -> NotAttachedReason {
     // Frames are logged under the vendor's slug until the Model is identified.
     let mut slug = "samsung";
-    let handshake = samsung::Session::handshake();
-    frame_log.record(slug, Direction::Sent, &handshake);
-    if link.outgoing.send(handshake).is_err() {
+    // Every frame written goes through here, so all of them are logged.
+    let send = |slug: &str, frame: Vec<u8>| {
+        frame_log.record(slug, Direction::Sent, &frame);
+        link.outgoing.send(frame).is_ok()
+    };
+    if !send(slug, samsung::Session::handshake()) {
         return NotAttachedReason::LinkDropped;
     }
     let mut session = samsung::Session::default();
-    while let Some(bytes) = link.incoming.recv().await {
-        for frame in session.deframe(&bytes) {
-            let updates = session.receive(&frame);
-            for update in &updates {
-                if let samsung::Update::Identified(model) = update {
-                    slug = model.slug();
+    loop {
+        tokio::select! {
+            bytes = link.incoming.recv() => {
+                let Some(bytes) = bytes else {
+                    return NotAttachedReason::LinkDropped;
+                };
+                for frame in session.deframe(&bytes) {
+                    let updates = session.receive(&frame);
+                    for update in &updates {
+                        if let samsung::Update::Identified(model) = update {
+                            slug = model.slug();
+                        }
+                    }
+                    frame_log.record(slug, Direction::Received, &frame.raw);
+                    for update in updates {
+                        let unsupported = update == samsung::Update::Unsupported;
+                        on_update(update);
+                        if unsupported {
+                            // Dropping the link Detaches without writing anything more.
+                            return NotAttachedReason::UnsupportedModel;
+                        }
+                    }
                 }
             }
-            frame_log.record(slug, Direction::Received, &frame.raw);
-            for update in updates {
-                let unsupported = update == samsung::Update::Unsupported;
-                on_update(update);
-                if unsupported {
-                    // Dropping the link Detaches without writing anything more.
-                    return NotAttachedReason::UnsupportedModel;
+            Some(command) = commands.recv() => {
+                let frames = match command {
+                    SessionCommand::SetNoiseControlMode(mode) => {
+                        session.set_noise_control_mode(mode)
+                    }
+                };
+                for frame in frames {
+                    if !send(slug, frame) {
+                        return NotAttachedReason::LinkDropped;
+                    }
                 }
             }
         }
     }
-    NotAttachedReason::LinkDropped
 }
