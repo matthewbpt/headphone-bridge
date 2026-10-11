@@ -210,12 +210,15 @@ impl TrayMenu {
 
 fn battery_text(battery: Battery) -> String {
     let percent = |level: Option<u8>| level.map_or("–".into(), |level| format!("{level}%"));
-    format!(
-        "Battery: L {} · R {} · Case {}",
-        percent(battery.left),
-        percent(battery.right),
-        percent(battery.case)
-    )
+    match battery {
+        Battery::Buds { left, right, case } => format!(
+            "Battery: L {} · R {} · Case {}",
+            percent(left),
+            percent(right),
+            percent(case)
+        ),
+        Battery::Headphones { level } => format!("Battery: {level}%"),
+    }
 }
 
 fn mode_label(mode: NoiseControlMode) -> &'static str {
@@ -254,7 +257,7 @@ mod tests {
             state,
             capabilities: Model::GalaxyBuds4Pro.capabilities(),
             chosen_mode: Some(NoiseControlMode::Ambient),
-            battery: Some(Battery {
+            battery: Some(Battery::Buds {
                 left: Some(80),
                 right: Some(75),
                 case: None,
@@ -298,5 +301,33 @@ mod tests {
         };
         assert_eq!(TrayMenu::new(&list).title, "No device");
         assert_eq!(TrayMenu::new(&list).modes, vec![]);
+    }
+
+    #[test]
+    fn offers_only_the_modes_in_the_headphones_capabilities() {
+        let list = DeviceList {
+            devices: vec![Device {
+                address: DeviceAddress("11:22:33:44:55:66".into()),
+                name: "WH-1000XM5".into(),
+                model: Some(Model::Wh1000Xm5),
+                state: DeviceState::Attached,
+                capabilities: Model::Wh1000Xm5.capabilities(),
+                chosen_mode: Some(NoiseControlMode::NoiseCancelling),
+                battery: Some(Battery::Headphones { level: 70 }),
+            }],
+        };
+        assert_eq!(
+            TrayMenu::new(&list),
+            TrayMenu {
+                title: "WH-1000XM5".into(),
+                battery: Some("Battery: 70%".into()),
+                device: Some(DeviceAddress("11:22:33:44:55:66".into())),
+                modes: vec![
+                    mode(NoiseControlMode::Off, "Off", false),
+                    mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", true),
+                    mode(NoiseControlMode::Ambient, "Ambient", false),
+                ],
+            }
+        );
     }
 }
