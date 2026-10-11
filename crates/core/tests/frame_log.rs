@@ -5,8 +5,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Command, Core, DeviceState};
-use support::{buds4pro, fake_platform, fixture, received, wait_for};
+use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState};
+use support::{buds4pro, fake_platform, fixture, received, samsung_frame, wait_for};
 
 const LINE: &str = "2026-09-13T13:26:47.128Z galaxy-buds4-pro >> fd 06 00 88 01 01 22 da 58 dd";
 
@@ -115,5 +115,99 @@ async fn every_frame_sent_and_received_is_logged_with_its_direction_and_model() 
     assert!(
         core.device_list().devices[0].state == DeviceState::Attached,
         "logging doesn't change the session"
+    );
+}
+
+#[tokio::test]
+async fn a_recorded_log_replays_through_the_fake_platform() {
+    let path = log_path("a_recorded_log_replays");
+    let (platform, mut os) = fake_platform();
+    let recording = Core::start(platform);
+    recording
+        .command(Command::SetFrameLog(Some(path.clone())))
+        .await
+        .unwrap();
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let link = os.next_link().await;
+    // capture-1c, where a bud goes in and out of the case, then a status with
+    // both buds worn at L 42 % and R 43 % to mark the end.
+    let mut frames = received(&fixture("galaxy-buds4-pro/capture-1c"));
+    frames.push(samsung_frame(
+        96,
+        &[0x01, 0x2a, 0x2b, 0x01, 0x01, 0x11, 0x64, 0x00],
+    ));
+    for frame in frames {
+        link.send.send(frame).unwrap();
+    }
+    let ended = Some(Battery {
+        left: Some(42),
+        right: Some(43),
+        case: None,
+    });
+    let recorded = wait_for(&recording, |list| list.devices[0].battery == ended).await;
+    recording.command(Command::SetFrameLog(None)).await.unwrap();
+
+    let log = read_log(&path);
+    let (platform, mut os) = fake_platform();
+    let replay = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let mut link = os.next_link().await;
+    for frame in received(&log) {
+        link.send.send(frame).unwrap();
+    }
+
+    wait_for(&replay, |list| *list == recorded).await;
+    let sent: Vec<Vec<u8>> = log
+        .iter()
+        .filter(|record| record.direction == Direction::Sent)
+        .map(|record| record.bytes.clone())
+        .collect();
+    for frame in sent {
+        assert_eq!(link.written.recv().await.unwrap(), frame);
+    }
+}
+
+#[tokio::test]
+async fn frames_after_the_log_is_switched_off_are_not_logged() {
+    let path = log_path("frames_after_the_log_is_switched_off");
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    core.command(Command::SetFrameLog(Some(path.clone())))
+        .await
+        .unwrap();
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let link = os.next_link().await;
+    let frames = received(&fixture("galaxy-buds4-pro/capture-3"));
+    link.send.send(frames[0].clone()).unwrap();
+    wait_for(&core, |list| list.devices[0].battery.is_some()).await;
+
+    core.command(Command::SetFrameLog(None)).await.unwrap();
+    link.send
+        .send(samsung_frame(
+            96,
+            &[0x01, 0x2a, 0x2b, 0x01, 0x01, 0x11, 0x64, 0x00],
+        ))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].battery.is_some_and(|b| b.left == Some(42))
+    })
+    .await;
+
+    let log = read_log(&path);
+    assert_eq!(log.len(), 2, "{log:#?}");
+    assert_eq!(log[1].bytes, frames[0]);
+}
+
+#[tokio::test]
+async fn a_frame_log_that_cannot_be_opened_is_reported() {
+    let (platform, _os) = fake_platform();
+    let core = Core::start(platform);
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-dir/log.frames");
+
+    let result = core.command(Command::SetFrameLog(Some(path))).await;
+
+    assert!(
+        matches!(result, Err(CommandError::FrameLogUnavailable(_))),
+        "{result:?}"
     );
 }
