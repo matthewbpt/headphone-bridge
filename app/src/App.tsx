@@ -339,7 +339,7 @@ function RetryButton({ address }: { address: string }) {
   );
 }
 
-/** For buds, L and R merge while they're known and equal; Case shows only while reported. */
+/** For earbuds, L and R merge while they're known and equal; Case shows only while reported. */
 function BatteryView({ battery }: { battery: Battery }) {
   const values: { label?: string; level: number | null }[] =
     battery.kind === "headphones"

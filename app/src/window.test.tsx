@@ -377,27 +377,27 @@ describe("the battery", () => {
     renderWindow(new FakeCore(only(device)));
     return screen.findByRole("group", { name: "Battery" });
   };
-  const buds = (left: number | null, right: number | null, case_: number | null = null) =>
+  const earbuds = (left: number | null, right: number | null, case_: number | null = null) =>
     buds4Pro({ battery: { kind: "buds", left, right, case: case_ } });
 
-  it("merges equal buds into one L·R value", async () => {
-    expect(await battery(buds(80, 80))).toHaveTextContent(/^L·R 80%$/);
+  it("merges equal earbuds into one L·R value", async () => {
+    expect(await battery(earbuds(80, 80))).toHaveTextContent(/^L·R 80%$/);
   });
 
-  it("shows unequal buds separately", async () => {
-    expect(await battery(buds(80, 65))).toHaveTextContent(/^L 80% · R 65%$/);
+  it("shows unequal earbuds separately", async () => {
+    expect(await battery(earbuds(80, 65))).toHaveTextContent(/^L 80% · R 65%$/);
   });
 
-  it("shows an unknown bud as a dash", async () => {
-    expect(await battery(buds(null, 65))).toHaveTextContent(/^L – · R 65%$/);
+  it("shows an unknown earbud as a dash", async () => {
+    expect(await battery(earbuds(null, 65))).toHaveTextContent(/^L – · R 65%$/);
   });
 
-  it("shows two unknown buds separately", async () => {
-    expect(await battery(buds(null, null))).toHaveTextContent(/^L – · R –$/);
+  it("shows two unknown earbuds separately", async () => {
+    expect(await battery(earbuds(null, null))).toHaveTextContent(/^L – · R –$/);
   });
 
   it("shows the case while its level is reported", async () => {
-    expect(await battery(buds(80, 80, 45))).toHaveTextContent(/^L·R 80% · Case 45%$/);
+    expect(await battery(earbuds(80, 80, 45))).toHaveTextContent(/^L·R 80% · Case 45%$/);
   });
 
   it("shows one value for headphones", async () => {

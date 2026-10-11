@@ -64,7 +64,7 @@ export interface AmbientLevelRange {
   max: number;
 }
 
-/** Percentages; for buds, null where the level is unknown. */
+/** Percentages; for earbuds, null where the level is unknown. */
 export type Battery =
   | { kind: "buds"; left: number | null; right: number | null; case: number | null }
   | { kind: "headphones"; level: number };

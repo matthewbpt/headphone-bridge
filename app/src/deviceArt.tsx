@@ -30,17 +30,17 @@ function Buds4Pro() {
   return (
     <>
       <g transform="translate(64 24) scale(1.4) rotate(-3)">
-        <Bud />
+        <Earbud />
       </g>
       <g transform="translate(136 24) scale(-1.4 1.4) rotate(-3)">
-        <Bud />
+        <Earbud />
       </g>
     </>
   );
 }
 
-/** One bud, ear tip pointing left and stem down, centred on x = 0. */
-function Bud() {
+/** One earbud, ear tip pointing left and stem down, centred on x = 0. */
+function Earbud() {
   return (
     <g>
       <ellipse cx="-20" cy="25" rx="9" ry="12" fill="var(--art-tip)" transform="rotate(-20 -20 25)" />
