@@ -64,6 +64,12 @@ impl Waker {
 const PUMP_SLICE: f64 = 0.05;
 /// How long to wait for an SDP query when the service isn't cached.
 const SDP_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long a Device stays Connected before its control link is opened. A
+/// Buds4 Pro opens its own RFCOMM session as it connects; an open sent
+/// within ~50 ms of that is never answered, and bluetoothd keeps it pending,
+/// failing every later open, until the Device disconnects. macOS waits 2 s
+/// for an incoming connection too, before discovering A2DP endpoints.
+const SETTLE_TIME: Duration = Duration::from_secs(2);
 /// How long to wait for an RFCOMM channel to report itself open.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// After the open completes with an error, how long to keep polling `isOpen`
@@ -113,6 +119,8 @@ struct ConnectedDevice {
     /// can claim the Device isn't connected while it is.
     device: Retained<IOBluetoothDevice>,
     disconnect_notification: Retained<IOBluetoothUserNotification>,
+    /// When it was reported Connected.
+    connected_at: Instant,
 }
 
 struct Link {
@@ -252,6 +260,7 @@ impl BluetoothThread {
             ConnectedDevice {
                 device: device.retain(),
                 disconnect_notification: notification,
+                connected_at: Instant::now(),
             },
         );
         let _ = self
@@ -310,11 +319,18 @@ impl BluetoothThread {
         // connects one. `isConnected` isn't checked: on a Connected Buds4 Pro
         // it returned false while the OS listed it as connected.
         let iobluetooth_address = address.0.replace(':', "-").to_ascii_lowercase();
-        let device = self
+        let (device, connected_at) = self
             .connected
             .get(&iobluetooth_address)
-            .map(|connected| connected.device.clone())
+            .map(|connected| (connected.device.clone(), connected.connected_at))
             .ok_or(LinkFailure::DeviceNotConnected)?;
+        while connected_at.elapsed() < SETTLE_TIME {
+            pump();
+            // Opening a Device that isn't connected would connect it.
+            if self.disconnect_queued(&iobluetooth_address) {
+                return Err(LinkFailure::DeviceNotConnected);
+            }
+        }
         let channel_id = self.rfcomm_channel_id(&device, service)?;
 
         let (incoming, incoming_rx) = mpsc::unbounded_channel();
@@ -385,6 +401,14 @@ impl BluetoothThread {
             return Err(LinkFailure::ServiceNotFound);
         }
         Ok(channel_id)
+    }
+
+    /// Whether the Device at `address` has disconnected since events were
+    /// last handled.
+    fn disconnect_queued(&self, address: &str) -> bool {
+        self.events.lock().iter().any(|event| {
+            matches!(event, DeviceEvent::Disconnected(d) if address_of(d).as_deref() == Some(address))
+        })
     }
 
     /// Whether an SDP query for `device` has completed, leaving other queued
