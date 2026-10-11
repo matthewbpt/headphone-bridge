@@ -8,6 +8,7 @@ use uuid::{uuid, Uuid};
 
 use crate::device_list::Battery;
 use crate::model::Model;
+pub use frame::Frame;
 use frame::{encode, Deframer};
 
 /// The vendor's RFCOMM service.
@@ -53,37 +54,41 @@ impl Session {
         encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
     }
 
-    /// Feeds bytes received from the Device, in chunks of any size.
-    pub fn receive(&mut self, bytes: &[u8]) -> Vec<Update> {
+    /// Feeds bytes received from the Device, in chunks of any size, and
+    /// returns the whole frames they complete.
+    pub fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
+        self.deframer.push(bytes)
+    }
+
+    /// Handles a frame received from the Device.
+    pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
+        let p = &frame.payload;
         let mut updates = Vec::new();
-        for frame in self.deframer.push(bytes) {
-            let p = &frame.payload;
-            match frame.id {
-                id::EXTENDED_STATUS_UPDATED if p.len() > 17 => {
-                    if !self.identified {
-                        let device_id = |at: usize| u16::from_le_bytes([p[at], p[at + 1]]);
-                        match [device_id(14), device_id(16)]
-                            .into_iter()
-                            .find_map(model_for_device_id)
-                        {
-                            Some(model) => {
-                                self.identified = true;
-                                updates.push(Update::Identified(model));
-                            }
-                            None => return vec![Update::Unsupported],
+        match frame.id {
+            id::EXTENDED_STATUS_UPDATED if p.len() > 17 => {
+                if !self.identified {
+                    let device_id = |at: usize| u16::from_le_bytes([p[at], p[at + 1]]);
+                    match [device_id(14), device_id(16)]
+                        .into_iter()
+                        .find_map(model_for_device_id)
+                    {
+                        Some(model) => {
+                            self.identified = true;
+                            updates.push(Update::Identified(model));
                         }
+                        None => return vec![Update::Unsupported],
                     }
-                    let charging = p.get(42).copied().unwrap_or(0);
-                    self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
                 }
-                id::STATUS_UPDATED if p.len() >= 8 => {
-                    self.buds.apply(p[5], p[7], [p[1], p[2], p[6]]);
-                }
-                _ => continue,
+                let charging = p.get(42).copied().unwrap_or(0);
+                self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
             }
-            if self.identified {
-                updates.push(Update::Battery(self.buds.battery()));
+            id::STATUS_UPDATED if p.len() >= 8 => {
+                self.buds.apply(p[5], p[7], [p[1], p[2], p[6]]);
             }
+            _ => return Vec::new(),
+        }
+        if self.identified {
+            updates.push(Update::Battery(self.buds.battery()));
         }
         updates
     }
