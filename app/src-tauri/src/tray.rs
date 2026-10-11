@@ -257,6 +257,7 @@ mod tests {
             state,
             capabilities: Model::GalaxyBuds4Pro.capabilities(),
             chosen_mode: Some(NoiseControlMode::Ambient),
+            ambient_level: None,
             battery: Some(Battery::Buds {
                 left: Some(80),
                 right: Some(75),
@@ -313,6 +314,7 @@ mod tests {
                 state: DeviceState::Attached,
                 capabilities: Model::Wh1000Xm5.capabilities(),
                 chosen_mode: Some(NoiseControlMode::NoiseCancelling),
+                ambient_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
             }],
         };
