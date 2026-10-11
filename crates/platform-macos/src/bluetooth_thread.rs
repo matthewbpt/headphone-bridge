@@ -343,7 +343,13 @@ impl BluetoothThread {
             let gave_up = error_since.is_some_and(|since| since.elapsed() > OPEN_ERROR_GRACE)
                 || started.elapsed() > OPEN_TIMEOUT;
             if gave_up {
-                release(&channel);
+                // Cancels the open: one still pending makes every later open
+                // of the channel fail at once, and IOBluetooth doesn't report
+                // either.
+                unsafe {
+                    channel.setDelegate(None);
+                    channel.closeChannel();
+                }
                 delegate.close();
                 return Err(match last_error {
                     Some(status) => self.open_failure(status),
@@ -465,8 +471,8 @@ impl BluetoothThread {
 
 /// Stops `channel` calling its delegate, and closes it if it's open.
 /// `closeChannel` closes the Device's RFCOMM channel with the same id whatever
-/// the state of this object, so on one that's closed, or never finished
-/// opening, it could only close another.
+/// the state of this object, so on one that's already closed it could only
+/// close another.
 fn release(channel: &IOBluetoothRFCOMMChannel) {
     unsafe {
         channel.setDelegate(None);
