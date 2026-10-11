@@ -251,7 +251,12 @@ impl Session {
                     (_, 0x00) => NoiseControlMode::NoiseCancelling,
                     _ => NoiseControlMode::Ambient,
                 };
-                vec![Update::ChosenMode(mode), Update::AmbientLevel(level)]
+                let mut updates = vec![Update::ChosenMode(mode)];
+                let range = Model::Wh1000Xm5.capabilities().ambient_level;
+                if range.is_some_and(|range| (range.min..=range.max).contains(&level)) {
+                    updates.push(Update::AmbientLevel(level));
+                }
+                updates
             }
             _ => Vec::new(),
         }

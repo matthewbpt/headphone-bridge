@@ -3,7 +3,7 @@ mod support;
 use std::time::Duration;
 
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Battery, Command, Core, NoiseControlMode};
+use headphone_bridge_core::{Battery, Command, CommandError, Core, NoiseControlMode};
 use support::{fake_platform, fixture, replay, sony_frame, wait_for, xm5, DeviceLink, FakeOs};
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -61,6 +61,140 @@ async fn setting_a_mode_resends_focus_on_voice_and_level_and_waits_for_the_devic
         list.devices[0].chosen_mode == Some(NoiseControlMode::NoiseCancelling)
     })
     .await;
+}
+
+#[tokio::test]
+async fn setting_a_level_resends_the_mode_and_focus_on_voice_and_waits_for_the_device() {
+    let (core, _os, mut link) = attached_xm5().await;
+
+    core.command(Command::SetAmbientLevel(xm5().address, 15))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
+    );
+    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(sony_frame(0, &[0x25, 0x00, 68, 0x00])).unwrap();
+    let list = wait_for(&core, |list| {
+        list.devices[0].battery == Some(Battery::Headphones { level: 68 })
+    })
+    .await;
+    assert_eq!(list.devices[0].ambient_level, Some(10));
+
+    link.send
+        .send(sony_frame(1, &[0x69, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f]))
+        .unwrap();
+    wait_for(&core, |list| list.devices[0].ambient_level == Some(15)).await;
+}
+
+#[tokio::test]
+async fn a_set_made_before_the_last_is_confirmed_keeps_the_last() {
+    let (core, _os, mut link) = attached_xm5().await;
+
+    core.command(Command::SetNoiseControlMode(
+        xm5().address,
+        NoiseControlMode::Off,
+    ))
+    .await
+    .unwrap();
+    core.command(Command::SetAmbientLevel(xm5().address, 3))
+        .await
+        .unwrap();
+
+    // Off keeps the mode byte, ambient, as it was.
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a])
+    );
+    // The level set waits for the ACK, and doesn't switch Off back on.
+    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
+    );
+}
+
+#[tokio::test]
+async fn adaptive_is_rejected_and_nothing_is_sent() {
+    let (core, _os, mut link) = attached_xm5().await;
+
+    assert_eq!(
+        core.command(Command::SetNoiseControlMode(
+            xm5().address,
+            NoiseControlMode::Adaptive,
+        ))
+        .await,
+        Err(CommandError::MissingCapability)
+    );
+    // A later set is the next thing written.
+    core.command(Command::SetAmbientLevel(xm5().address, 20))
+        .await
+        .unwrap();
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x14])
+    );
+}
+
+#[tokio::test]
+async fn levels_outside_1_to_20_are_rejected() {
+    let (core, _os, _link) = attached_xm5().await;
+
+    for level in [0, 21] {
+        assert_eq!(
+            core.command(Command::SetAmbientLevel(xm5().address, level))
+                .await,
+            Err(CommandError::OutOfRange)
+        );
+    }
+}
+
+#[tokio::test]
+async fn changes_from_the_phone_appear_live() {
+    let (core, _os, mut link) = attached_xm5().await;
+
+    // The Sony app switches to Noise Cancelling, then Off.
+    link.send
+        .send(sony_frame(0, &[0x69, 0x17, 0x01, 0x01, 0x00, 0x01, 0x0a]))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].chosen_mode == Some(NoiseControlMode::NoiseCancelling)
+    })
+    .await;
+    link.send
+        .send(sony_frame(1, &[0x69, 0x17, 0x01, 0x00, 0x00, 0x01, 0x0a]))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].chosen_mode == Some(NoiseControlMode::Off)
+    })
+    .await;
+    // Then Ambient, mid-drag of its slider at level 4.
+    link.send
+        .send(sony_frame(0, &[0x69, 0x17, 0x00, 0x01, 0x01, 0x01, 0x04]))
+        .unwrap();
+    let list = wait_for(&core, |list| list.devices[0].ambient_level == Some(4)).await;
+    assert_eq!(list.devices[0].chosen_mode, Some(NoiseControlMode::Ambient));
+    // Every notification was ACKed.
+    for _ in 0..3 {
+        assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+    }
+}
+
+#[tokio::test]
+async fn a_reported_level_outside_1_to_20_is_ignored() {
+    let (core, _os, link) = attached_xm5().await;
+
+    link.send
+        .send(sony_frame(0, &[0x69, 0x17, 0x01, 0x01, 0x00, 0x01, 0x00]))
+        .unwrap();
+
+    let list = wait_for(&core, |list| {
+        list.devices[0].chosen_mode == Some(NoiseControlMode::NoiseCancelling)
+    })
+    .await;
+    assert_eq!(list.devices[0].ambient_level, Some(10));
 }
 
 /// The next frame the core writes.
