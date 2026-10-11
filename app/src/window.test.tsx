@@ -259,6 +259,48 @@ describe("Ambient Level", () => {
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
 
+  it("keeps a return to the confirmed level pending until the level asked before it has landed", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    expect(core.sent()).toEqual([
+      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 2 } },
+      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 1 } },
+    ]);
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    // A snapshot from before the Device applied either level confirms nothing.
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1, battery: { kind: "headphones", level: 50 } })));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when a return to the confirmed level isn't confirmed within 10 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await screen.findByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("button", { name: "Less" }));
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Ambient Level 1 wasn't confirmed by the Device");
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
   it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
@@ -335,27 +377,27 @@ describe("the battery", () => {
     renderWindow(new FakeCore(only(device)));
     return screen.findByRole("group", { name: "Battery" });
   };
-  const buds = (left: number | null, right: number | null, case_: number | null = null) =>
+  const earbuds = (left: number | null, right: number | null, case_: number | null = null) =>
     buds4Pro({ battery: { kind: "buds", left, right, case: case_ } });
 
-  it("merges equal buds into one L·R value", async () => {
-    expect(await battery(buds(80, 80))).toHaveTextContent(/^L·R 80%$/);
+  it("merges equal earbuds into one L·R value", async () => {
+    expect(await battery(earbuds(80, 80))).toHaveTextContent(/^L·R 80%$/);
   });
 
-  it("shows unequal buds separately", async () => {
-    expect(await battery(buds(80, 65))).toHaveTextContent(/^L 80% · R 65%$/);
+  it("shows unequal earbuds separately", async () => {
+    expect(await battery(earbuds(80, 65))).toHaveTextContent(/^L 80% · R 65%$/);
   });
 
-  it("shows an unknown bud as a dash", async () => {
-    expect(await battery(buds(null, 65))).toHaveTextContent(/^L – · R 65%$/);
+  it("shows an unknown earbud as a dash", async () => {
+    expect(await battery(earbuds(null, 65))).toHaveTextContent(/^L – · R 65%$/);
   });
 
-  it("shows two unknown buds separately", async () => {
-    expect(await battery(buds(null, null))).toHaveTextContent(/^L – · R –$/);
+  it("shows two unknown earbuds separately", async () => {
+    expect(await battery(earbuds(null, null))).toHaveTextContent(/^L – · R –$/);
   });
 
   it("shows the case while its level is reported", async () => {
-    expect(await battery(buds(80, 80, 45))).toHaveTextContent(/^L·R 80% · Case 45%$/);
+    expect(await battery(earbuds(80, 80, 45))).toHaveTextContent(/^L·R 80% · Case 45%$/);
   });
 
   it("shows one value for headphones", async () => {

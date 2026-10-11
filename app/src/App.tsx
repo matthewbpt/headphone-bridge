@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
+import type { AmbientLevelRange, Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import {
   reasonText,
   retryAttach,
@@ -11,6 +11,7 @@ import {
 import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
+import { usePendingCommand } from "./usePendingCommand";
 
 export function App() {
   return (
@@ -67,20 +68,23 @@ function DevicePills({
 }) {
   return (
     <div className="pills" role="tablist" aria-label="Devices">
-      {devices.map((device) => (
-        <button
-          key={device.address}
-          className="pill"
-          role="tab"
-          aria-selected={device === selected}
-          onClick={() => onPick(device.address)}
-          title={device.address === primary ? "Primary Device" : undefined}
-        >
-          {device.address === primary && <span className="pill__primary" aria-hidden />}
-          {device.name}
-          {device.address === primary && <span className="visually-hidden"> (Primary)</span>}
-        </button>
-      ))}
+      {devices.map((device) => {
+        const isPrimary = device.address === primary;
+        return (
+          <button
+            key={device.address}
+            className="pill"
+            role="tab"
+            aria-selected={device === selected}
+            onClick={() => onPick(device.address)}
+            title={isPrimary ? "Primary Device" : undefined}
+          >
+            {isPrimary && <span className="pill__primary" aria-hidden />}
+            {device.name}
+            {isPrimary && <span className="visually-hidden"> (Primary)</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -100,32 +104,17 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   // The mode asked for, until the next snapshot moves the Chosen Mode. Held
   // here rather than in the selector, so the rest of the Device view can
   // treat a pending mode as Chosen.
-  const [pendingMode, setPendingMode] = useState<NoiseControlMode | null>(null);
-  const [modeError, setModeError] = useState<string | null>(null);
+  const mode = usePendingCommand((mode: NoiseControlMode) => labels.modes[mode]);
+  const { clear: clearMode } = mode;
+  useEffect(clearMode, [device.chosenMode, clearMode]);
 
-  useEffect(() => setPendingMode(null), [device.chosenMode]);
-  useEffect(() => {
-    if (pendingMode === null) return;
-    const timer = setTimeout(() => {
-      setPendingMode(null);
-      setModeError(`${labels.modes[pendingMode]} wasn't confirmed by the Device`);
-    }, PENDING_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [pendingMode, labels]);
-
-  const chooseMode = (mode: NoiseControlMode) => {
-    setModeError(null);
-    setPendingMode(mode);
-    setNoiseControlMode(device.address, mode).catch((e) => {
-      setPendingMode(null);
-      setModeError(`Couldn't set ${labels.modes[mode]}: ${e}`);
-    });
-  };
+  const chooseMode = (chosen: NoiseControlMode) =>
+    mode.send(chosen, () => setNoiseControlMode(device.address, chosen));
 
   const attached = device.state.kind === "attached";
   // A pending mode counts as Chosen, so the slider comes and goes the
   // moment a mode is clicked, and goes back if the Device refuses.
-  const shownMode = pendingMode ?? device.chosenMode;
+  const shownMode = mode.pending ?? device.chosenMode;
   const ambientLevel = device.capabilities.ambientLevel;
   return (
     <>
@@ -138,17 +127,19 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
           {device.capabilities.noiseControlModes.length > 0 && (
             <>
               <NoiseControlModeSelector
-                device={device}
-                pending={pendingMode}
+                supported={device.capabilities.noiseControlModes}
+                chosen={device.chosenMode}
+                pending={mode.pending}
+                shown={shownMode}
                 labels={labels}
                 onChoose={chooseMode}
               />
               {device.effectiveModeReason && (
                 <p className="hint">{labels.hints[device.effectiveModeReason]}</p>
               )}
-              {modeError && (
+              {mode.error && (
                 <p className="error" role="alert">
-                  {modeError}
+                  {mode.error}
                 </p>
               )}
             </>
@@ -195,27 +186,28 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
   }
 }
 
-/** How long a pressed button stays pending if the Device never confirms. */
-const PENDING_TIMEOUT_MS = 10_000;
-
 /**
  * Round icon buttons joined by a track, after the Galaxy Buds app. The
  * Chosen Mode is filled; a pending mode takes the fill, dimmed and ringed,
  * until the Device confirms it.
  */
 function NoiseControlModeSelector({
-  device,
+  supported,
+  chosen,
   pending,
+  shown,
   labels,
   onChoose,
 }: {
-  device: Device;
+  supported: NoiseControlMode[];
+  chosen: NoiseControlMode | null;
   pending: NoiseControlMode | null;
+  /** The pending mode, else the Chosen Mode: the one filled. */
+  shown: NoiseControlMode | null;
   labels: Labels;
   onChoose: (mode: NoiseControlMode) => void;
 }) {
-  const modes = MODE_ORDER.filter((mode) => device.capabilities.noiseControlModes.includes(mode));
-  const filled = pending ?? device.chosenMode;
+  const modes = MODE_ORDER.filter((mode) => supported.includes(mode));
   return (
     <div
       className="modes"
@@ -229,10 +221,10 @@ function NoiseControlModeSelector({
           key={mode}
           className="mode"
           role="radio"
-          data-filled={filled === mode}
-          aria-checked={device.chosenMode === mode}
+          data-filled={shown === mode}
+          aria-checked={chosen === mode}
           aria-busy={pending === mode}
-          disabled={pending !== null || device.chosenMode === mode}
+          disabled={pending !== null || chosen === mode}
           onClick={() => onChoose(mode)}
         >
           <span className="mode__circle">
@@ -252,40 +244,20 @@ const MAX_NOTCHES = 10;
  * The Ambient Level, in the Model's own steps. A level set here shows a
  * dashed thumb until the Device reports it.
  */
-function AmbientLevelSlider({
-  device,
-  range,
-}: {
-  device: Device;
-  range: { min: number; max: number };
-}) {
-  // The level last asked for, until a snapshot reports it. Dragging across
-  // notches asks for each in turn.
-  const [pending, setPending] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPending((level) => (level === device.ambientLevel ? null : level));
-  }, [device.ambientLevel]);
-  useEffect(() => {
-    if (pending === null) return;
-    const timer = setTimeout(() => {
-      setPending(null);
-      setError(`Ambient Level ${pending} wasn't confirmed by the Device`);
-    }, PENDING_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [pending]);
+function AmbientLevelSlider({ device, range }: { device: Device; range: AmbientLevelRange }) {
+  // The levels asked for, until snapshots report them. Dragging across
+  // notches asks for each in turn. Only a change of level confirms one: a
+  // snapshot still reporting the old level says nothing about those asked.
+  const { pending, error, send, confirm } = usePendingCommand(
+    (level: number) => `Ambient Level ${level}`,
+  );
+  useEffect(() => confirm(device.ambientLevel), [device.ambientLevel, confirm]);
 
   const shown = pending ?? device.ambientLevel;
   const choose = (level: number) => {
     level = Math.min(range.max, Math.max(range.min, level));
     if (level === shown) return;
-    setError(null);
-    setPending(level === device.ambientLevel ? null : level);
-    setAmbientLevel(device.address, level).catch((e) => {
-      setPending(null);
-      setError(`Couldn't set Ambient Level ${level}: ${e}`);
-    });
+    send(level, () => setAmbientLevel(device.address, level));
   };
 
   const steps = range.max - range.min + 1;
@@ -367,7 +339,7 @@ function RetryButton({ address }: { address: string }) {
   );
 }
 
-/** For buds, L and R merge while they're known and equal; Case shows only while reported. */
+/** For earbuds, L and R merge while they're known and equal; Case shows only while reported. */
 function BatteryView({ battery }: { battery: Battery }) {
   const values: { label?: string; level: number | null }[] =
     battery.kind === "headphones"

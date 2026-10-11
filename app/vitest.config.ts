@@ -13,6 +13,8 @@ export default mergeConfig(
         "@tauri-apps/plugin-autostart": "/src/testing/autostart.ts",
       },
     },
+    // The fake core's labels test reads the core's Rust sources, outside app/.
+    server: { fs: { allow: [".."] } },
     test: {
       environment: "jsdom",
       setupFiles: ["src/testing/setup.ts"],
