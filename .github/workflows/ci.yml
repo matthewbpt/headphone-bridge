@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    # The platform-independent crates must build and pass on every OS (ADR-0002).
+    # The Tauri shell is excluded: it needs per-OS system libraries, so the Linux app job covers it.
+    name: Core tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the Linux adapter's system libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libpulse-dev pkg-config
+      - run: cargo test --workspace --exclude headphone-bridge --locked
+
+  linux-app:
+    # The whole app on Linux: lints and tests the shell and the Linux adapter,
+    # then bundles the deb and AppImage.
+    name: Linux app
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install Tauri's and the Linux adapter's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev libpulse-dev pkg-config file
+      - run: npm ci
+        working-directory: app
+      # Builds the UI, which the shell embeds.
+      - run: npm run build
+        working-directory: app
+      - run: cargo clippy -p headphone-bridge -p headphone-bridge-platform-linux --all-targets --locked -- -D warnings
+      - run: cargo test -p headphone-bridge --locked
+      - run: npm run tauri build -- --bundles deb,appimage
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: headphone-bridge-linux
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+
+  ui:
+    name: UI typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run build

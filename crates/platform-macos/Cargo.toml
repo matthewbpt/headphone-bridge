@@ -1,0 +1,31 @@
+[package]
+name = "headphone-bridge-platform-macos"
+version = "0.1.0"
+description = "Headphone Bridge's macOS platform adapter: IOBluetooth behind the core's platform port"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+headphone-bridge-core = { path = "../core" }
+tokio.workspace = true
+uuid.workspace = true
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSObject", "NSData"] }
+objc2-io-bluetooth = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2",
+  "objc2-foundation",
+  "Bluetooth",
+  "IOBluetoothObject",
+  "IOBluetoothDevice",
+  "IOBluetoothRFCOMMChannel",
+  "IOBluetoothSDPDataElement",
+  "IOBluetoothSDPServiceRecord",
+  "IOBluetoothSDPUUID",
+  "IOBluetoothUserNotification",
+  "IOBluetoothUserLib",
+] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFRunLoop", "CFDate", "CFString"] }
+objc2-core-audio = { version = "0.3", default-features = false, features = ["std", "AudioHardware", "objc2-core-audio-types"] }
+objc2-core-bluetooth = { version = "0.3", default-features = false, features = ["std", "CBManager"] }
