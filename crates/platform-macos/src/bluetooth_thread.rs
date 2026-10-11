@@ -6,7 +6,7 @@ use std::sync::{mpsc as std_mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
-use objc2::rc::Retained;
+use objc2::rc::{autoreleasepool, Retained};
 use objc2::{sel, Message};
 use objc2_core_bluetooth::{CBManager, CBManagerAuthorization};
 use objc2_core_foundation::{kCFRunLoopDefaultMode, CFRetained, CFRunLoop, CFRunLoopRunResult};
@@ -136,31 +136,44 @@ impl BluetoothThread {
         }
     }
 
+    /// Every turn runs in its own autorelease pool. This thread has no pool
+    /// of its own, so without one every object IOBluetooth autoreleases would
+    /// live until the thread exits. That includes each RFCOMM channel it
+    /// opens, which stays registered for the Device's connection events: one
+    /// left over from before a disconnect reacts to the reconnect.
     fn run(mut self, commands: std_mpsc::Receiver<Command>) {
-        // Fires for every new baseband connection, and may fire for those that
-        // already exist; Devices already Connected are seeded below either way.
-        self.connect_notification = unsafe {
-            IOBluetoothDevice::registerForConnectNotifications_selector(
-                Some(&self.watcher),
-                Some(sel!(deviceConnected:fromDevice:)),
-            )
-        };
-        for device in paired_devices() {
-            if unsafe { device.isConnected() } {
-                self.device_connected(&device);
-            }
-        }
-        self.check_audio_output();
-        loop {
-            pump();
-            self.handle_device_events();
-            self.sweep_closed_links();
-            loop {
-                match commands.try_recv() {
-                    Ok(command) => self.command(command),
-                    Err(std_mpsc::TryRecvError::Empty) => break,
-                    Err(std_mpsc::TryRecvError::Disconnected) => return self.shut_down(),
+        autoreleasepool(|_| {
+            // Fires for every new baseband connection, and may fire for those
+            // that already exist; Devices already Connected are seeded below
+            // either way.
+            self.connect_notification = unsafe {
+                IOBluetoothDevice::registerForConnectNotifications_selector(
+                    Some(&self.watcher),
+                    Some(sel!(deviceConnected:fromDevice:)),
+                )
+            };
+            for device in paired_devices() {
+                if unsafe { device.isConnected() } {
+                    self.device_connected(&device);
                 }
+            }
+            self.check_audio_output();
+        });
+        while autoreleasepool(|_| self.turn(&commands)) {}
+        autoreleasepool(|_| self.shut_down());
+    }
+
+    /// Pumps the run loop once and handles what happened. False once the
+    /// adapter is dropped.
+    fn turn(&mut self, commands: &std_mpsc::Receiver<Command>) -> bool {
+        pump();
+        self.handle_device_events();
+        self.sweep_closed_links();
+        loop {
+            match commands.try_recv() {
+                Ok(command) => self.command(command),
+                Err(std_mpsc::TryRecvError::Empty) => return true,
+                Err(std_mpsc::TryRecvError::Disconnected) => return false,
             }
         }
     }
