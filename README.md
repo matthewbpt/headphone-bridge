@@ -11,6 +11,8 @@ Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
   commands and emits Device list snapshots; everything OS-specific comes in
   through the platform port (`platform::Platform`). Tests drive it through a
   scripted fake platform in `crates/core/tests/support`.
+- `crates/platform-macos`: the macOS platform adapter (IOBluetooth). It
+  compiles to nothing on other OSes and is tested by hand.
 - `app/src-tauri`: the Tauri v2 shell.
 - `app/src`: the React + TypeScript UI.
 
