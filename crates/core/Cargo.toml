@@ -1,0 +1,15 @@
+[package]
+name = "headphone-bridge-core"
+version = "0.1.0"
+description = "Platform-independent core of Headphone Bridge: device model, vendor protocols and the platform port"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

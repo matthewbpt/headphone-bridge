@@ -1,0 +1,19 @@
+Headphone Bridge
+Copyright (c) 2026 Matthew Tompsett
+
+Licensed under either of the Apache License, Version 2.0 (LICENSE-APACHE) or
+the MIT licence (LICENSE-MIT), at your option.
+
+The vendor protocol implementations are ported from the following projects,
+both under the MIT licence:
+
+- SonyHeadphonesClient (libmdr), by mos9527
+  https://github.com/mos9527/SonyHeadphonesClient
+  Sony MDR protocol for the WH-1000XM5.
+
+- omarchy-buds, by hmarquez-solutions
+  https://github.com/hmarquez-solutions/omarchy-buds
+  Samsung Galaxy Buds protocol and Buds4 Pro captures.
+
+GalaxyBudsClient (GPL-3.0) and Gadgetbridge (AGPL-3.0) were consulted only to
+cross-check protocol facts. No code was copied from them.

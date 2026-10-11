@@ -1,0 +1,21 @@
+[package]
+name = "headphone-bridge"
+version = "0.1.0"
+description = "Headphone Bridge desktop app: the Tauri shell around the core"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "headphone_bridge_lib"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+headphone-bridge-core = { path = "../../crates/core" }
+serde.workspace = true
+tauri = { version = "2", features = [] }
+tokio.workspace = true
+uuid.workspace = true
