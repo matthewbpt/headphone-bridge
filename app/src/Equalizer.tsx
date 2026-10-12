@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { setEqualizer } from "./core";
-import type { Bands, Device, Equalizer as EqualizerValue, EqualizerCapability } from "./deviceList";
+import type { Bands, Device, Equalizer as EqualizerValue, EqualizerCapability, StepRange } from "./deviceList";
 import { usePendingSetting } from "./usePendingSetting";
 
 /**
  * The Equalizer card, drawn from the Model's Capability alone: a Preset
  * dropdown listing the Model's Presets under its own names and, once the
- * Device reports them, the curve as a slider per Band. A picked Preset or a
- * released Band is Pending until the Device reports it. While the Device is
+ * Device reports them, the curve as a slider per Band and a Clear Bass
+ * slider. A picked Preset or a released slider is Pending until the Device
+ * reports it. While the Device is
  * Equalizer Unavailable the card stays, disabled, and says why.
  */
 export function Equalizer({
@@ -32,16 +33,16 @@ export function Equalizer({
   const listed = shown !== null && capability.presets.some((preset) => preset.id === shown.preset);
 
   /**
-   * Asks for `bands`: on the shown Preset if its Bands can be changed, else
-   * on the Model's first editable Preset (the XM5's Manual), which starts
-   * from the shown curve so nothing jumps.
+   * Asks for the shown curve with `edit` applied: on the shown Preset if its
+   * curve can be changed, else on the Model's first editable Preset (the
+   * XM5's Manual), which starts from the shown curve so nothing jumps.
    */
-  const requestBands = (bands: number[]) => {
+  const requestCurve = (edit: Pick<EqualizerValue, "bands"> | Pick<EqualizerValue, "clearBass">) => {
     if (shown === null) return;
     const editable = capability.presets.find((preset) => preset.id === shown.preset)?.editable;
     const preset = editable ? shown.preset : capability.presets.find((preset) => preset.editable)?.id;
     if (preset === undefined) return;
-    request({ ...shown, preset, bands });
+    request({ ...shown, preset, ...edit });
   };
 
   return (
@@ -66,7 +67,20 @@ export function Equalizer({
         ))}
       </select>
       {capability.bands && shown?.bands && (
-        <Curve bands={capability.bands} values={shown.bands} pending={pending !== null} onRelease={requestBands} />
+        <Curve
+          bands={capability.bands}
+          values={shown.bands}
+          pending={pending !== null}
+          onRelease={(bands) => requestCurve({ bands })}
+        />
+      )}
+      {capability.clearBass && shown?.clearBass != null && (
+        <ClearBass
+          range={capability.clearBass}
+          value={shown.clearBass}
+          pending={pending !== null}
+          onRelease={(clearBass) => requestCurve({ clearBass })}
+        />
       )}
       {device.equalizerUnavailable && (
         <p className="hint">The Device isn't taking Equalizer changes right now.</p>
@@ -135,6 +149,49 @@ function Curve({
         </label>
       ))}
     </div>
+  );
+}
+
+/**
+ * Clear Bass as a horizontal slider. Like a Band, a drag moves only here
+ * until it's let go, by pointer or key, and then goes to `onRelease`.
+ */
+function ClearBass({
+  range,
+  value,
+  pending,
+  onRelease,
+}: {
+  range: StepRange;
+  /** The shown Clear Bass: Pending, else reported. */
+  value: number;
+  pending: boolean;
+  onRelease: (value: number) => void;
+}) {
+  const [dragged, setDragged] = useState<number | null>(null);
+  const release = () => {
+    if (dragged === null) return;
+    setDragged(null);
+    onRelease(dragged);
+  };
+
+  return (
+    <label className="equalizer__clear-bass" data-pending={pending}>
+      <span>Clear Bass</span>
+      <input
+        type="range"
+        min={range.min}
+        max={range.max}
+        step={1}
+        value={dragged ?? value}
+        aria-label="Clear Bass"
+        aria-orientation="horizontal"
+        aria-busy={pending}
+        onChange={(e) => setDragged(Number(e.target.value))}
+        onPointerUp={release}
+        onKeyUp={release}
+      />
+    </label>
   );
 }
 

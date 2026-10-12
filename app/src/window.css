@@ -697,3 +697,61 @@ button {
 .equalizer:disabled .equalizer__bands {
   opacity: 0.5;
 }
+
+/* Clear Bass: a horizontal slider below the Bands, its knob like theirs. */
+
+.equalizer__clear-bass {
+  --thumb: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.equalizer__clear-bass input {
+  flex: 1;
+  height: var(--thumb);
+  margin: 0;
+  background: linear-gradient(var(--track), var(--track)) center / 100% 4px no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.equalizer__clear-bass input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.equalizer__clear-bass input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.equalizer__clear-bass[data-pending="true"] input::-webkit-slider-thumb {
+  border-style: dashed;
+}
+
+.equalizer__clear-bass[data-pending="true"] input::-moz-range-thumb {
+  border-style: dashed;
+}
+
+.equalizer__clear-bass input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.equalizer:disabled .equalizer__clear-bass {
+  opacity: 0.5;
+}

@@ -979,7 +979,7 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: null } },
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: 2 } },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Custom 1");
@@ -996,7 +996,7 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: null } },
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 } },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Manual");
@@ -1021,7 +1021,7 @@ describe("Equalizer", () => {
     fireEvent.keyUp(slider, { key: "ArrowUp" });
 
     expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
-      { preset: 0xa0, bands: [0, 0, 3, 5, 10], clearBass: null },
+      { preset: 0xa0, bands: [0, 0, 3, 5, 10], clearBass: 2 },
     ]);
   });
 
@@ -1034,8 +1034,8 @@ describe("Equalizer", () => {
     fireEvent.change(await band("16 kHz"), { target: { value: "-4" } });
     fireEvent.pointerUp(await band("16 kHz"));
     expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
-      { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: null },
-      { preset: 0xa0, bands: [3, 0, 0, 0, -4], clearBass: null },
+      { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: 2 },
+      { preset: 0xa0, bands: [3, 0, 0, 0, -4], clearBass: 2 },
     ]);
 
     core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: 2 } })));
@@ -1075,6 +1075,95 @@ describe("Equalizer", () => {
     act(() => vi.advanceTimersByTime(10_000));
     expect(screen.getByRole("alert")).toHaveTextContent("Manual curve wasn't confirmed by the Device");
     expect(bandValues()).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  const clearBass = () => screen.findByRole("slider", { name: "Clear Bass" });
+
+  it("shows the XM5's reported Clear Bass on its own slider below the Bands", async () => {
+    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } }))));
+
+    const slider = await clearBass();
+    expect(slider).toHaveValue("2");
+    expect(slider).toHaveAttribute("min", "-10");
+    expect(slider).toHaveAttribute("max", "10");
+    expect(slider).toHaveAttribute("aria-orientation", "horizontal");
+  });
+
+  it("sends nothing while Clear Bass is dragged, then it with the Bands once it's released, staying on Custom 1", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await clearBass();
+
+    fireEvent.change(slider, { target: { value: "4" } });
+    fireEvent.change(slider, { target: { value: "-6" } });
+    expect(core.sent()).toEqual([]);
+    expect(slider).toHaveValue("-6");
+
+    fireEvent.pointerUp(slider);
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: -6 } },
+      },
+    ]);
+    expect(await preset()).toHaveDisplayValue("Custom 1");
+  });
+
+  it("moves a fixed Preset onto Manual when Clear Bass is released, starting from that Preset's curve", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await clearBass();
+
+    fireEvent.change(slider, { target: { value: "8" } });
+    fireEvent.keyUp(slider, { key: "ArrowRight" });
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 } },
+      },
+    ]);
+    expect(await preset()).toHaveDisplayValue("Manual");
+    expect(await clearBass()).toHaveAttribute("aria-busy", "true");
+    expect(bandValues()).toEqual([-1, 0, 3, 5, 10]);
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 } })));
+
+    expect(await clearBass()).toHaveAttribute("aria-busy", "false");
+    expect(await clearBass()).toHaveValue("8");
+  });
+
+  it("shows a Clear Bass change from Sony's app", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    renderWindow(core);
+    expect(await clearBass()).toHaveValue("2");
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: -5 } })));
+
+    await vi.waitFor(async () => expect(await clearBass()).toHaveValue("-5"));
+  });
+
+  it("goes back to the reported Clear Bass when the Device doesn't confirm it within 10 s", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await clearBass();
+    freezeClock();
+
+    fireEvent.change(slider, { target: { value: "9" } });
+    fireEvent.pointerUp(slider);
+    expect(slider).toHaveValue("9");
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Manual curve wasn't confirmed by the Device");
+    expect(slider).toHaveValue("2");
+  });
+
+  it("shows no Clear Bass for a Model without it", async () => {
+    renderWindow(new FakeCore(only(buds4Pro())));
+
+    expect(await preset()).toBeVisible();
+    expect(screen.queryByRole("slider", { name: "Clear Bass" })).not.toBeInTheDocument();
   });
 
   it("disables the Bands while the Device is Powering Off", async () => {
@@ -1333,7 +1422,7 @@ describe("Power Off", () => {
     expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
     const sliders = screen.getAllByRole("slider");
-    expect(sliders).toHaveLength(6);
+    expect(sliders).toHaveLength(7);
     for (const slider of sliders) expect(slider).toBeDisabled();
   });
 
@@ -1363,7 +1452,7 @@ describe("Power Off", () => {
       if (radio.getAttribute("aria-checked") === "false") expect(radio).toBeEnabled();
     }
     const sliders = screen.getAllByRole("slider");
-    expect(sliders).toHaveLength(6);
+    expect(sliders).toHaveLength(7);
     for (const slider of sliders) expect(slider).toBeEnabled();
   });
 
