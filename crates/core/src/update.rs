@@ -20,4 +20,7 @@ pub enum Update {
     AmbientLevel(u8),
     /// In the Model's own steps, within its Capabilities' range.
     NoiseCancellingLevel(u8),
+    /// The Device acknowledged a request to Power Off. It should stop being
+    /// Connected soon after.
+    PowerOffAcknowledged,
 }

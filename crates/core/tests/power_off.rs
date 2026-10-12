@@ -100,6 +100,38 @@ async fn a_device_that_is_powering_off_leaves_the_list_once_disconnected() {
     assert_eq!(list.primary, None);
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() {
+    let (core, _os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+
+    tokio::time::sleep(Duration::from_secs(9)).await;
+    let device = &core.device_list().devices[0];
+    assert_eq!(device.state, DeviceState::PoweringOff);
+    assert!(!device.power_off_failed);
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let device = &core.device_list().devices[0];
+    assert!(device.power_off_failed);
+    assert_eq!(
+        device.state,
+        DeviceState::Attached,
+        "its link is still open"
+    );
+    // Its controls work again.
+    core.command(Command::SetAmbientLevel(xm5().address, 3))
+        .await
+        .unwrap();
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
+    );
+}
+
 #[tokio::test]
 async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothing() {
     let (platform, mut os) = fake_platform();
@@ -161,6 +193,9 @@ async fn an_unsupported_model_refuses_power_off() {
         Err(CommandError::UnsupportedModel)
     );
 }
+
+/// An ACK for a request the app sent with sequence number 1.
+const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
 
 /// The next frame the core writes.
 async fn written(link: &mut DeviceLink) -> Vec<u8> {

@@ -48,6 +48,9 @@ pub struct Device {
     pub noise_cancelling_level: Option<u8>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
+    /// The Device acknowledged the last Power Off but was still Connected
+    /// well after. Cleared when the Device is asked to Power Off again.
+    pub power_off_failed: bool,
 }
 
 impl Device {
@@ -66,6 +69,7 @@ impl Device {
             ambient_level: None,
             noise_cancelling_level: None,
             battery: None,
+            power_off_failed: false,
         }
     }
 
