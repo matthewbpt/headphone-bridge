@@ -5,7 +5,8 @@ import { usePendingSetting } from "./usePendingSetting";
 /**
  * The Equalizer card, drawn from the Model's Capability alone: a Preset
  * dropdown listing the Model's Presets under its own names. A picked Preset
- * is Pending until the Device reports it.
+ * is Pending until the Device reports it. While the Device is Equalizer
+ * Unavailable the card stays, disabled, and says why.
  */
 export function Equalizer({
   device,
@@ -26,7 +27,7 @@ export function Equalizer({
   // selects nothing. Neither does one not reported yet.
   const listed = shown !== null && capability.presets.some((preset) => preset.id === shown.preset);
   return (
-    <fieldset className="card equalizer" disabled={disabled}>
+    <fieldset className="card equalizer" disabled={disabled || device.equalizerUnavailable}>
       <legend className="equalizer__title">Equalizer</legend>
       <select
         aria-label="Preset"
@@ -46,6 +47,9 @@ export function Equalizer({
           </option>
         ))}
       </select>
+      {device.equalizerUnavailable && (
+        <p className="hint">The Device isn't taking Equalizer changes right now.</p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}

@@ -32,6 +32,8 @@ export interface Device {
   noiseCancellingLevel: number | null;
   /** The Equalizer the Device reports. Null until reported. */
   equalizer: Equalizer | null;
+  /** The Device reports that it refuses Equalizer changes for now. */
+  equalizerUnavailable: boolean;
   /** Null until the Device first reports it. */
   battery: Battery | null;
   /**

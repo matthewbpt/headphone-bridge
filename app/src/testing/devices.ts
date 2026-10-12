@@ -64,6 +64,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     ambientLevel: 1,
     noiseCancellingLevel: 4,
     equalizer: { preset: 0, bands: null, clearBass: null },
+    equalizerUnavailable: false,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,
     reportedAt: null,
@@ -85,6 +86,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     ambientLevel: 12,
     noiseCancellingLevel: null,
     equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 },
+    equalizerUnavailable: false,
     battery: { kind: "headphones", level: 70 },
     powerOffFailed: false,
     reportedAt: null,
@@ -110,6 +112,7 @@ export function notAttached(device: Device, state: Device["state"]): Device {
     ambientLevel: null,
     noiseCancellingLevel: null,
     equalizer: null,
+    equalizerUnavailable: false,
     battery: null,
     reportedAt: null,
   };

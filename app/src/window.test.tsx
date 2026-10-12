@@ -850,6 +850,20 @@ describe("Equalizer", () => {
     expect(await preset()).toBeDisabled();
   });
 
+  it("is disabled with a reason while the Device is Equalizer Unavailable, and back when it clears", async () => {
+    const core = new FakeCore(only(xm5({ equalizerUnavailable: true })));
+    renderWindow(core);
+
+    expect(await preset()).toBeDisabled();
+    expect(screen.getByRole("group", { name: "Equalizer" })).toBeVisible();
+    expect(screen.getByText("The Device isn't taking Equalizer changes right now.")).toBeVisible();
+
+    core.emit(only(xm5({ equalizerUnavailable: false })));
+
+    expect(await preset()).toBeEnabled();
+    expect(screen.queryByText("The Device isn't taking Equalizer changes right now.")).not.toBeInTheDocument();
+  });
+
   it("is hidden while the Device isn't Attached", async () => {
     const core = new FakeCore(only(buds4Pro()));
     renderWindow(core);

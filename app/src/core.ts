@@ -60,6 +60,7 @@ export type CommandError =
   | "outOfRange"
   | "unavailablePreset"
   | "settingsNotReported"
+  | "equalizerUnavailable"
   | { frameLogUnavailable: string };
 
 /** Why the shell couldn't hand the frame log to Android's share sheet. */
@@ -88,6 +89,7 @@ const WORDS: {
   outOfRange: "that value is outside the Model's range",
   unavailablePreset: "the app can't pick that Preset",
   settingsNotReported: "the Device hasn't reported its settings yet",
+  equalizerUnavailable: "the Device isn't taking Equalizer changes right now",
   frameLogUnavailable: (message) => message,
   frameLogOff: "the frame log is off",
   frameLogEmpty: "it's empty until a Device is Attached",
