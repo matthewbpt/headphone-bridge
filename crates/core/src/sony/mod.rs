@@ -106,6 +106,9 @@ enum RequestKind {
     Plain,
     /// That the Device has taken the Power Off.
     PowerOff,
+    /// That the Device has taken an Equalizer curve. It sends no notification
+    /// for a curve edit that stays on its Preset, so the curve is read back.
+    EqualizerCurve,
 }
 
 /// A request waiting for its ACK.
@@ -218,8 +221,9 @@ impl Session {
     /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
     /// to the Device. Bands and Clear Bass are sent together, so one given
     /// alone keeps the other as last reported or sent; with none to keep,
-    /// it is rejected as not reported and nothing is sent. The Device
-    /// confirms with a notification of the new params.
+    /// it is rejected as not reported and nothing is sent. A Preset change
+    /// is confirmed by the notification that follows it. A curve that stays
+    /// on its Preset brings none, so it is read back once acknowledged.
     pub fn set_equalizer(&mut self, equalizer: &Equalizer) -> Result<(), CommandError> {
         let curve = match (&equalizer.bands, equalizer.clear_bass) {
             (None, None) => None,
@@ -245,14 +249,17 @@ impl Session {
             }
             None => payload.push(0),
         }
-        if let Some((bands, clear_bass)) = curve {
-            self.equalizer = Some(Equalizer {
-                preset: equalizer.preset,
-                bands: Some(bands),
-                clear_bass: Some(clear_bass),
-            });
+        match curve {
+            Some((bands, clear_bass)) => {
+                self.equalizer = Some(Equalizer {
+                    preset: equalizer.preset,
+                    bands: Some(bands),
+                    clear_bass: Some(clear_bass),
+                });
+                self.request_as(payload, RequestKind::EqualizerCurve);
+            }
+            None => self.request(payload),
         }
-        self.request(payload);
         Ok(())
     }
 
@@ -311,6 +318,10 @@ impl Session {
         self.send_next();
         match in_flight.kind {
             RequestKind::PowerOff => vec![Update::PowerOffAcknowledged],
+            RequestKind::EqualizerCurve => {
+                self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                Vec::new()
+            }
             RequestKind::Plain => Vec::new(),
         }
     }

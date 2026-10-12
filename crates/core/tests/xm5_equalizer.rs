@@ -645,3 +645,41 @@ async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }
+
+#[tokio::test]
+async fn a_curve_edit_the_device_only_acks_is_read_back() {
+    // A real WH-1000XM5 already on Manual ACKs a curve edit and sends no
+    // notification; only a Preset change brings one.
+    let (core, _os, mut link) = xm5_on_manual().await;
+    let louder = Equalizer {
+        preset: 0xa0,
+        bands: Some(vec![-10, 10, 0, -2, 2]),
+        clear_bass: Some(7),
+    };
+
+    core.command(Command::SetEqualizer(xm5().address, louder.clone()))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(
+            1,
+            &[0x58, 0x00, 0xa0, 0x06, 0x11, 0x00, 0x14, 0x0a, 0x08, 0x0c]
+        )
+    );
+    link.send.send(sony_ack(0)).unwrap();
+    // EQEBB_GET_PARAM, and the Device's reply settles the edit.
+    assert_eq!(written(&mut link).await, sony_frame(0, &[0x56, 0x00]));
+    link.send.send(sony_ack(1)).unwrap();
+    link.send
+        .send(sony_frame(
+            1,
+            &[0x57, 0x00, 0xa0, 0x06, 0x11, 0x00, 0x14, 0x0a, 0x08, 0x0c],
+        ))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].equalizer == Some(louder.clone())
+    })
+    .await;
+}
