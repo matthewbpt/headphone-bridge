@@ -80,6 +80,21 @@ async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() 
 }
 
 #[tokio::test]
+async fn a_device_that_is_powering_off_leaves_the_list_once_disconnected() {
+    let (core, os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+    drop(link);
+
+    os.observe(Observation::DeviceDisconnected(xm5().address));
+
+    let list = wait_for(&core, |list| list.devices.is_empty()).await;
+    assert_eq!(list.primary, None);
+}
+
+#[tokio::test]
 async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothing() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
