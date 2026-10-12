@@ -9,6 +9,9 @@ use serde::Serialize;
 
 pub const NO_DEVICE: &str = "No Device";
 
+pub const POWER_OFF: &str = "Power Off";
+pub const POWERING_OFF: &str = "Powering Off…";
+
 pub fn mode(mode: NoiseControlMode) -> &'static str {
     match mode {
         NoiseControlMode::Off => "Off",

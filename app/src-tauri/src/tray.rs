@@ -1,6 +1,7 @@
 //! The native tray menu, labelled from [`crate::labels`]. It shows the Primary Device's name and battery, its
 //! Chosen Mode as radio items with a hint while the Device has paused it,
-//! "Open Headphone Bridge" and "Quit".
+//! "Power Off" when it has that Capability, "Open Headphone Bridge" and
+//! "Quit".
 //!
 //! Tray actions only use menu items, never tray click events, because Linux
 //! doesn't emit them.
@@ -19,6 +20,7 @@ use crate::labels;
 
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
+const POWER_OFF: &str = "power-off";
 /// Prefixes a Noise Control Mode item's id, e.g. `mode:ambient`.
 const MODE: &str = "mode:";
 
@@ -114,7 +116,7 @@ fn build(app: &AppHandle, menu: &TrayMenu) -> tauri::Result<Menu<tauri::Wry>> {
                 app,
                 format!("{MODE}{}", mode_id(item.mode)),
                 item.label,
-                true,
+                item.enabled,
                 item.checked,
                 None::<&str>,
             )?);
@@ -122,6 +124,15 @@ fn build(app: &AppHandle, menu: &TrayMenu) -> tauri::Result<Menu<tauri::Wry>> {
         if let Some(hint) = &menu.hint {
             builder = builder.item(&MenuItem::with_id(app, "hint", hint, false, None::<&str>)?);
         }
+    }
+    if let Some(item) = &menu.power_off {
+        builder = builder.separator().item(&MenuItem::with_id(
+            app,
+            POWER_OFF,
+            item.label,
+            item.enabled,
+            None::<&str>,
+        )?);
     }
     builder
         .separator()
@@ -135,24 +146,22 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         OPEN => crate::show_window(app),
         QUIT => app.exit(0),
         id => {
-            let Some(mode) = id.strip_prefix(MODE).and_then(mode_from_id) else {
-                return;
-            };
             let tray = app.state::<Tray>();
             let shown = tray.menu.lock().unwrap().clone();
-            // A check item toggles itself when clicked. Put the check marks
-            // back as the Device last confirmed them: the radio selection
-            // moves only once the Device confirms the new mode.
-            show(app, &tray.icon, &shown);
-            let Some(address) = shown.device.clone() else {
+            if id.starts_with(MODE) {
+                // A check item toggles itself when clicked. Put the check
+                // marks back as the Device last confirmed them: the radio
+                // selection moves only once the Device confirms the new mode.
+                show(app, &tray.icon, &shown);
+            }
+            let Some(command) = shown.command(id) else {
                 return;
             };
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let core = app.state::<Core>();
-                let command = Command::SetNoiseControlMode(address, mode);
-                if let Err(error) = core.command(command).await {
-                    eprintln!("couldn't set the Noise Control Mode from the tray: {error:?}");
+                if let Err(error) = core.command(command.clone()).await {
+                    eprintln!("couldn't send {command:?} from the tray: {error:?}");
                 }
             });
         }
@@ -190,10 +199,19 @@ pub struct TrayMenu {
     pub hint: Option<String>,
     /// Why the Device named in the title isn't Attached.
     pub status: Option<String>,
-    /// The Primary Device, while one is Attached.
+    /// The Primary Device, while one is Attached or Powering Off.
     pub device: Option<DeviceAddress>,
     /// Limited to the Primary Device's Capabilities.
     pub modes: Vec<ModeItem>,
+    /// Shown after the modes when the Primary Device has the Power Off
+    /// Capability.
+    pub power_off: Option<PowerOffItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PowerOffItem {
+    pub label: &'static str,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,14 +220,20 @@ pub struct ModeItem {
     pub label: &'static str,
     /// Whether this is the Chosen Mode the Device last confirmed.
     pub checked: bool,
+    /// False while the Device is Powering Off.
+    pub enabled: bool,
 }
 
 impl TrayMenu {
     pub fn new(list: &DeviceList) -> TrayMenu {
         let primary = list.primary.as_ref().and_then(|primary| {
-            list.devices
-                .iter()
-                .find(|device| device.address == *primary && device.state == DeviceState::Attached)
+            list.devices.iter().find(|device| {
+                device.address == *primary
+                    && matches!(
+                        device.state,
+                        DeviceState::Attached | DeviceState::PoweringOff
+                    )
+            })
         });
         let Some(device) = primary else {
             // Failing that, a supported Device that couldn't be Attached, and why.
@@ -233,8 +257,10 @@ impl TrayMenu {
                 status,
                 device: None,
                 modes: vec![],
+                power_off: None,
             };
         };
+        let powering_off = device.state == DeviceState::PoweringOff;
         TrayMenu {
             title: device.name.clone(),
             battery: device.battery.map(battery_text),
@@ -251,9 +277,31 @@ impl TrayMenu {
                     mode,
                     label: labels::mode(mode),
                     checked: device.chosen_mode == Some(mode),
+                    enabled: !powering_off,
                 })
                 .collect(),
+            power_off: device.capabilities.power_off.then_some(if powering_off {
+                PowerOffItem {
+                    label: labels::POWERING_OFF,
+                    enabled: false,
+                }
+            } else {
+                PowerOffItem {
+                    label: labels::POWER_OFF,
+                    enabled: true,
+                }
+            }),
         }
+    }
+
+    /// What clicking the item with `id` asks of the Primary Device.
+    pub fn command(&self, id: &str) -> Option<Command> {
+        let address = self.device.clone()?;
+        if id == POWER_OFF {
+            return Some(Command::PowerOff(address));
+        }
+        let mode = id.strip_prefix(MODE).and_then(mode_from_id)?;
+        Some(Command::SetNoiseControlMode(address, mode))
     }
 }
 
@@ -287,6 +335,7 @@ mod tests {
                 status: None,
                 device: None,
                 modes: vec![],
+                power_off: None,
             }
         );
     }
@@ -316,6 +365,7 @@ mod tests {
             mode,
             label,
             checked,
+            enabled: true,
         }
     }
 
@@ -339,6 +389,7 @@ mod tests {
                     mode(NoiseControlMode::Ambient, "Ambient", true),
                     mode(NoiseControlMode::Adaptive, "Adaptive", false),
                 ],
+                power_off: None,
             }
         );
     }
@@ -378,6 +429,7 @@ mod tests {
                     status: Some(status.into()),
                     device: None,
                     modes: vec![],
+                    power_off: None,
                 }
             );
         }
@@ -426,6 +478,10 @@ mod tests {
                     mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", true),
                     mode(NoiseControlMode::Ambient, "Ambient", false),
                 ],
+                power_off: Some(PowerOffItem {
+                    label: "Power Off",
+                    enabled: true,
+                }),
             }
         );
     }
@@ -478,5 +534,66 @@ mod tests {
 
         list.primary = Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into()));
         assert_eq!(TrayMenu::new(&list).title, "Matt's Buds4 Pro");
+    }
+
+    #[test]
+    fn offers_to_power_off_attached_headphones() {
+        let list = DeviceList {
+            devices: vec![xm5()],
+            primary: Some(xm5().address),
+        };
+        assert_eq!(
+            TrayMenu::new(&list).power_off,
+            Some(PowerOffItem {
+                label: "Power Off",
+                enabled: true,
+            })
+        );
+    }
+
+    #[test]
+    fn offers_no_power_off_for_headphones_that_are_not_attached() {
+        let list = DeviceList {
+            devices: vec![Device {
+                state: DeviceState::Attaching,
+                ..xm5()
+            }],
+            primary: None,
+        };
+        assert_eq!(TrayMenu::new(&list).power_off, None);
+    }
+
+    #[test]
+    fn disables_everything_while_the_primary_device_is_powering_off() {
+        let list = DeviceList {
+            devices: vec![Device {
+                state: DeviceState::PoweringOff,
+                ..xm5()
+            }],
+            primary: Some(xm5().address),
+        };
+        let menu = TrayMenu::new(&list);
+        assert_eq!(menu.title, "WH-1000XM5");
+        assert_eq!(menu.battery.as_deref(), Some("Battery: 70%"));
+        assert_eq!(
+            menu.power_off,
+            Some(PowerOffItem {
+                label: "Powering Off…",
+                enabled: false,
+            })
+        );
+        assert!(menu.modes.iter().all(|item| !item.enabled));
+    }
+
+    #[test]
+    fn powers_off_the_primary_device_when_clicked() {
+        let list = DeviceList {
+            devices: vec![buds(DeviceState::Attached), xm5()],
+            primary: Some(xm5().address),
+        };
+        assert_eq!(
+            TrayMenu::new(&list).command("power-off"),
+            Some(Command::PowerOff(xm5().address))
+        );
     }
 }
