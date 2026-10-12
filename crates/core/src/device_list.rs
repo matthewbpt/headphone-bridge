@@ -98,6 +98,9 @@ pub enum DeviceState {
     /// Opening the control link and identifying the Model.
     Attaching,
     Attached,
+    /// Asked to Power Off and still Connected. Refuses every command, and its
+    /// control link closing is part of switching off, not a failure.
+    PoweringOff,
     /// Connected, but the app has no control link.
     NotAttached {
         reason: NotAttachedReason,

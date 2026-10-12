@@ -112,7 +112,57 @@ button {
 /* Header: the Device's OS name, and its Model when that differs. */
 
 .header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
   padding: 0 4px;
+}
+
+.header__names {
+  flex: 1;
+  min-width: 0;
+}
+
+.header__error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* The Device's controls: a card, disabled as a whole while Powering Off. */
+.controls {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+/* A round icon-only button, such as Power Off in the header. */
+.icon-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--card);
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.power-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .title {

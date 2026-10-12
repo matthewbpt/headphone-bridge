@@ -41,6 +41,7 @@ impl Model {
                 ],
                 ambient_level: Some(LevelRange { min: 0, max: 4 }),
                 noise_cancelling_level: Some(LevelRange { min: 0, max: 4 }),
+                power_off: false,
             },
             Model::Wh1000Xm5 => Capabilities {
                 noise_control_modes: vec![
@@ -50,6 +51,7 @@ impl Model {
                 ],
                 ambient_level: Some(LevelRange { min: 1, max: 20 }),
                 noise_cancelling_level: None,
+                power_off: true,
             },
         }
     }
@@ -65,6 +67,8 @@ pub struct Capabilities {
     /// The Noise Cancelling Level's range in the Model's own steps, if it has
     /// one.
     pub noise_cancelling_level: Option<LevelRange>,
+    /// Whether the app can Power Off the Device.
+    pub power_off: bool,
 }
 
 /// A level Capability's steps in the Model's own units, both ends included.

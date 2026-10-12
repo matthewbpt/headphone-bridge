@@ -9,12 +9,14 @@ const buds4ProCapabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient", "adaptive"],
   ambientLevel: { min: 0, max: 4 },
   noiseCancellingLevel: { min: 0, max: 4 },
+  powerOff: false,
 };
 
 const xm5Capabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient"],
   ambientLevel: { min: 1, max: 20 },
   noiseCancellingLevel: null,
+  powerOff: true,
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -58,7 +60,7 @@ export function notAttached(device: Device, state: Device["state"]): Device {
   return {
     ...device,
     state,
-    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null },
+    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null, powerOff: false },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,

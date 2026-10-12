@@ -822,6 +822,72 @@ describe("the header", () => {
   });
 });
 
+describe("Power Off", () => {
+  const powerOff = () => screen.findByRole("button", { name: "Power Off" });
+
+  it("is a button in an XM5's header, with a tooltip", async () => {
+    renderWindow(new FakeCore(only(xm5())));
+
+    expect(await powerOff()).toBeEnabled();
+    expect(await powerOff()).toHaveAttribute("title", "Power Off");
+    expect((await powerOff()).closest("header")).toHaveTextContent("WH-1000XM5");
+  });
+
+  it("is disabled unless the Device is Attached", async () => {
+    const core = new FakeCore(only(xm5({ state: { kind: "attaching" } })));
+    renderWindow(core);
+
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(xm5()));
+    expect(await powerOff()).toBeEnabled();
+  });
+
+  it("sends Power Off for the Device shown, with no confirmation", async () => {
+    const core = new FakeCore({ devices: [buds4Pro(), xm5()], primary: XM5_ADDRESS });
+    renderWindow(core);
+
+    await userEvent.click(await powerOff());
+
+    expect(core.sent()).toEqual([{ command: "power_off", args: { address: XM5_ADDRESS } }]);
+  });
+
+  it("disables itself and every control of the Device while it is Powering Off", async () => {
+    const core = new FakeCore(only(xm5({ chosenMode: "ambient" })));
+    renderWindow(core);
+    await userEvent.click(await powerOff());
+
+    core.emit(only(xm5({ chosenMode: "ambient", state: { kind: "poweringOff" } })));
+
+    expect(await screen.findByText("Powering Off…")).toBeVisible();
+    expect(await powerOff()).toBeDisabled();
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    for (const radio of radios) expect(radio).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("slider")).toBeDisabled();
+  });
+
+  it("shows why the core refused Power Off", async () => {
+    const core = new FakeCore(only(xm5()));
+    core.answer("power_off", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await powerOff());
+    await core.release("power_off", { reject: "poweringOff" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't Power Off: the Device is Powering Off");
+  });
+
+  it("isn't shown for a Buds4 Pro", async () => {
+    renderWindow(new FakeCore(only(buds4Pro())));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Power Off" })).not.toBeInTheDocument();
+  });
+});
+
 describe("the Device switcher", () => {
   it("isn't shown with one Device Connected", async () => {
     const core = new FakeCore(only(buds4Pro()));

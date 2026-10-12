@@ -13,6 +13,8 @@ pub enum Command {
     SetAmbientLevel(DeviceAddress, u8),
     /// Sets the Noise Cancelling Level, in the Model's own steps.
     SetNoiseCancellingLevel(DeviceAddress, u8),
+    /// Powers Off the Device: it switches off and stops being Connected.
+    PowerOff(DeviceAddress),
     /// Tries again to Attach a Connected Device that isn't Attached.
     RetryAttach(DeviceAddress),
     /// Switches the frame log on, appending to the given file, or off (`None`).
@@ -29,6 +31,8 @@ pub enum CommandError {
     NotAttached,
     /// The Device's Model isn't on the allowlist, so the app won't control it.
     UnsupportedModel,
+    /// The Device is Powering Off, so it takes no more commands.
+    PoweringOff,
     /// The Device's Model doesn't have the Capability the command needs.
     MissingCapability,
     /// The value is outside the range the Model's Capabilities declare.

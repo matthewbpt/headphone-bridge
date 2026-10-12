@@ -198,6 +198,7 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
+    PowerOff,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -393,6 +394,11 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            // The control link closing is part of switching off: the Device
+            // stays Powering Off until it stops being Connected.
+            LinkEventKind::Ended(_) if device.state == DeviceState::PoweringOff => {
+                tracked.session = None;
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device::unidentified(
@@ -436,6 +442,16 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
+            Command::PowerOff(address) => {
+                let (device, session) = self.attached(&address)?;
+                if !device.capabilities.power_off {
+                    return Err(CommandError::MissingCapability);
+                }
+                session.send(SessionCommand::PowerOff)?;
+                let tracked = self.devices.get_mut(&address).expect("checked above");
+                tracked.device.state = DeviceState::PoweringOff;
+                Ok(())
+            }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
                 if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
@@ -460,7 +476,8 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// The Device at `address`, unless it's unknown or an unsupported Model.
+    /// The Device at `address`, unless it's unknown, an unsupported Model, or
+    /// Powering Off.
     fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
         let tracked = self
             .devices
@@ -470,6 +487,7 @@ impl<P: Platform> State<P> {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             } => Err(CommandError::UnsupportedModel),
+            DeviceState::PoweringOff => Err(CommandError::PoweringOff),
             _ => Ok(tracked),
         }
     }
@@ -572,6 +590,12 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
+                    // No Samsung Model can Power Off, so the command is
+                    // rejected before it gets here.
+                    SessionCommand::PowerOff => {
+                        debug_assert!(false, "no Samsung Model can Power Off");
+                        Vec::new()
+                    }
                 };
                 for frame in frames {
                     if !send(slug, frame) {
@@ -661,6 +685,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
+                    SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;
