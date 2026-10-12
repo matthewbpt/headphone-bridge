@@ -273,7 +273,7 @@ function LevelSlider({
   set: (level: number) => Promise<void>;
 }) {
   // The levels asked for, until snapshots report them. Dragging across
-  // notches asks for each in turn. Only a change of level confirms one: a
+  // notches asks for each in turn. Only a change of level settles them: a
   // snapshot still reporting the old level says nothing about those asked.
   const { pending, error, send, confirm } = usePendingCommand(
     (asked: number) => `${title} ${asked}`,

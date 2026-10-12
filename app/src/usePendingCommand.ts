@@ -8,7 +8,8 @@ const PENDING_TIMEOUT_MS = 10_000;
  * asked in turn queue up, oldest first, and the last is the one shown
  * pending. The Device applies them in order, so a reported value confirms
  * every value asked up to it; an earlier value landing late can't clear a
- * later one.
+ * later one. A reported value that wasn't asked for means the Device has
+ * moved somewhere else, so it drops every pending value.
  *
  * `name` names a value in the errors: "<name> wasn't confirmed by the
  * Device" after 10 s, "Couldn't set <name>: <error>" when the core rejects it.
@@ -39,12 +40,15 @@ export function usePendingCommand<T>(name: (value: T) => string) {
     });
   };
 
-  /** The Device now reports `value`: drops every value asked up to it. */
+  /**
+   * The Device now reports `value`: drops every value asked up to it, or
+   * every value if it wasn't asked for.
+   */
   const confirm = useCallback(
     (value: T | null) =>
       setAsked((asked) => {
         const i = asked.findIndex((v) => v === value);
-        return i < 0 ? asked : asked.slice(i + 1);
+        return i < 0 ? [] : asked.slice(i + 1);
       }),
     [],
   );
