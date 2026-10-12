@@ -103,8 +103,7 @@ async fn settle(core: &Core, link: &DeviceLink) -> DeviceList {
 }
 
 #[tokio::test]
-async fn setting_a_level_sends_noise_reduction_level_and_changes_nothing_until_the_device_confirms()
-{
+async fn setting_a_level_sends_the_level_set_and_changes_nothing_until_the_device_confirms() {
     let (core, _os, mut link) = attached_buds4pro().await;
 
     core.command(Command::SetNoiseCancellingLevel(buds4pro().address, 4))
