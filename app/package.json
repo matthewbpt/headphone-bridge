@@ -10,7 +10,8 @@
     "test": "vitest run",
     "tauri": "tauri",
     "bundle:dev": "tauri build --debug --bundles app",
-    "open:dev": "npm run bundle:dev && open \"../target/debug/bundle/macos/Headphone Bridge.app\""
+    "open:dev": "npm run bundle:dev && open \"../target/debug/bundle/macos/Headphone Bridge.app\"",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.3",
