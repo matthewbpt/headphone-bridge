@@ -81,14 +81,22 @@ struct NoiseControl {
     level: u8,
 }
 
+/// What the Device acknowledging a request tells the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestKind {
+    /// Only that the next request can go.
+    Plain,
+    /// That the Device has taken the Power Off.
+    PowerOff,
+}
+
 /// A request waiting for its ACK.
 #[derive(Debug)]
 struct InFlight {
     frame: Vec<u8>,
     /// How many times it has been sent.
     sends: u32,
-    /// Whether it asks the Device to Power Off.
-    power_off: bool,
+    kind: RequestKind,
 }
 
 /// One control link session with a Sony Device.
@@ -106,7 +114,7 @@ pub struct Session {
     /// Data frames sent so far, resends included.
     sends: u64,
     /// Data frame payloads waiting for the outstanding one to be acknowledged.
-    requests: VecDeque<Vec<u8>>,
+    requests: VecDeque<(Vec<u8>, RequestKind)>,
     outgoing: Vec<Vec<u8>>,
     identified: bool,
     /// The NCASM params last reported, or since sent. Every set changes one
@@ -188,7 +196,10 @@ impl Session {
     pub fn power_off(&mut self) {
         /// `PowerOffSettingValue::ON`.
         const ON: u8 = 0x01;
-        self.request(vec![command::POWER_SET_STATUS, power::POWER_OFF, ON]);
+        self.request_as(
+            vec![command::POWER_SET_STATUS, power::POWER_OFF, ON],
+            RequestKind::PowerOff,
+        );
     }
 
     fn set_noise_control(&mut self, params: NoiseControl) {
@@ -234,10 +245,9 @@ impl Session {
         };
         self.seq = ack.seq;
         self.send_next();
-        if in_flight.power_off {
-            vec![Update::PowerOffAcknowledged]
-        } else {
-            Vec::new()
+        match in_flight.kind {
+            RequestKind::PowerOff => vec![Update::PowerOffAcknowledged],
+            RequestKind::Plain => Vec::new(),
         }
     }
 
@@ -316,7 +326,11 @@ impl Session {
     }
 
     fn request(&mut self, payload: Vec<u8>) {
-        self.requests.push_back(payload);
+        self.request_as(payload, RequestKind::Plain);
+    }
+
+    fn request_as(&mut self, payload: Vec<u8>, kind: RequestKind) {
+        self.requests.push_back((payload, kind));
         self.send_next();
     }
 
@@ -324,15 +338,14 @@ impl Session {
         if self.in_flight.is_some() {
             return;
         }
-        if let Some(payload) = self.requests.pop_front() {
+        if let Some((payload, kind)) = self.requests.pop_front() {
             let frame = encode(DataType::Mdr, self.seq, &payload);
             self.outgoing.push(frame.clone());
             self.sends += 1;
-            let power_off = payload.starts_with(&[command::POWER_SET_STATUS, power::POWER_OFF]);
             self.in_flight = Some(InFlight {
                 frame,
                 sends: 1,
-                power_off,
+                kind,
             });
         }
     }
