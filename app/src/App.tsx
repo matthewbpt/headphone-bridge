@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import type { AmbientLevelRange, Battery, Device, Labels, NoiseControlMode } from "./deviceList";
+import type { Battery, Device, Labels, LevelRange, NoiseControlMode } from "./deviceList";
 import {
   reasonText,
   retryAttach,
@@ -145,7 +145,12 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
             </>
           )}
           {ambientLevel && shownMode === "ambient" && (
-            <AmbientLevelSlider device={device} range={ambientLevel} />
+            <LevelSlider
+              title="Ambient Level"
+              level={device.ambientLevel}
+              range={ambientLevel}
+              set={(level) => setAmbientLevel(device.address, level)}
+            />
           )}
         </section>
       )}
@@ -241,30 +246,41 @@ function NoiseControlModeSelector({
 const MAX_NOTCHES = 10;
 
 /**
- * The Ambient Level, in the Model's own steps. A level set here shows a
- * dashed thumb until the Device reports it.
+ * A level, in the Model's own steps. A level set here shows a dashed thumb
+ * until the Device reports it.
  */
-function AmbientLevelSlider({ device, range }: { device: Device; range: AmbientLevelRange }) {
+function LevelSlider({
+  title,
+  level,
+  range,
+  set,
+}: {
+  title: string;
+  /** The reported level; null until the Device first reports it. */
+  level: number | null;
+  range: LevelRange;
+  set: (level: number) => Promise<void>;
+}) {
   // The levels asked for, until snapshots report them. Dragging across
   // notches asks for each in turn. Only a change of level confirms one: a
   // snapshot still reporting the old level says nothing about those asked.
   const { pending, error, send, confirm } = usePendingCommand(
-    (level: number) => `Ambient Level ${level}`,
+    (asked: number) => `${title} ${asked}`,
   );
-  useEffect(() => confirm(device.ambientLevel), [device.ambientLevel, confirm]);
+  useEffect(() => confirm(level), [level, confirm]);
 
-  const shown = pending ?? device.ambientLevel;
-  const choose = (level: number) => {
-    level = Math.min(range.max, Math.max(range.min, level));
-    if (level === shown) return;
-    send(level, () => setAmbientLevel(device.address, level));
+  const shown = pending ?? level;
+  const choose = (asked: number) => {
+    asked = Math.min(range.max, Math.max(range.min, asked));
+    if (asked === shown) return;
+    send(asked, () => set(asked));
   };
 
   const steps = range.max - range.min + 1;
   const notched = steps <= MAX_NOTCHES;
   return (
     <div className="level">
-      <div className="level__title">Ambient Level</div>
+      <div className="level__title">{title}</div>
       <div className="level__row">
         <button
           className="level__step"
@@ -291,7 +307,7 @@ function AmbientLevelSlider({ device, range }: { device: Device; range: AmbientL
             step={1}
             value={shown ?? range.min}
             disabled={shown === null}
-            aria-label="Ambient Level"
+            aria-label={title}
             aria-busy={pending !== null}
             onChange={(e) => choose(Number(e.target.value))}
           />

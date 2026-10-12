@@ -55,11 +55,11 @@ export type EffectiveModeReason = "budOutOfEar" | "unknown";
 
 export interface Capabilities {
   noiseControlModes: NoiseControlMode[];
-  ambientLevel: AmbientLevelRange | null;
+  ambientLevel: LevelRange | null;
 }
 
-/** The Model's Ambient Level steps, both ends included. */
-export interface AmbientLevelRange {
+/** A level Capability's steps in the Model's own units, both ends included. */
+export interface LevelRange {
   min: number;
   max: number;
 }
