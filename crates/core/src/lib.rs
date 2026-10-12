@@ -20,6 +20,7 @@ use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
 pub use command::{Command, CommandError, NoiseControlMode};
 pub use device_list::{
@@ -125,10 +126,17 @@ struct Tracked {
     retries: u32,
     /// The Device's place in the order of Attaches, while it is Attached.
     attach_order: Option<u64>,
+    /// When a Device that is Powering Off, and acknowledged it, is given up
+    /// on if it is still Connected.
+    power_off_deadline: Option<Instant>,
 }
 
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a Device that acknowledged a Power Off has to stop being
+/// Connected before Powering Off ends and the Power Off is reported as failed.
+const POWER_OFF_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a Sony request waits for its ACK before it is sent again.
 const ACK_TIMEOUT: Duration = Duration::from_secs(1);
@@ -229,7 +237,15 @@ impl<P: Platform> State<P> {
     ) {
         let mut observations = self.platform.observations();
         loop {
+            let power_off_deadline = self.power_off_deadline();
+            let power_off_timeout = async {
+                match power_off_deadline {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending().await,
+                }
+            };
             tokio::select! {
+                () = power_off_timeout => self.power_off_timed_out(),
                 Some(observation) = observations.recv() => self.observe(observation),
                 Some(event) = link_events.recv() => self.link_event(event),
                 command = commands.recv() => match command {
@@ -282,6 +298,7 @@ impl<P: Platform> State<P> {
             session: None,
             retries: 0,
             attach_order: None,
+            power_off_deadline: None,
         };
         if attach {
             tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
@@ -394,9 +411,18 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            LinkEventKind::Update(Update::PowerOffAcknowledged) => {
+                if device.state == DeviceState::PoweringOff {
+                    tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
+                }
+            }
             // The control link closing is part of switching off: the Device
-            // stays Powering Off until it stops being Connected.
-            LinkEventKind::Ended(_) if device.state == DeviceState::PoweringOff => {
+            // stays Powering Off until it stops being Connected. A Power Off
+            // the Device never acknowledged fails like any other request.
+            LinkEventKind::Ended(ref reason)
+                if device.state == DeviceState::PoweringOff
+                    && *reason != NotAttachedReason::NoResponse =>
+            {
                 tracked.session = None;
             }
             LinkEventKind::Ended(reason) => {
@@ -408,6 +434,7 @@ impl<P: Platform> State<P> {
                 );
                 tracked.session = None;
                 tracked.attach_order = None;
+                tracked.power_off_deadline = None;
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -450,6 +477,7 @@ impl<P: Platform> State<P> {
                 session.send(SessionCommand::PowerOff)?;
                 let tracked = self.devices.get_mut(&address).expect("checked above");
                 tracked.device.state = DeviceState::PoweringOff;
+                tracked.device.power_off_failed = false;
                 Ok(())
             }
             Command::RetryAttach(address) => {
@@ -473,6 +501,50 @@ impl<P: Platform> State<P> {
                 self.frame_log.stop();
                 Ok(())
             }
+        }
+    }
+
+    /// The earliest moment a Device that is Powering Off is given up on.
+    fn power_off_deadline(&self) -> Option<Instant> {
+        self.devices
+            .values()
+            .filter_map(|tracked| tracked.power_off_deadline)
+            .min()
+    }
+
+    /// Ends Powering Off for every Device still Connected past its deadline,
+    /// and reports that it didn't Power Off.
+    /// A Device whose control link is still open is Attached again; one
+    /// whose link closed is Attached afresh, as a newly Connected Device is.
+    fn power_off_timed_out(&mut self) {
+        let now = Instant::now();
+        let timed_out: Vec<DeviceAddress> = self
+            .devices
+            .iter()
+            .filter(|(_, tracked)| tracked.power_off_deadline.is_some_and(|d| d <= now))
+            .map(|(address, _)| address.clone())
+            .collect();
+        for address in timed_out {
+            let tracked = self.devices.get_mut(&address).expect("listed above");
+            tracked.power_off_deadline = None;
+            if tracked.session.is_some() {
+                tracked.device.state = DeviceState::Attached;
+            } else {
+                let device = &tracked.device;
+                tracked.device = Device::unidentified(
+                    device.address.clone(),
+                    device.name.clone(),
+                    DeviceState::Attaching,
+                );
+                tracked.attach_order = None;
+                tracked.retries = 0;
+                let vendor = tracked.vendor;
+                let session = self.attach(&address, vendor, Duration::ZERO);
+                let tracked = self.devices.get_mut(&address).expect("listed above");
+                tracked.session = Some(session);
+            }
+            let tracked = self.devices.get_mut(&address).expect("listed above");
+            tracked.device.power_off_failed = true;
         }
     }
 

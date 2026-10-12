@@ -33,6 +33,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     ambientLevel: 1,
     noiseCancellingLevel: 4,
     battery: { kind: "buds", left: 100, right: 100, case: null },
+    powerOffFailed: false,
     ...overrides,
   };
 }
@@ -51,6 +52,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     ambientLevel: 12,
     noiseCancellingLevel: null,
     battery: { kind: "headphones", level: 70 },
+    powerOffFailed: false,
     ...overrides,
   };
 }

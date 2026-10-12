@@ -28,6 +28,11 @@ export interface Device {
   noiseCancellingLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
+  /**
+   * The Device acknowledged the last Power Off but was still Connected well
+   * after. Cleared when it is asked to Power Off again.
+   */
+  powerOffFailed: boolean;
 }
 
 export type Model = "galaxyBuds4Pro" | "wh1000xm5";

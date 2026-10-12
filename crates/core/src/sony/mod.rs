@@ -87,6 +87,8 @@ struct InFlight {
     frame: Vec<u8>,
     /// How many times it has been sent.
     sends: u32,
+    /// Whether it asks the Device to Power Off.
+    power_off: bool,
 }
 
 /// One control link session with a Sony Device.
@@ -212,7 +214,7 @@ impl Session {
     /// response, such as its ACK, are then in [`Session::outgoing`].
     pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
         match frame.data_type {
-            DataType::Ack => self.acknowledged(frame),
+            DataType::Ack => return self.acknowledged(frame),
             DataType::Mdr | DataType::MdrNo2 => {
                 self.outgoing
                     .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
@@ -225,14 +227,18 @@ impl Session {
         Vec::new()
     }
 
-    fn acknowledged(&mut self, ack: &Frame) {
+    fn acknowledged(&mut self, ack: &Frame) -> Vec<Update> {
         // A stale ACK, for a frame other than the outstanding one, is ignored.
-        if self.in_flight.is_none() || ack.seq != 1 - self.seq {
-            return;
-        }
+        let Some(in_flight) = self.in_flight.take_if(|_| ack.seq == 1 - self.seq) else {
+            return Vec::new();
+        };
         self.seq = ack.seq;
-        self.in_flight = None;
         self.send_next();
+        if in_flight.power_off {
+            vec![Update::PowerOffAcknowledged]
+        } else {
+            Vec::new()
+        }
     }
 
     /// Handles a Table 1 message.
@@ -322,7 +328,12 @@ impl Session {
             let frame = encode(DataType::Mdr, self.seq, &payload);
             self.outgoing.push(frame.clone());
             self.sends += 1;
-            self.in_flight = Some(InFlight { frame, sends: 1 });
+            let power_off = payload.starts_with(&[command::POWER_SET_STATUS, power::POWER_OFF]);
+            self.in_flight = Some(InFlight {
+                frame,
+                sends: 1,
+                power_off,
+            });
         }
     }
 }
