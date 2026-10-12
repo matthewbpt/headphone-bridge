@@ -28,6 +28,8 @@ export interface Device {
   effectiveModeReason: EffectiveModeReason | null;
   /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
   ambientLevel: number | null;
+  /** In the Model's own steps, within `capabilities.noiseCancellingLevel`. Null until reported. */
+  noiseCancellingLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
 }
@@ -56,6 +58,7 @@ export type EffectiveModeReason = "budOutOfEar" | "unknown";
 export interface Capabilities {
   noiseControlModes: NoiseControlMode[];
   ambientLevel: LevelRange | null;
+  noiseCancellingLevel: LevelRange | null;
 }
 
 /** A level Capability's steps in the Model's own units, both ends included. */

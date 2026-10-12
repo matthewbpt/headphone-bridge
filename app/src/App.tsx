@@ -116,6 +116,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   // moment a mode is clicked, and goes back if the Device refuses.
   const shownMode = mode.pending ?? device.chosenMode;
   const ambientLevel = device.capabilities.ambientLevel;
+  const noiseCancellingLevel = device.capabilities.noiseCancellingLevel;
   return (
     <>
       <section className="hero">
@@ -150,6 +151,13 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               level={device.ambientLevel}
               range={ambientLevel}
               set={(level) => setAmbientLevel(device.address, level)}
+            />
+          )}
+          {noiseCancellingLevel && shownMode === "noiseCancelling" && (
+            <LevelSlider
+              title="Noise Cancelling Level"
+              level={device.noiseCancellingLevel}
+              range={noiseCancellingLevel}
             />
           )}
         </section>
@@ -259,7 +267,8 @@ function LevelSlider({
   /** The reported level; null until the Device first reports it. */
   level: number | null;
   range: LevelRange;
-  set: (level: number) => Promise<void>;
+  /** Asks the Device for a level; without it the slider only shows the level. */
+  set?: (level: number) => Promise<void>;
 }) {
   // The levels asked for, until snapshots report them. Dragging across
   // notches asks for each in turn. Only a change of level confirms one: a
@@ -272,9 +281,11 @@ function LevelSlider({
   const shown = pending ?? level;
   const choose = (asked: number) => {
     asked = Math.min(range.max, Math.max(range.min, asked));
-    if (asked === shown) return;
+    if (asked === shown || !set) return;
     send(asked, () => set(asked));
   };
+  // Nothing to act on until the Device reports a level, or with no way to set one.
+  const disabled = shown === null || !set;
 
   const steps = range.max - range.min + 1;
   const notched = steps <= MAX_NOTCHES;
@@ -285,7 +296,7 @@ function LevelSlider({
         <button
           className="level__step"
           aria-label="Less"
-          disabled={shown === null || shown <= range.min}
+          disabled={disabled || shown <= range.min}
           onClick={() => shown !== null && choose(shown - 1)}
         >
           <svg viewBox="0 0 16 16" aria-hidden>
@@ -306,7 +317,7 @@ function LevelSlider({
             max={range.max}
             step={1}
             value={shown ?? range.min}
-            disabled={shown === null}
+            disabled={disabled}
             aria-label={title}
             aria-busy={pending !== null}
             onChange={(e) => choose(Number(e.target.value))}
@@ -315,7 +326,7 @@ function LevelSlider({
         <button
           className="level__step"
           aria-label="More"
-          disabled={shown === null || shown >= range.max}
+          disabled={disabled || shown >= range.max}
           onClick={() => shown !== null && choose(shown + 1)}
         >
           <svg viewBox="0 0 16 16" aria-hidden>
