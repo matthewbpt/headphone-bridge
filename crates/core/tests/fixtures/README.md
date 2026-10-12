@@ -51,6 +51,9 @@ file.
   - `real-noise-control`: not from omarchy-buds but from the frame log, on
     2026-10-11. Attach, then two mode sets, each confirmed only by an ACK
     carrying the applied mode.
+  - `real-nc-level-0`…`4`: from the frame log, on 2026-10-12. One Attach
+    each, with Noise Cancelling chosen and the Noise Cancelling Level set to
+    0…4 on the phone beforehand. Extended status byte 24 reports the level.
 - `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
   mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
   exist from the frame log. No WH-1000XM5 capture exists yet.
