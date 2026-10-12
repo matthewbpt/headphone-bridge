@@ -560,6 +560,31 @@ async fn a_set_while_the_equalizer_is_unavailable_is_rejected_and_nothing_is_sen
 }
 
 #[tokio::test]
+async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equalizer() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")[..20]).await;
+    // EQEBB_GET_STATUS, answered DISABLE, and the Equalizer GET left
+    // unanswered.
+    assert_eq!(written(&mut link).await, sony_frame(1, &[0x52, 0x00]));
+    link.send.send(sony_ack(0)).unwrap();
+    link.send.send(sony_frame(1, &[0x53, 0x00, 0x01])).unwrap();
+    assert_eq!(written(&mut link).await, sony_ack(0));
+    assert_eq!(written(&mut link).await, sony_frame(0, &[0x56, 0x00]));
+    wait_for(&core, |list| list.devices[0].equalizer_unavailable).await;
+
+    let result = core
+        .command(Command::SetEqualizer(xm5().address, preset(0x16)))
+        .await;
+
+    assert_eq!(result, Err(CommandError::EqualizerUnavailable));
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "nothing else written");
+}
+
+#[tokio::test]
 async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
     let (core, _os, mut link) = attached_xm5().await;
     // The Device reports Manual without its curve.

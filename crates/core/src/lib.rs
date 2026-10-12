@@ -672,6 +672,9 @@ impl<P: Platform> State<P> {
             Command::SetEqualizer(address, mut equalizer) => {
                 let (device, session) = self.attached(&address)?;
                 check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
+                if device.equalizer_unavailable {
+                    return Err(CommandError::EqualizerUnavailable);
+                }
                 let reported = device
                     .equalizer
                     .as_ref()
@@ -692,9 +695,6 @@ impl<P: Platform> State<P> {
                             .clone()
                             .ok_or(CommandError::SettingsNotReported)?,
                     );
-                }
-                if device.equalizer_unavailable {
-                    return Err(CommandError::EqualizerUnavailable);
                 }
                 session.send(SessionCommand::SetEqualizer(equalizer))
             }
