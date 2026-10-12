@@ -658,7 +658,9 @@ async fn run_sony_session(
                     SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
                     // No Sony Model has a Noise Cancelling Level, so the
                     // command is rejected before it gets here.
-                    SessionCommand::SetNoiseCancellingLevel(_) => {}
+                    SessionCommand::SetNoiseCancellingLevel(_) => {
+                        debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
+                    }
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;
