@@ -14,8 +14,7 @@ import type { DeviceList, Labels } from "../deviceList";
 export class FakeCore {
   private deviceList: DeviceList;
   private readonly listeners = new Set<(event: { payload: DeviceList }) => void>();
-  private readonly answers = new Map<Command, Answer>();
-  private frameLogAnswer: FrameLogAnswer = "accept";
+  private readonly answers = new Map<AnsweredCommand, Answer>();
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
@@ -37,15 +36,15 @@ export class FakeCore {
    * (the default), reject it with an error, or hold it until `release`.
    * Turning the frame log on or off is answered at once: accepted or rejected.
    */
-  answer(command: Command, answer: Answer): void;
-  answer(command: "set_frame_log", answer: FrameLogAnswer): void;
-  answer(command: Command | "set_frame_log", answer: Answer) {
-    if (command === "set_frame_log") this.frameLogAnswer = answer as FrameLogAnswer;
-    else this.answers.set(command, answer);
+  answer<C extends AnsweredCommand>(
+    command: C,
+    answer: C extends RecordedCommand ? Answer : Exclude<Answer, "hold">,
+  ) {
+    this.answers.set(command, answer);
   }
 
   /** Answers the oldest held call of `command`. */
-  async release(command: Command, answer: Exclude<Answer, "hold"> = "accept") {
+  async release(command: RecordedCommand, answer: Exclude<Answer, "hold"> = "accept") {
     const call = this.calls.find((call) => call.command === command && call.held);
     if (!call) throw new Error(`no held ${command} call to release`);
     call.held = false;
@@ -81,7 +80,8 @@ export class FakeCore {
     retry_attach: (args) => this.record("retry_attach", args),
     frame_log: () => Promise.resolve(this.frameLog),
     set_frame_log: ({ enabled }) => {
-      if (this.frameLogAnswer !== "accept") return Promise.reject(this.frameLogAnswer.reject);
+      const answer = this.answers.get("set_frame_log") ?? "accept";
+      if (typeof answer === "object") return Promise.reject(answer.reject);
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
@@ -107,7 +107,7 @@ export class FakeCore {
     },
   };
 
-  private record<C extends Command>(command: C, args: Commands[C]["args"]): Promise<void> {
+  private record<C extends RecordedCommand>(command: C, args: Commands[C]["args"]): Promise<void> {
     const answer = this.answers.get(command) ?? "accept";
     let settle!: Call["settle"];
     const promise = new Promise<void>((resolve, reject) => (settle = { resolve, reject }));
@@ -119,19 +119,20 @@ export class FakeCore {
 }
 
 /** The commands the fake core records. */
-export type Command = keyof Pick<
-  Commands,
-  "set_noise_control_mode" | "set_ambient_level" | "set_noise_cancelling_level" | "retry_attach"
->;
+export type RecordedCommand =
+  | "set_noise_control_mode"
+  | "set_ambient_level"
+  | "set_noise_cancelling_level"
+  | "retry_attach";
+
+/** The commands a test can tell the fake core how to answer. */
+type AnsweredCommand = RecordedCommand | "set_frame_log";
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };
 
-/** Accept turning the frame log on or off, or reject it with the core's error. */
-export type FrameLogAnswer = Exclude<Answer, "hold">;
-
 export interface SentCommand {
-  command: Command;
+  command: RecordedCommand;
   args: Record<string, unknown>;
 }
 
