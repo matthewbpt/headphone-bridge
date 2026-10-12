@@ -880,6 +880,30 @@ describe("Power Off", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't Power Off: the Device is Powering Off");
   });
 
+  it("tells the listener a Device didn't power off, and enables its controls again", async () => {
+    const core = new FakeCore(only(xm5({ chosenMode: "ambient", state: { kind: "poweringOff" } })));
+    renderWindow(core);
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(xm5({ chosenMode: "ambient", powerOffFailed: true })));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't power off");
+    expect(await powerOff()).toBeEnabled();
+    for (const radio of screen.getAllByRole("radio")) {
+      if (radio.getAttribute("aria-checked") === "false") expect(radio).toBeEnabled();
+    }
+    expect(screen.getByRole("slider")).toBeEnabled();
+  });
+
+  it("still says a Device didn't power off while it is attached again", async () => {
+    const core = new FakeCore(only(xm5({ state: { kind: "poweringOff" } })));
+    renderWindow(core);
+
+    core.emit(only(notAttached(xm5({ powerOffFailed: true }), { kind: "attaching" })));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't power off");
+  });
+
   it("isn't shown for a Buds4 Pro", async () => {
     renderWindow(new FakeCore(only(buds4Pro())));
 

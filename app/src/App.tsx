@@ -87,7 +87,7 @@ function DevicePills({
 /**
  * The Device's OS name, and its Model when that says something the name
  * doesn't. At the right, Power Off, as in Sony's Sound Connect app, for a
- * Model that has the Capability.
+ * Model that has the Capability. Below, whether the last Power Off failed.
  */
 function Header({ device, labels }: { device: Device; labels: Labels }) {
   const model = device.model && labels.models[device.model];
@@ -98,6 +98,12 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
         {model && model !== device.name && <div className="subtitle">{model}</div>}
       </div>
       {device.capabilities.powerOff && <PowerOffButton device={device} />}
+      {/* Kept while the Device is attached again, when the button is hidden. */}
+      {device.powerOffFailed && (
+        <p className="error header__error" role="alert">
+          {device.name} didn't power off
+        </p>
+      )}
     </header>
   );
 }
