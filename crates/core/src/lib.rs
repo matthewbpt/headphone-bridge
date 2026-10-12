@@ -183,9 +183,12 @@ impl Drop for LinkSession {
 }
 
 /// A command for the Device, already checked against its Capabilities.
+// Named after the `Command`s they come from.
+#[allow(clippy::enum_variant_names)]
 enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
+    SetNoiseCancellingLevel(u8),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -424,6 +427,18 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetAmbientLevel(level))
             }
+            Command::SetNoiseCancellingLevel(address, level) => {
+                let (device, session) = self.attached(&address)?;
+                let range = device
+                    .capabilities
+                    .noise_cancelling_level
+                    .ok_or(CommandError::MissingCapability)?;
+                if !(range.min..=range.max).contains(&level) {
+                    return Err(CommandError::OutOfRange);
+                }
+                device.settings_reported()?;
+                session.send(SessionCommand::SetNoiseCancellingLevel(level))
+            }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
                 if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
@@ -557,6 +572,9 @@ async fn run_samsung_session(
                         session.set_noise_control_mode(mode)
                     }
                     SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
+                    SessionCommand::SetNoiseCancellingLevel(level) => {
+                        session.set_noise_cancelling_level(level)
+                    }
                 };
                 for frame in frames {
                     if !send(slug, frame) {
@@ -641,6 +659,9 @@ async fn run_sony_session(
                         session.set_noise_control_mode(mode)
                     }
                     SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
+                    // No Sony Model has a Noise Cancelling Level, so the
+                    // command is rejected before it gets here.
+                    SessionCommand::SetNoiseCancellingLevel(_) => {}
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;

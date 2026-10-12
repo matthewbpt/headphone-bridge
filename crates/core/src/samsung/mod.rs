@@ -22,6 +22,7 @@ mod id {
     pub const EXTENDED_STATUS_UPDATED: u8 = 97;
     pub const NOISE_CONTROLS_UPDATE: u8 = 119;
     pub const NOISE_CONTROLS: u8 = 120;
+    pub const NOISE_REDUCTION_LEVEL: u8 = 131;
     pub const AMBIENT_VOLUME: u8 = 132;
     pub const MANAGER_INFO: u8 = 136;
 }
@@ -45,6 +46,10 @@ pub struct Session {
     pending_mode: Option<NoiseControlMode>,
     /// The Ambient Level the app last asked for, until the Device confirms it.
     pending_level: Option<u8>,
+    /// The Noise Cancelling Level the app last asked for, until the Device
+    /// confirms it. Kept apart from the Ambient Level's, so that sets of the
+    /// two can't confirm each other.
+    pending_noise_cancelling_level: Option<u8>,
     /// Whether a Chosen Mode has been reported yet.
     chosen_known: bool,
 }
@@ -78,6 +83,18 @@ impl Session {
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
         self.pending_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
+    }
+
+    /// The frames that ask the Device to set the Noise Cancelling Level, in
+    /// the Model's own steps. A hypothesis by analogy with the Ambient Level
+    /// set, until confirmed on hardware: GalaxyBudsClient sends this message
+    /// to the original Buds Pro, and treats its ACK as `83 <level>`.
+    pub fn set_noise_cancelling_level(&mut self, level: u8) -> Vec<Vec<u8>> {
+        self.pending_noise_cancelling_level = Some(level);
+        vec![
+            encode(id::NOISE_REDUCTION_LEVEL, &[level]),
+            Self::handshake(),
+        ]
     }
 
     /// The update for a mode the Device reports applying while the buds are
@@ -171,6 +188,12 @@ impl Session {
                     id::AMBIENT_VOLUME if self.pending_level == Some(p[1]) => {
                         self.pending_level = None;
                         self.ambient_level(p.get(1)).into_iter().collect()
+                    }
+                    id::NOISE_REDUCTION_LEVEL
+                        if self.pending_noise_cancelling_level == Some(p[1]) =>
+                    {
+                        self.pending_noise_cancelling_level = None;
+                        self.noise_cancelling_level(p.get(1)).into_iter().collect()
                     }
                     _ => Vec::new(),
                 };

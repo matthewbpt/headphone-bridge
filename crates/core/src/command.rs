@@ -11,6 +11,8 @@ pub enum Command {
     SetNoiseControlMode(DeviceAddress, NoiseControlMode),
     /// Sets the Ambient Level, in the Model's own steps.
     SetAmbientLevel(DeviceAddress, u8),
+    /// Sets the Noise Cancelling Level, in the Model's own steps.
+    SetNoiseCancellingLevel(DeviceAddress, u8),
     /// Tries again to Attach a Connected Device that isn't Attached.
     RetryAttach(DeviceAddress),
     /// Switches the frame log on, appending to the given file, or off (`None`).
