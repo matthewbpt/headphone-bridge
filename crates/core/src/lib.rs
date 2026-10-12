@@ -432,11 +432,7 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                *device = Device::unidentified(
-                    device.address.clone(),
-                    device.name.clone(),
-                    DeviceState::NotAttached { reason },
-                );
+                *device = device.detached(DeviceState::NotAttached { reason });
                 tracked.session = None;
                 tracked.attach_order = None;
                 tracked.power_off_deadline = None;
@@ -535,12 +531,7 @@ impl<P: Platform> State<P> {
             if tracked.session.is_some() {
                 tracked.device.state = DeviceState::Attached;
             } else {
-                let device = &tracked.device;
-                tracked.device = Device::unidentified(
-                    device.address.clone(),
-                    device.name.clone(),
-                    DeviceState::Attaching,
-                );
+                tracked.device = tracked.device.detached(DeviceState::Attaching);
                 tracked.attach_order = None;
                 tracked.retries = 0;
                 let vendor = tracked.vendor;

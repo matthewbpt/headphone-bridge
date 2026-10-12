@@ -262,7 +262,9 @@ async fn a_dropped_link_detaches_the_xm5() {
             reason: NotAttachedReason::LinkDropped
         }
     );
-    assert_eq!((device.model, device.battery), (None, None));
+    assert_eq!(device.battery, None, "no stale values remain");
+    // It's the same headphones while they stay Connected.
+    assert_eq!(device.model, Some(Model::Wh1000Xm5));
 }
 
 #[tokio::test]

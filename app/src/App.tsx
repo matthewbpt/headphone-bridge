@@ -98,7 +98,7 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
         {model && model !== device.name && <div className="subtitle">{model}</div>}
       </div>
       {device.capabilities.powerOff && <PowerOffButton device={device} />}
-      {/* Kept while the Device is attached again, when the button is hidden. */}
+      {/* Kept while the Device is Attached again, when the button is disabled. */}
       {device.powerOffFailed && (
         <p className="error header__error" role="alert">
           {device.name} didn't power off

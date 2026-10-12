@@ -307,8 +307,11 @@ async fn a_dropped_link_detaches_the_device() {
             reason: NotAttachedReason::LinkDropped
         }
     );
-    assert_eq!((device.model, device.battery), (None, None));
-    assert_eq!(device.capabilities, Capabilities::default());
+    assert_eq!(device.battery, None, "no stale values remain");
+    assert_eq!(device.chosen_mode, None, "no stale values remain");
+    // It's the same headphones while they stay Connected.
+    assert_eq!(device.model, Some(Model::GalaxyBuds4Pro));
+    assert_eq!(device.capabilities, Model::GalaxyBuds4Pro.capabilities());
 }
 
 #[tokio::test]

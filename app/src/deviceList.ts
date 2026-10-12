@@ -12,7 +12,10 @@ export interface Device {
   address: string;
   /** The name the OS reports. */
   name: string;
-  /** Null until identified, and for unsupported Models. */
+  /**
+   * Null until identified, and for unsupported Models. Kept, with the
+   * Capabilities, while the Device is Attached again in the same Connected spell.
+   */
   model: Model | null;
   state: DeviceState;
   capabilities: Capabilities;

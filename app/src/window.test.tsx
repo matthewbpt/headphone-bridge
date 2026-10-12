@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
-import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, xm5 } from "./testing/devices";
+import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
 
@@ -833,10 +833,16 @@ describe("Power Off", () => {
     expect((await powerOff()).closest("header")).toHaveTextContent("WH-1000XM5");
   });
 
-  it("is disabled unless the Device is Attached", async () => {
-    const core = new FakeCore(only(xm5({ state: { kind: "attaching" } })));
+  it("is disabled, not hidden, while the Device reattaches", async () => {
+    const core = new FakeCore(only(xm5()));
     renderWindow(core);
+    expect(await powerOff()).toBeEnabled();
 
+    core.emit(only(reattaching(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } })));
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(reattaching(xm5(), { kind: "attaching" })));
+    expect(await screen.findByText("Attaching…")).toBeVisible();
     expect(await powerOff()).toBeDisabled();
 
     core.emit(only(xm5()));
@@ -899,9 +905,10 @@ describe("Power Off", () => {
     const core = new FakeCore(only(xm5({ state: { kind: "poweringOff" } })));
     renderWindow(core);
 
-    core.emit(only(notAttached(xm5({ powerOffFailed: true }), { kind: "attaching" })));
+    core.emit(only(reattaching(xm5({ powerOffFailed: true }), { kind: "attaching" })));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't power off");
+    expect(await powerOff()).toBeDisabled();
   });
 
   it("isn't shown for a Buds4 Pro", async () => {
