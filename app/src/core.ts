@@ -19,6 +19,7 @@ export type Commands = {
   set_ambient_level: { args: { address: string; level: number }; result: void };
   set_noise_cancelling_level: { args: { address: string; level: number }; result: void };
   retry_attach: { args: { address: string }; result: void };
+  power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
 };
@@ -28,6 +29,7 @@ export type CommandError =
   | "unknownDevice"
   | "notAttached"
   | "unsupportedModel"
+  | "poweringOff"
   | "missingCapability"
   | "outOfRange"
   | "settingsNotReported"
@@ -48,6 +50,7 @@ const WORDS: {
   unknownDevice: "the Device isn't Connected",
   notAttached: "the Device isn't Attached",
   unsupportedModel: "the Model isn't supported",
+  poweringOff: "the Device is Powering Off",
   missingCapability: "the Model doesn't have that setting",
   outOfRange: "that value is outside the Model's range",
   settingsNotReported: "the Device hasn't reported its settings yet",
@@ -117,6 +120,11 @@ export function setNoiseCancellingLevel(address: string, level: number): Promise
 /** Tries again to Attach a Connected Device that isn't Attached. */
 export function retryAttach(address: string): Promise<void> {
   return send("retry_attach", { address });
+}
+
+/** Asks the Device to Power Off. Resolves once the core accepts the command. */
+export function powerOff(address: string): Promise<void> {
+  return send("power_off", { address });
 }
 
 /**

@@ -1,8 +1,8 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import { reasonText } from "./deviceList";
-import { retryAttach, setNoiseControlMode, useDeviceList, useLabels, whyRejected } from "./core";
-import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
+import { powerOff, retryAttach, setNoiseControlMode, useDeviceList, useLabels, whyRejected } from "./core";
+import { BatteryGlyph, DevicePicture, ModeIcon, PowerIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
 import { Levels } from "./Levels";
@@ -84,14 +84,47 @@ function DevicePills({
   );
 }
 
-/** The Device's OS name, and its Model when that says something the name doesn't. */
+/**
+ * The Device's OS name, and its Model when that says something the name
+ * doesn't. At the right, Power Off, as in Sony's Sound Connect app, for a
+ * Model that has the Capability.
+ */
 function Header({ device, labels }: { device: Device; labels: Labels }) {
   const model = device.model && labels.models[device.model];
   return (
     <header className="header">
-      <h1 className="title">{device.name}</h1>
-      {model && model !== device.name && <div className="subtitle">{model}</div>}
+      <div className="header__names">
+        <h1 className="title">{device.name}</h1>
+        {model && model !== device.name && <div className="subtitle">{model}</div>}
+      </div>
+      {device.capabilities.powerOff && <PowerOffButton device={device} />}
     </header>
+  );
+}
+
+/** Icon only, with no confirmation step. */
+function PowerOffButton({ device }: { device: Device }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        className="icon-button"
+        title="Power Off"
+        aria-label="Power Off"
+        disabled={device.state.kind !== "attached"}
+        onClick={() => {
+          setError(null);
+          powerOff(device.address).catch((e) => setError(`Couldn't Power Off: ${whyRejected(e)}`));
+        }}
+      >
+        <PowerIcon />
+      </button>
+      {error && (
+        <p className="error header__error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -106,14 +139,16 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   );
 
   const attached = device.state.kind === "attached";
+  // A Device that is Powering Off keeps its controls in view, all disabled.
+  const poweringOff = device.state.kind === "poweringOff";
   return (
     <>
       <section className="hero">
         <DevicePicture model={device.model} labels={labels} />
         <Status device={device} labels={labels} />
       </section>
-      {attached && (
-        <section className="card">
+      {(attached || poweringOff) && (
+        <fieldset className="card controls" disabled={poweringOff}>
           {device.capabilities.noiseControlModes.length > 0 && (
             <>
               <NoiseControlModeSelector
@@ -135,7 +170,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
             </>
           )}
           <Levels device={device} shownMode={mode.shown} />
-        </section>
+        </fieldset>
       )}
     </>
   );
@@ -147,7 +182,10 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
  */
 const MODE_ORDER: NoiseControlMode[] = ["off", "ambient", "adaptive", "noiseCancelling"];
 
-/** Under the picture: the battery once Attached, else why the controls aren't there. */
+/**
+ * Under the picture: the battery once Attached, else what the Device is
+ * doing or why the controls aren't there.
+ */
 function Status({ device, labels }: { device: Device; labels: Labels }) {
   switch (device.state.kind) {
     case "attached":
@@ -160,6 +198,12 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
       return (
         <div className="status muted">
           <span className="spinner" aria-hidden /> Attaching…
+        </div>
+      );
+    case "poweringOff":
+      return (
+        <div className="status muted">
+          <span className="spinner" aria-hidden /> Powering Off…
         </div>
       );
     case "notAttached":
