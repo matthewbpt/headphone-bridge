@@ -127,13 +127,8 @@ function Curve({
   pending: boolean;
   onRelease: (values: number[]) => void;
 }) {
-  const [dragged, setDragged] = useState<number[] | null>(null);
+  const { dragged, drag, release } = useDrag(onRelease);
   const curve = dragged ?? values;
-  const release = () => {
-    if (dragged === null) return;
-    setDragged(null);
-    onRelease(dragged);
-  };
 
   const { min, max } = bands.range;
   const points = curve.map((value, i) => `${i + 0.5},${(max - value) / (max - min)}`).join(" ");
@@ -157,7 +152,7 @@ function Curve({
             value={curve[i]}
             aria-label={`${frequency} Band`}
             aria-busy={pending}
-            onChange={(e) => setDragged(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))}
+            onChange={(e) => drag(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))}
             onPointerUp={release}
             onKeyUp={release}
           />
@@ -184,12 +179,7 @@ function ClearBass({
   pending: boolean;
   onRelease: (value: number) => void;
 }) {
-  const [dragged, setDragged] = useState<number | null>(null);
-  const release = () => {
-    if (dragged === null) return;
-    setDragged(null);
-    onRelease(dragged);
-  };
+  const { dragged, drag, release } = useDrag(onRelease);
 
   return (
     <label className="equalizer__clear-bass" data-pending={pending}>
@@ -203,12 +193,26 @@ function ClearBass({
         aria-label="Clear Bass"
         aria-orientation="horizontal"
         aria-busy={pending}
-        onChange={(e) => setDragged(Number(e.target.value))}
+        onChange={(e) => drag(Number(e.target.value))}
         onPointerUp={release}
         onKeyUp={release}
       />
     </label>
   );
+}
+
+/**
+ * A slider's drag: the value being dragged, shown only here until `release`,
+ * on pointer or key up, hands it to `onRelease`. Null while not dragged.
+ */
+function useDrag<T>(onRelease: (value: T) => void) {
+  const [dragged, setDragged] = useState<T | null>(null);
+  const release = () => {
+    if (dragged === null) return;
+    setDragged(null);
+    onRelease(dragged);
+  };
+  return { dragged, drag: setDragged, release };
 }
 
 /**
