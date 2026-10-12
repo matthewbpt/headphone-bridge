@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import type { DeviceList, Labels, Model, NoiseControlMode } from "./deviceList";
+import type { DeviceList, Equalizer, Labels, Model, NoiseControlMode } from "./deviceList";
 
 // The window's only way in to the core: its commands, as named and typed
 // functions, and the hooks that follow its snapshots, labels and frame log.
@@ -19,6 +19,7 @@ export type Commands = {
   set_noise_control_mode: { args: { address: string; mode: NoiseControlMode }; result: void };
   set_ambient_level: { args: { address: string; level: number }; result: void };
   set_noise_cancelling_level: { args: { address: string; level: number }; result: void };
+  set_equalizer: { args: { address: string; equalizer: Equalizer }; result: void };
   retry_attach: { args: { address: string }; result: void };
   power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
@@ -57,6 +58,7 @@ export type CommandError =
   | "poweringOff"
   | "missingCapability"
   | "outOfRange"
+  | "unavailablePreset"
   | "settingsNotReported"
   | { frameLogUnavailable: string };
 
@@ -84,6 +86,7 @@ const WORDS: {
   poweringOff: "the Device is Powering Off",
   missingCapability: "the Model doesn't have that setting",
   outOfRange: "that value is outside the Model's range",
+  unavailablePreset: "the app can't pick that Preset",
   settingsNotReported: "the Device hasn't reported its settings yet",
   frameLogUnavailable: (message) => message,
   frameLogOff: "the frame log is off",
@@ -149,6 +152,11 @@ export function setAmbientLevel(address: string, level: number): Promise<void> {
 /** Asks the Device to set the Noise Cancelling Level, in the Model's own steps. */
 export function setNoiseCancellingLevel(address: string, level: number): Promise<void> {
   return send("set_noise_cancelling_level", { address, level });
+}
+
+/** Asks the Device to set its whole Equalizer. Resolves once the core accepts the command. */
+export function setEqualizer(address: string, equalizer: Equalizer): Promise<void> {
+  return send("set_equalizer", { address, equalizer });
 }
 
 /** Tries again to Attach a Connected Device that isn't Attached. */

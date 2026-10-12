@@ -572,3 +572,38 @@ button {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
+
+/* Equalizer: a card below the mode card, with the Preset dropdown. A picked
+   Preset is dimmed until the Device confirms it. */
+
+.equalizer {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+.equalizer__title {
+  float: left;
+  padding: 0;
+  margin: 0 4px 6px;
+}
+
+.equalizer select {
+  clear: left;
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--circle);
+  color: var(--text);
+  font: inherit;
+}
+
+.equalizer select[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.equalizer:disabled select {
+  opacity: 0.5;
+}

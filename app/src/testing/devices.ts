@@ -10,6 +10,19 @@ const buds4ProCapabilities: Capabilities = {
   ambientLevel: { min: 0, max: 4 },
   noiseCancellingLevel: { min: 0, max: 4 },
   powerOff: false,
+  equalizer: {
+    presets: [
+      { id: 0, name: "Normal", editable: false, selectable: true },
+      { id: 1, name: "Bass boost", editable: false, selectable: true },
+      { id: 2, name: "Soft", editable: false, selectable: true },
+      { id: 3, name: "Dynamic", editable: false, selectable: true },
+      { id: 4, name: "Clear", editable: false, selectable: true },
+      { id: 5, name: "Treble boost", editable: false, selectable: true },
+      { id: 7, name: "Custom", editable: false, selectable: false },
+    ],
+    bands: null,
+    clearBass: null,
+  },
 };
 
 const xm5Capabilities: Capabilities = {
@@ -17,6 +30,7 @@ const xm5Capabilities: Capabilities = {
   ambientLevel: { min: 1, max: 20 },
   noiseCancellingLevel: null,
   powerOff: true,
+  equalizer: null,
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -32,6 +46,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 1,
     noiseCancellingLevel: 4,
+    equalizer: { preset: 0, bands: null, clearBass: null },
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,
     reportedAt: null,
@@ -52,6 +67,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 12,
     noiseCancellingLevel: null,
+    equalizer: null,
     battery: { kind: "headphones", level: 70 },
     powerOffFailed: false,
     reportedAt: null,
@@ -69,12 +85,14 @@ export function notAttached(device: Device, state: Device["state"]): Device {
       ambientLevel: null,
       noiseCancellingLevel: null,
       powerOff: false,
+      equalizer: null,
     },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,
     ambientLevel: null,
     noiseCancellingLevel: null,
+    equalizer: null,
     battery: null,
     reportedAt: null,
   };

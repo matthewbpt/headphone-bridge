@@ -30,6 +30,8 @@ export interface Device {
   ambientLevel: number | null;
   /** In the Model's own steps, within `capabilities.noiseCancellingLevel`. Null until reported. */
   noiseCancellingLevel: number | null;
+  /** The Equalizer the Device reports. Null until reported. */
+  equalizer: Equalizer | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
   /**
@@ -77,6 +79,52 @@ export interface Capabilities {
   noiseCancellingLevel: LevelRange | null;
   /** Whether the app can Power Off the Device. */
   powerOff: boolean;
+  /** The Model's Equalizer, if the app can show and change it. */
+  equalizer: EqualizerCapability | null;
+}
+
+/** What a Model's Equalizer offers. */
+export interface EqualizerCapability {
+  /** Every Preset the Device can report, in the order the Model lists them. */
+  presets: Preset[];
+  /** Null if the Model's Bands can't be shown. */
+  bands: Bands | null;
+  /** Clear Bass's range in the Model's own steps, if it has Clear Bass. */
+  clearBass: StepRange | null;
+}
+
+export interface Preset {
+  /** The Preset's id on the wire. */
+  id: number;
+  /** In the Model's own words. */
+  name: string;
+  /** Whether its Bands can be changed while on it. */
+  editable: boolean;
+  /** Whether the app can pick it. A Preset it can't is only reported. */
+  selectable: boolean;
+}
+
+export interface Bands {
+  /** Each Band's centre frequency, as the app labels it, lowest first. */
+  frequencies: string[];
+  /** The range every Band shares, in the Model's own steps. */
+  range: StepRange;
+}
+
+/** A signed setting's steps in the Model's own units, both ends included. */
+export interface StepRange {
+  min: number;
+  max: number;
+}
+
+/** An Equalizer's settings, as reported by a Device or asked of it. */
+export interface Equalizer {
+  /** The Preset's wire id: possibly one the Model's Capability doesn't list. */
+  preset: number;
+  /** Each Band's value, lowest first. Null when not reported, or left unchanged by a set. */
+  bands: number[] | null;
+  /** Null when not reported, or left unchanged by a set. */
+  clearBass: number | null;
 }
 
 /** A level Capability's steps in the Model's own units, both ends included. */

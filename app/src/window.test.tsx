@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
@@ -700,6 +700,172 @@ describe("Noise Cancelling Level", () => {
     expect(core.sent()).toEqual([
       { command: "set_noise_cancelling_level", args: { address: BUDS_ADDRESS, level: 3 } },
     ]);
+  });
+});
+
+describe("Equalizer", () => {
+  const preset = () => screen.findByRole("combobox", { name: "Preset" });
+  const optionNames = async () =>
+    Array.from((await preset()).querySelectorAll("option"), (option) => option.textContent);
+
+  it("lists the Buds4 Pro's Presets under Samsung's names, with the current one selected", async () => {
+    renderWindow(new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } }))));
+
+    expect(await optionNames()).toEqual([
+      "Normal",
+      "Bass boost",
+      "Soft",
+      "Dynamic",
+      "Clear",
+      "Treble boost",
+      "Custom",
+    ]);
+    expect(await preset()).toHaveDisplayValue("Dynamic");
+  });
+
+  it("sends a picked Preset and shows it Pending until a snapshot confirms it", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Bass boost");
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: BUDS_ADDRESS, equalizer: { preset: 1, bands: null, clearBass: null } },
+      },
+    ]);
+    expect(await preset()).toHaveDisplayValue("Bass boost");
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ equalizer: { preset: 1, bands: null, clearBass: null } })));
+
+    expect(await preset()).toHaveDisplayValue("Bass boost");
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows a Preset the app doesn't know as Unrecognised, and recovers when a known one is picked", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 9, bands: null, clearBass: null } })));
+    renderWindow(core);
+
+    expect(await preset()).toHaveDisplayValue("Unrecognised Preset");
+    const known = ["Normal", "Bass boost", "Soft", "Dynamic", "Clear", "Treble boost", "Custom"];
+    for (const name of known) {
+      expect(screen.getByRole<HTMLOptionElement>("option", { name }).selected).toBe(false);
+    }
+
+    await userEvent.selectOptions(await preset(), "Normal");
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: BUDS_ADDRESS, equalizer: { preset: 0, bands: null, clearBass: null } },
+      },
+    ]);
+    core.emit(only(buds4Pro({ equalizer: { preset: 0, bands: null, clearBass: null } })));
+
+    expect(await preset()).toHaveDisplayValue("Normal");
+    expect(screen.queryByRole("option", { name: "Unrecognised Preset" })).not.toBeInTheDocument();
+  });
+
+  it("shows Custom, set from Samsung's app, without offering it to pick", async () => {
+    renderWindow(new FakeCore(only(buds4Pro({ equalizer: { preset: 7, bands: null, clearBass: null } }))));
+
+    expect(await preset()).toHaveDisplayValue("Custom");
+    expect(screen.getByRole("option", { name: "Custom" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Normal" })).toBeEnabled();
+  });
+
+  it("keeps the newest Preset Pending until it lands, past the one picked before it", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Bass boost");
+    await userEvent.selectOptions(await preset(), "Soft");
+    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
+      { preset: 1, bands: null, clearBass: null },
+      { preset: 2, bands: null, clearBass: null },
+    ]);
+
+    core.emit(only(buds4Pro({ equalizer: { preset: 1, bands: null, clearBass: null } })));
+    expect(await preset()).toHaveDisplayValue("Soft");
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ equalizer: { preset: 2, bands: null, clearBass: null } })));
+    expect(await preset()).toHaveDisplayValue("Soft");
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("goes back to the reported Preset when the Device doesn't confirm within 10 s", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    renderWindow(core);
+    const select = await preset();
+    freezeClock();
+
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(select).toHaveAttribute("aria-busy", "true");
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Bass boost Preset wasn't confirmed by the Device");
+    expect(select).toHaveDisplayValue("Dynamic");
+    expect(select).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("goes back to the reported Preset and shows why when the core rejects it", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    core.answer("set_equalizer", "hold");
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Clear");
+    await core.release("set_equalizer", { reject: "unavailablePreset" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Clear Preset: the app can't pick that Preset");
+    expect(await preset()).toHaveDisplayValue("Dynamic");
+  });
+
+  it("follows a Preset changed from Samsung's app", async () => {
+    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    renderWindow(core);
+    expect(await preset()).toHaveDisplayValue("Dynamic");
+
+    core.emit(only(buds4Pro({ equalizer: { preset: 5, bands: null, clearBass: null } })));
+
+    expect(await preset()).toHaveDisplayValue("Treble boost");
+  });
+
+  it("is shown whatever Noise Control Mode is chosen, with no curve", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "off" })));
+    renderWindow(core);
+    const card = await screen.findByRole("group", { name: "Equalizer" });
+
+    for (const chosenMode of ["noiseCancelling", "ambient", "adaptive"] as const) {
+      core.emit(only(buds4Pro({ chosenMode })));
+      expect(screen.getByRole("group", { name: "Equalizer" })).toBeVisible();
+    }
+    expect(within(card).queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  it("is disabled while the Device is Powering Off", async () => {
+    renderWindow(new FakeCore(only(buds4Pro({ state: { kind: "poweringOff" } }))));
+
+    expect(await preset()).toBeDisabled();
+  });
+
+  it("is hidden while the Device isn't Attached", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    renderWindow(core);
+    expect(await preset()).toBeVisible();
+
+    core.emit(only(reattaching(buds4Pro(), { kind: "attaching" })));
+
+    expect(await screen.findByText("Attaching…")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Equalizer" })).not.toBeInTheDocument();
+  });
+
+  it("isn't shown for a Model without an Equalizer", async () => {
+    renderWindow(new FakeCore(only(xm5())));
+
+    expect(await screen.findByRole("radiogroup", { name: "Noise Control Mode" })).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Equalizer" })).not.toBeInTheDocument();
   });
 });
 
