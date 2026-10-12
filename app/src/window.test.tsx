@@ -457,6 +457,25 @@ describe("Noise Cancelling Level", () => {
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
   });
 
+  it("stays while an earbud is out and the Effective Mode has dropped to Off", async () => {
+    renderWindow(
+      new FakeCore(
+        only(
+          buds4Pro({
+            chosenMode: "noiseCancelling",
+            effectiveMode: "off",
+            effectiveModeReason: "budOutOfEar",
+            noiseCancellingLevel: 2,
+          }),
+        ),
+      ),
+    );
+
+    expect(await screen.findByText("Paused: an earbud is out of the ear")).toBeVisible();
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toBeEnabled();
+  });
+
   it("isn't shown for a WH-1000XM5", async () => {
     renderWindow(new FakeCore(only(xm5({ chosenMode: "noiseCancelling" }))));
 
