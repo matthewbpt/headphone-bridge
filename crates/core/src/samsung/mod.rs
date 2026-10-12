@@ -117,9 +117,7 @@ impl Session {
     fn ambient_level(&self, value: Option<&u8>) -> Option<Update> {
         let range = self.model?.capabilities().ambient_level?;
         let level = *value?;
-        (range.min..=range.max)
-            .contains(&level)
-            .then_some(Update::AmbientLevel(level))
+        range.contains(level).then_some(Update::AmbientLevel(level))
     }
 
     /// The Noise Cancelling Level a Device reports as `value`, if it is in
@@ -127,8 +125,8 @@ impl Session {
     fn noise_cancelling_level(&self, value: Option<&u8>) -> Option<Update> {
         let range = self.model?.capabilities().noise_cancelling_level?;
         let level = *value?;
-        (range.min..=range.max)
-            .contains(&level)
+        range
+            .contains(level)
             .then_some(Update::NoiseCancellingLevel(level))
     }
 

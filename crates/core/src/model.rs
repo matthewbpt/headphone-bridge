@@ -73,3 +73,10 @@ pub struct LevelRange {
     pub min: u8,
     pub max: u8,
 }
+
+impl LevelRange {
+    /// Whether `level` is one of the range's steps.
+    pub fn contains(self, level: u8) -> bool {
+        (self.min..=self.max).contains(&level)
+    }
+}

@@ -143,6 +143,15 @@ fn backoff(retries: u32) -> Duration {
     Duration::from_secs(1u64 << retries.min(5)).min(Duration::from_secs(30))
 }
 
+/// Rejects `level` unless a Device with the level Capability `range` has it.
+fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !range.contains(level) {
+        return Err(CommandError::OutOfRange);
+    }
+    Ok(())
+}
+
 impl NotAttachedReason {
     /// Whether trying again by itself might Attach the Device. Not when only
     /// the listener can fix the cause, e.g. by quitting the app holding the
@@ -417,25 +426,13 @@ impl<P: Platform> State<P> {
             }
             Command::SetAmbientLevel(address, level) => {
                 let (device, session) = self.attached(&address)?;
-                let range = device
-                    .capabilities
-                    .ambient_level
-                    .ok_or(CommandError::MissingCapability)?;
-                if !(range.min..=range.max).contains(&level) {
-                    return Err(CommandError::OutOfRange);
-                }
+                check_level(device.capabilities.ambient_level, level)?;
                 device.settings_reported()?;
                 session.send(SessionCommand::SetAmbientLevel(level))
             }
             Command::SetNoiseCancellingLevel(address, level) => {
                 let (device, session) = self.attached(&address)?;
-                let range = device
-                    .capabilities
-                    .noise_cancelling_level
-                    .ok_or(CommandError::MissingCapability)?;
-                if !(range.min..=range.max).contains(&level) {
-                    return Err(CommandError::OutOfRange);
-                }
+                check_level(device.capabilities.noise_cancelling_level, level)?;
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
