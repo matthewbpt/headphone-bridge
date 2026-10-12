@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::command::{CommandError, NoiseControlMode};
+use crate::command::{CommandError, Equalizer, NoiseControlMode};
 use crate::model::{Capabilities, Model};
 use crate::platform::{DeviceAddress, LinkFailure};
 
@@ -48,6 +48,8 @@ pub struct Device {
     /// `capabilities.noise_cancelling_level`. `None` until the Device first
     /// reports it.
     pub noise_cancelling_level: Option<u8>,
+    /// The Equalizer the Device reports. `None` until it first reports it.
+    pub equalizer: Option<Equalizer>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
     /// The Device acknowledged the last Power Off but was still Connected
@@ -74,6 +76,7 @@ impl Device {
             effective_mode_reason: None,
             ambient_level: None,
             noise_cancelling_level: None,
+            equalizer: None,
             battery: None,
             power_off_failed: false,
             reported_at: None,

@@ -24,12 +24,12 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-pub use command::{Command, CommandError, NoiseControlMode};
+pub use command::{Command, CommandError, Equalizer, NoiseControlMode};
 pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
 use frame_log::{Direction, FrameLog};
-pub use model::{Capabilities, LevelRange, Model};
+pub use model::{Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, StepRange};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
 
@@ -290,6 +290,26 @@ fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError>
     Ok(())
 }
 
+/// Rejects `equalizer` unless a Device with the Equalizer Capability
+/// `capability` can be set to it.
+fn check_equalizer(
+    capability: Option<&EqualizerCapability>,
+    equalizer: &Equalizer,
+) -> Result<(), CommandError> {
+    let capability = capability.ok_or(CommandError::MissingCapability)?;
+    if !capability
+        .preset(equalizer.preset)
+        .is_some_and(|preset| preset.selectable)
+    {
+        return Err(CommandError::UnavailablePreset);
+    }
+    // No Model's Bands or Clear Bass can be set yet.
+    if equalizer.bands.is_some() || equalizer.clear_bass.is_some() {
+        return Err(CommandError::MissingCapability);
+    }
+    Ok(())
+}
+
 impl NotAttachedReason {
     /// Whether trying again by itself might Attach the Device. Not when only
     /// the listener can fix the cause, e.g. by quitting the app holding the
@@ -336,6 +356,7 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
+    SetEqualizer(Equalizer),
     PowerOff,
 }
 
@@ -570,6 +591,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            LinkEventKind::Update(Update::Equalizer(equalizer)) => {
+                device.equalizer = Some(equalizer);
+            }
             LinkEventKind::Update(Update::PowerOffAcknowledged) => {
                 if device.state == DeviceState::PoweringOff {
                     tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
@@ -622,6 +646,14 @@ impl<P: Platform> State<P> {
                 check_level(device.capabilities.noise_cancelling_level, level)?;
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
+            }
+            Command::SetEqualizer(address, equalizer) => {
+                let (device, session) = self.attached(&address)?;
+                check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
+                if device.equalizer.is_none() {
+                    return Err(CommandError::SettingsNotReported);
+                }
+                session.send(SessionCommand::SetEqualizer(equalizer))
             }
             Command::PowerOff(address) => {
                 let (device, session) = self.attached(&address)?;
@@ -852,6 +884,9 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
+                    SessionCommand::SetEqualizer(equalizer) => {
+                        session.set_equalizer_preset(equalizer.preset)
+                    }
                     // No Samsung Model can Power Off, so the command is
                     // rejected before it gets here.
                     SessionCommand::PowerOff => {
@@ -946,6 +981,11 @@ async fn run_sony_session(
                     // command is rejected before it gets here.
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
+                    }
+                    // No Sony Model has an Equalizer yet, so the command is
+                    // rejected before it gets here.
+                    SessionCommand::SetEqualizer(_) => {
+                        debug_assert!(false, "no Sony Model has an Equalizer");
                     }
                     SessionCommand::PowerOff => session.power_off(),
                 }
