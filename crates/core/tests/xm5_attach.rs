@@ -59,6 +59,7 @@ async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
             ],
             ambient_level: Some(LevelRange { min: 1, max: 20 }),
             noise_cancelling_level: None,
+            power_off: true,
         }
     );
     assert_eq!(device.battery, Some(Battery::Headphones { level: 70 }));
@@ -261,7 +262,9 @@ async fn a_dropped_link_detaches_the_xm5() {
             reason: NotAttachedReason::LinkDropped
         }
     );
-    assert_eq!((device.model, device.battery), (None, None));
+    assert_eq!(device.battery, None, "no stale values remain");
+    // It's the same headphones while they stay Connected.
+    assert_eq!(device.model, Some(Model::Wh1000Xm5));
 }
 
 #[tokio::test]

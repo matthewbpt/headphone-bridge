@@ -33,6 +33,7 @@ mod command {
     pub const CONNECT_RET_SUPPORT_FUNCTION: u8 = 0x07;
     pub const POWER_GET_STATUS: u8 = 0x22;
     pub const POWER_RET_STATUS: u8 = 0x23;
+    pub const POWER_SET_STATUS: u8 = 0x24;
     pub const POWER_NTFY_STATUS: u8 = 0x25;
     pub const NCASM_GET_PARAM: u8 = 0x66;
     pub const NCASM_RET_PARAM: u8 = 0x67;
@@ -49,6 +50,7 @@ const MODEL_NAME: u8 = 0x01;
 mod power {
     pub const BATTERY: u8 = 0x00;
     pub const BATTERY_WITH_THRESHOLD: u8 = 0x08;
+    pub const POWER_OFF: u8 = 0x03;
 }
 
 /// `FunctionType`s in the support function list.
@@ -79,12 +81,22 @@ struct NoiseControl {
     level: u8,
 }
 
+/// What the Device acknowledging a request tells the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestKind {
+    /// Only that the next request can go.
+    Plain,
+    /// That the Device has taken the Power Off.
+    PowerOff,
+}
+
 /// A request waiting for its ACK.
 #[derive(Debug)]
 struct InFlight {
     frame: Vec<u8>,
     /// How many times it has been sent.
     sends: u32,
+    kind: RequestKind,
 }
 
 /// One control link session with a Sony Device.
@@ -102,7 +114,7 @@ pub struct Session {
     /// Data frames sent so far, resends included.
     sends: u64,
     /// Data frame payloads waiting for the outstanding one to be acknowledged.
-    requests: VecDeque<Vec<u8>>,
+    requests: VecDeque<(Vec<u8>, RequestKind)>,
     outgoing: Vec<Vec<u8>>,
     identified: bool,
     /// The NCASM params last reported, or since sent. Every set changes one
@@ -180,6 +192,16 @@ impl Session {
         self.set_noise_control(params);
     }
 
+    /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
+    pub fn power_off(&mut self) {
+        /// `PowerOffSettingValue::ON`.
+        const ON: u8 = 0x01;
+        self.request_as(
+            vec![command::POWER_SET_STATUS, power::POWER_OFF, ON],
+            RequestKind::PowerOff,
+        );
+    }
+
     fn set_noise_control(&mut self, params: NoiseControl) {
         self.noise_control = Some(params);
         self.request(vec![
@@ -203,7 +225,7 @@ impl Session {
     /// response, such as its ACK, are then in [`Session::outgoing`].
     pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
         match frame.data_type {
-            DataType::Ack => self.acknowledged(frame),
+            DataType::Ack => return self.acknowledged(frame),
             DataType::Mdr | DataType::MdrNo2 => {
                 self.outgoing
                     .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
@@ -216,14 +238,17 @@ impl Session {
         Vec::new()
     }
 
-    fn acknowledged(&mut self, ack: &Frame) {
+    fn acknowledged(&mut self, ack: &Frame) -> Vec<Update> {
         // A stale ACK, for a frame other than the outstanding one, is ignored.
-        if self.in_flight.is_none() || ack.seq != 1 - self.seq {
-            return;
-        }
+        let Some(in_flight) = self.in_flight.take_if(|_| ack.seq == 1 - self.seq) else {
+            return Vec::new();
+        };
         self.seq = ack.seq;
-        self.in_flight = None;
         self.send_next();
+        match in_flight.kind {
+            RequestKind::PowerOff => vec![Update::PowerOffAcknowledged],
+            RequestKind::Plain => Vec::new(),
+        }
     }
 
     /// Handles a Table 1 message.
@@ -301,7 +326,11 @@ impl Session {
     }
 
     fn request(&mut self, payload: Vec<u8>) {
-        self.requests.push_back(payload);
+        self.request_as(payload, RequestKind::Plain);
+    }
+
+    fn request_as(&mut self, payload: Vec<u8>, kind: RequestKind) {
+        self.requests.push_back((payload, kind));
         self.send_next();
     }
 
@@ -309,11 +338,15 @@ impl Session {
         if self.in_flight.is_some() {
             return;
         }
-        if let Some(payload) = self.requests.pop_front() {
+        if let Some((payload, kind)) = self.requests.pop_front() {
             let frame = encode(DataType::Mdr, self.seq, &payload);
             self.outgoing.push(frame.clone());
             self.sends += 1;
-            self.in_flight = Some(InFlight { frame, sends: 1 });
+            self.in_flight = Some(InFlight {
+                frame,
+                sends: 1,
+                kind,
+            });
         }
     }
 }

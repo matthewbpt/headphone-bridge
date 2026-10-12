@@ -9,12 +9,14 @@ const buds4ProCapabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient", "adaptive"],
   ambientLevel: { min: 0, max: 4 },
   noiseCancellingLevel: { min: 0, max: 4 },
+  powerOff: false,
 };
 
 const xm5Capabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient"],
   ambientLevel: { min: 1, max: 20 },
   noiseCancellingLevel: null,
+  powerOff: true,
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -31,6 +33,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     ambientLevel: 1,
     noiseCancellingLevel: 4,
     battery: { kind: "buds", left: 100, right: 100, case: null },
+    powerOffFailed: false,
     ...overrides,
   };
 }
@@ -49,6 +52,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     ambientLevel: 12,
     noiseCancellingLevel: null,
     battery: { kind: "headphones", level: 70 },
+    powerOffFailed: false,
     ...overrides,
   };
 }
@@ -58,7 +62,7 @@ export function notAttached(device: Device, state: Device["state"]): Device {
   return {
     ...device,
     state,
-    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null },
+    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null, powerOff: false },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,
@@ -66,6 +70,14 @@ export function notAttached(device: Device, state: Device["state"]): Device {
     noiseCancellingLevel: null,
     battery: null,
   };
+}
+
+/**
+ * A Device Detached during the same Connected spell, e.g. while it reattaches:
+ * nothing reported, but the core keeps its Model and Capabilities.
+ */
+export function reattaching(device: Device, state: Device["state"]): Device {
+  return { ...notAttached(device, state), model: device.model, capabilities: device.capabilities };
 }
 
 /** A Device list of one Device, Primary while it's Attached. */

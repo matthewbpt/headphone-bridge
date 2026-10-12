@@ -13,7 +13,7 @@ The product a Device is an instance of, e.g. Galaxy Buds4 Pro or WH-1000XM5. A M
 _Avoid_: Device type, product, SKU
 
 **Capability**:
-A Noise Control Mode or adjustable setting that a Model supports. The app only offers what a Device's Capabilities include.
+A Noise Control Mode, adjustable setting, or action such as Power Off that a Model supports. The app only offers what a Device's Capabilities include.
 _Avoid_: Feature, feature flag, support
 
 **Connected**:
@@ -23,6 +23,14 @@ _Avoid_: Paired, online
 **Attached**:
 The state of a Connected Device for which the app has an open control link and can read and change settings. A Device can be Connected without being Attached, e.g. when another app holds the control link.
 _Avoid_: Connected (when the control link is meant), linked, bound
+
+**Power Off**:
+The action of switching a Device off from the app. The Device then stops being Connected of its own accord; the app can't switch it back on.
+_Avoid_: Turn off, shut down, disconnect
+
+**Powering Off**:
+The state of a Device the app has asked to Power Off that is still Connected. It ends when the Device stops being Connected, or with an error if the Device stays Connected too long.
+_Avoid_: Shutting down, Pending (which is for setting values)
 
 **Primary Device**:
 The Attached Device shown by default: the one the operating system is currently using as its audio output.

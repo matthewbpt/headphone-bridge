@@ -12,7 +12,10 @@ export interface Device {
   address: string;
   /** The name the OS reports. */
   name: string;
-  /** Null until identified, and for unsupported Models. */
+  /**
+   * Null until identified, and for unsupported Models. Kept, with the
+   * Capabilities, while the Device is Attached again in the same Connected spell.
+   */
   model: Model | null;
   state: DeviceState;
   capabilities: Capabilities;
@@ -28,6 +31,11 @@ export interface Device {
   noiseCancellingLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
+  /**
+   * The Device acknowledged the last Power Off but was still Connected well
+   * after. Cleared when it is asked to Power Off again.
+   */
+  powerOffFailed: boolean;
 }
 
 export type Model = "galaxyBuds4Pro" | "wh1000xm5";
@@ -35,6 +43,8 @@ export type Model = "galaxyBuds4Pro" | "wh1000xm5";
 export type DeviceState =
   | { kind: "attaching" }
   | { kind: "attached" }
+  /** Asked to Power Off and still Connected: every command is refused. */
+  | { kind: "poweringOff" }
   | { kind: "notAttached"; reason: NotAttachedReason };
 
 export type NotAttachedReason =
@@ -55,6 +65,8 @@ export interface Capabilities {
   noiseControlModes: NoiseControlMode[];
   ambientLevel: LevelRange | null;
   noiseCancellingLevel: LevelRange | null;
+  /** Whether the app can Power Off the Device. */
+  powerOff: boolean;
 }
 
 /** A level Capability's steps in the Model's own units, both ends included. */

@@ -129,6 +129,12 @@ async fn retry_attach(core: State<'_, Core>, address: String) -> Result<(), Comm
         .await
 }
 
+#[tauri::command]
+async fn power_off(core: State<'_, Core>, address: String) -> Result<(), CommandError> {
+    core.command(Command::PowerOff(DeviceAddress(address)))
+        .await
+}
+
 /// The frame log file, or `None` while the frame log is off.
 #[tauri::command]
 fn frame_log(frame_log: State<FrameLog>) -> Option<PathBuf> {
@@ -217,6 +223,7 @@ pub fn run() {
             set_ambient_level,
             set_noise_cancelling_level,
             retry_attach,
+            power_off,
             frame_log,
             set_frame_log
         ])

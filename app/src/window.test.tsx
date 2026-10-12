@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
-import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, xm5 } from "./testing/devices";
+import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
 
@@ -819,6 +819,117 @@ describe("the header", () => {
 
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/^WH-1000XM5$/);
     expect(screen.getAllByText("WH-1000XM5")).toHaveLength(1);
+  });
+});
+
+describe("Power Off", () => {
+  const powerOff = () => screen.findByRole("button", { name: "Power Off" });
+
+  it("is a button in an XM5's header, with a tooltip", async () => {
+    renderWindow(new FakeCore(only(xm5())));
+
+    expect(await powerOff()).toBeEnabled();
+    expect(await powerOff()).toHaveAttribute("title", "Power Off");
+    expect((await powerOff()).closest("header")).toHaveTextContent("WH-1000XM5");
+  });
+
+  it("is disabled, not hidden, while the Device reattaches", async () => {
+    const core = new FakeCore(only(xm5()));
+    renderWindow(core);
+    expect(await powerOff()).toBeEnabled();
+
+    core.emit(only(reattaching(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } })));
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(reattaching(xm5(), { kind: "attaching" })));
+    expect(await screen.findByText("Attaching…")).toBeVisible();
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(xm5()));
+    expect(await powerOff()).toBeEnabled();
+  });
+
+  it("sends Power Off for the Device shown, with no confirmation", async () => {
+    const core = new FakeCore({ devices: [buds4Pro(), xm5()], primary: XM5_ADDRESS });
+    renderWindow(core);
+
+    await userEvent.click(await powerOff());
+
+    expect(core.sent()).toEqual([{ command: "power_off", args: { address: XM5_ADDRESS } }]);
+  });
+
+  it("disables itself and every control of the Device while it is Powering Off", async () => {
+    const core = new FakeCore(only(xm5({ chosenMode: "ambient" })));
+    renderWindow(core);
+    await userEvent.click(await powerOff());
+
+    core.emit(only(xm5({ chosenMode: "ambient", state: { kind: "poweringOff" } })));
+
+    expect(await screen.findByText("Powering Off…")).toBeVisible();
+    expect(await powerOff()).toBeDisabled();
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    for (const radio of radios) expect(radio).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("slider")).toBeDisabled();
+  });
+
+  it("shows why the core refused Power Off", async () => {
+    const core = new FakeCore(only(xm5()));
+    core.answer("power_off", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await powerOff());
+    await core.release("power_off", { reject: "poweringOff" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't Power Off: the Device is Powering Off");
+  });
+
+  it("tells the listener a Device didn't Power Off, and enables its controls again", async () => {
+    const core = new FakeCore(only(xm5({ chosenMode: "ambient", state: { kind: "poweringOff" } })));
+    renderWindow(core);
+    expect(await powerOff()).toBeDisabled();
+
+    core.emit(only(xm5({ chosenMode: "ambient", powerOffFailed: true })));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't Power Off");
+    expect(await powerOff()).toBeEnabled();
+    for (const radio of screen.getAllByRole("radio")) {
+      if (radio.getAttribute("aria-checked") === "false") expect(radio).toBeEnabled();
+    }
+    expect(screen.getByRole("slider")).toBeEnabled();
+  });
+
+  it("still says a Device didn't Power Off while it is Attached again", async () => {
+    const core = new FakeCore(only(xm5({ state: { kind: "poweringOff" } })));
+    renderWindow(core);
+
+    core.emit(only(reattaching(xm5({ powerOffFailed: true }), { kind: "attaching" })));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't Power Off");
+    expect(await powerOff()).toBeDisabled();
+  });
+
+  it("shows one alert at a time in the header", async () => {
+    const core = new FakeCore(only(xm5({ powerOffFailed: true })));
+    core.answer("power_off", "hold");
+    renderWindow(core);
+    expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't Power Off");
+
+    await userEvent.click(await powerOff());
+    await core.release("power_off", { reject: "notAttached" });
+
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent("Couldn't Power Off: the Device isn't Attached");
+  });
+
+  it("isn't shown for a Buds4 Pro", async () => {
+    renderWindow(new FakeCore(only(buds4Pro())));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Power Off" })).not.toBeInTheDocument();
   });
 });
 

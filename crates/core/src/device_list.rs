@@ -25,7 +25,8 @@ pub struct Device {
     pub address: DeviceAddress,
     /// The name the OS reports, which the listener may have changed.
     pub name: String,
-    /// `None` until the Model is identified, and for unsupported Models.
+    /// `None` until the Model is identified, and for unsupported Models. Kept
+    /// while the Device is Attached again, as long as it stays Connected.
     pub model: Option<Model>,
     pub state: DeviceState,
     pub capabilities: Capabilities,
@@ -48,11 +49,14 @@ pub struct Device {
     pub noise_cancelling_level: Option<u8>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
+    /// The Device acknowledged the last Power Off but was still Connected
+    /// well after. Cleared when the Device is asked to Power Off again.
+    pub power_off_failed: bool,
 }
 
 impl Device {
     /// A Device whose Model isn't known, nor anything it reports: when it is
-    /// first Connected, and again whenever it is Detached.
+    /// first Connected.
     pub(crate) fn unidentified(address: DeviceAddress, name: String, state: DeviceState) -> Device {
         Device {
             address,
@@ -66,6 +70,19 @@ impl Device {
             ambient_level: None,
             noise_cancelling_level: None,
             battery: None,
+            power_off_failed: false,
+        }
+    }
+
+    /// This Device once Detached, in `state`. What it reported is dropped,
+    /// but it keeps its Model and Capabilities: it's the same Device while it
+    /// stays Connected. Commands are refused by its state, not its
+    /// Capabilities, until it is Attached again.
+    pub(crate) fn detached(&self, state: DeviceState) -> Device {
+        Device {
+            model: self.model,
+            capabilities: self.capabilities.clone(),
+            ..Device::unidentified(self.address.clone(), self.name.clone(), state)
         }
     }
 
@@ -98,6 +115,9 @@ pub enum DeviceState {
     /// Opening the control link and identifying the Model.
     Attaching,
     Attached,
+    /// Asked to Power Off and still Connected. Refuses every command, and its
+    /// control link closing is part of switching off, not a failure.
+    PoweringOff,
     /// Connected, but the app has no control link.
     NotAttached {
         reason: NotAttachedReason,

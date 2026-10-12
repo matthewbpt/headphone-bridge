@@ -78,6 +78,7 @@ export class FakeCore {
     set_ambient_level: (args) => this.record("set_ambient_level", args),
     set_noise_cancelling_level: (args) => this.record("set_noise_cancelling_level", args),
     retry_attach: (args) => this.record("retry_attach", args),
+    power_off: (args) => this.record("power_off", args),
     frame_log: () => Promise.resolve(this.frameLog),
     set_frame_log: ({ enabled }) => {
       const answer = this.answers.get("set_frame_log") ?? "accept";
@@ -123,7 +124,8 @@ export type RecordedCommand =
   | "set_noise_control_mode"
   | "set_ambient_level"
   | "set_noise_cancelling_level"
-  | "retry_attach";
+  | "retry_attach"
+  | "power_off";
 
 /** The commands a test can tell the fake core how to answer. */
 type AnsweredCommand = RecordedCommand | "set_frame_log";

@@ -20,6 +20,7 @@ use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
 pub use command::{Command, CommandError, NoiseControlMode};
 pub use device_list::{
@@ -125,10 +126,27 @@ struct Tracked {
     retries: u32,
     /// The Device's place in the order of Attaches, while it is Attached.
     attach_order: Option<u64>,
+    /// When a Device that is Powering Off, and acknowledged it or closed its
+    /// control link, is given up on if it is still Connected.
+    power_off_deadline: Option<Instant>,
+}
+
+impl Tracked {
+    /// Detaches the Device, closing its control link, and puts it in `state`.
+    fn detach(&mut self, state: DeviceState) {
+        self.device = self.device.detached(state);
+        self.session = None;
+        self.attach_order = None;
+        self.power_off_deadline = None;
+    }
 }
 
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a Device that acknowledged a Power Off, or closed its control
+/// link first, has to stop being Connected before Powering Off ends and the Power Off is reported as failed.
+const POWER_OFF_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a Sony request waits for its ACK before it is sent again.
 const ACK_TIMEOUT: Duration = Duration::from_secs(1);
@@ -198,6 +216,7 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
+    PowerOff,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -228,7 +247,15 @@ impl<P: Platform> State<P> {
     ) {
         let mut observations = self.platform.observations();
         loop {
+            let power_off_deadline = self.power_off_deadline();
+            let power_off_timeout = async {
+                match power_off_deadline {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending().await,
+                }
+            };
             tokio::select! {
+                () = power_off_timeout => self.power_off_timed_out(),
                 Some(observation) = observations.recv() => self.observe(observation),
                 Some(event) = link_events.recv() => self.link_event(event),
                 command = commands.recv() => match command {
@@ -275,17 +302,30 @@ impl<P: Platform> State<P> {
                 reason: NotAttachedReason::UnsupportedModel,
             }
         };
-        let mut tracked = Tracked {
-            device: Device::unidentified(identity.address.clone(), identity.name, state),
+        let address = identity.address.clone();
+        let tracked = Tracked {
+            device: Device::unidentified(identity.address, identity.name, state),
             vendor,
             session: None,
             retries: 0,
             attach_order: None,
+            power_off_deadline: None,
         };
+        self.devices.insert(address.clone(), tracked);
         if attach {
-            tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
+            self.reattach(&address, Duration::ZERO);
         }
-        self.devices.insert(identity.address, tracked);
+    }
+
+    /// Starts a new session for the tracked Device at `address` that opens
+    /// the control link after `delay`, in place of any session it had.
+    fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
+        let Some(vendor) = self.devices.get(address).map(|tracked| tracked.vendor) else {
+            return;
+        };
+        let session = self.attach(address, vendor, delay);
+        let tracked = self.devices.get_mut(address).expect("tracked above");
+        tracked.session = Some(session);
     }
 
     /// Starts a session that opens the control link after `delay`.
@@ -393,22 +433,32 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            LinkEventKind::Update(Update::PowerOffAcknowledged) => {
+                if device.state == DeviceState::PoweringOff {
+                    tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
+                }
+            }
+            // The control link closing is part of switching off: the Device
+            // stays Powering Off until it stops being Connected, or until the
+            // deadline: a link that closes before the ACK stands in for it.
+            // A Power Off the Device never acknowledged fails like any other
+            // request.
+            LinkEventKind::Ended(ref reason)
+                if device.state == DeviceState::PoweringOff
+                    && *reason != NotAttachedReason::NoResponse =>
+            {
+                tracked.session = None;
+                tracked
+                    .power_off_deadline
+                    .get_or_insert(Instant::now() + POWER_OFF_TIMEOUT);
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                *device = Device::unidentified(
-                    device.address.clone(),
-                    device.name.clone(),
-                    DeviceState::NotAttached { reason },
-                );
-                tracked.session = None;
-                tracked.attach_order = None;
+                tracked.detach(DeviceState::NotAttached { reason });
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
-                    let vendor = tracked.vendor;
-                    let session = self.attach(&event.address, vendor, delay);
-                    let tracked = self.devices.get_mut(&event.address).expect("tracked");
-                    tracked.session = Some(session);
+                    self.reattach(&event.address, delay);
                 }
             }
         }
@@ -436,17 +486,27 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
+            Command::PowerOff(address) => {
+                let (device, session) = self.attached(&address)?;
+                if !device.capabilities.power_off {
+                    return Err(CommandError::MissingCapability);
+                }
+                session.send(SessionCommand::PowerOff)?;
+                let tracked = self.devices.get_mut(&address).expect("checked above");
+                tracked.device.state = DeviceState::PoweringOff;
+                tracked.device.power_off_failed = false;
+                Ok(())
+            }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
                 if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
                     return Ok(());
                 }
                 // Retrying by hand starts over, straight away.
-                let session = self.attach(&address, tracked.vendor, Duration::ZERO);
                 let tracked = self.devices.get_mut(&address).expect("checked above");
                 tracked.device.state = DeviceState::Attaching;
-                tracked.session = Some(session);
                 tracked.retries = 0;
+                self.reattach(&address, Duration::ZERO);
                 Ok(())
             }
             Command::SetFrameLog(Some(path)) => self
@@ -460,7 +520,45 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// The Device at `address`, unless it's unknown or an unsupported Model.
+    /// The earliest moment a Device that is Powering Off is given up on.
+    fn power_off_deadline(&self) -> Option<Instant> {
+        self.devices
+            .values()
+            .filter_map(|tracked| tracked.power_off_deadline)
+            .min()
+    }
+
+    /// Ends Powering Off for every Device still Connected past its deadline,
+    /// and reports that it didn't Power Off.
+    /// A Device whose control link is still open is Attached again; one
+    /// whose link closed is Attached afresh, as a newly Connected Device is.
+    fn power_off_timed_out(&mut self) {
+        let now = Instant::now();
+        let timed_out: Vec<DeviceAddress> = self
+            .devices
+            .iter()
+            .filter(|(_, tracked)| tracked.power_off_deadline.is_some_and(|d| d <= now))
+            .map(|(address, _)| address.clone())
+            .collect();
+        for address in timed_out {
+            let tracked = self.devices.get_mut(&address).expect("listed above");
+            let link_open = tracked.session.is_some();
+            if link_open {
+                tracked.device.state = DeviceState::Attached;
+                tracked.power_off_deadline = None;
+            } else {
+                tracked.detach(DeviceState::Attaching);
+                tracked.retries = 0;
+            }
+            tracked.device.power_off_failed = true;
+            if !link_open {
+                self.reattach(&address, Duration::ZERO);
+            }
+        }
+    }
+
+    /// The Device at `address`, unless it's unknown, an unsupported Model, or
+    /// Powering Off.
     fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
         let tracked = self
             .devices
@@ -470,6 +568,7 @@ impl<P: Platform> State<P> {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             } => Err(CommandError::UnsupportedModel),
+            DeviceState::PoweringOff => Err(CommandError::PoweringOff),
             _ => Ok(tracked),
         }
     }
@@ -572,6 +671,12 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
+                    // No Samsung Model can Power Off, so the command is
+                    // rejected before it gets here.
+                    SessionCommand::PowerOff => {
+                        debug_assert!(false, "no Samsung Model can Power Off");
+                        Vec::new()
+                    }
                 };
                 for frame in frames {
                     if !send(slug, frame) {
@@ -661,6 +766,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
+                    SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;
