@@ -32,7 +32,10 @@ async fn power_off_sends_power_set_status_and_the_device_is_powering_off() {
 
     // POWER_SET_STATUS: power off, on, as libmdr and Gadgetbridge send it.
     assert_eq!(written(&mut link).await, sony_frame(1, &[0x24, 0x03, 0x01]));
-    wait_for(&core, |list| list.devices[0].state == DeviceState::PoweringOff).await;
+    wait_for(&core, |list| {
+        list.devices[0].state == DeviceState::PoweringOff
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -76,7 +79,10 @@ async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() 
         !os.attempts_within(Duration::from_secs(600)).await,
         "no reattach is scheduled"
     );
-    assert_eq!(core.device_list().devices[0].state, DeviceState::PoweringOff);
+    assert_eq!(
+        core.device_list().devices[0].state,
+        DeviceState::PoweringOff
+    );
 }
 
 #[tokio::test]
@@ -121,7 +127,10 @@ async fn an_xm5_that_is_not_attached_refuses_power_off() {
     os.observe(Observation::DeviceConnected(xm5()));
     // The link is open, but the Device hasn't identified itself.
     let _link = os.next_link().await;
-    wait_for(&core, |list| list.devices[0].state == DeviceState::Attaching).await;
+    wait_for(&core, |list| {
+        list.devices[0].state == DeviceState::Attaching
+    })
+    .await;
 
     assert_eq!(
         core.command(Command::PowerOff(xm5().address)).await,
