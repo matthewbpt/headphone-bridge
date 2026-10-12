@@ -15,7 +15,7 @@ use uuid::{uuid, Uuid};
 
 use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
-use crate::model::Model;
+use crate::model::{Model, WH_1000XM5_BANDS};
 pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, DataType, Deframer};
@@ -78,9 +78,13 @@ const CHANGED: u8 = 0x01;
 /// `EqEbbInquiredType::PRESET_EQ`.
 const PRESET_EQ: u8 = 0x00;
 /// `EqEbbStatus::DISABLE`: the Device refuses Equalizer changes for now.
-const EQ_DISABLE: u8 = 0x01;
-/// How far a step is offset on the wire: a step of −10 is sent as 0.
-const EQ_STEP_OFFSET: i8 = 10;
+const EQUALIZER_DISABLE: u8 = 0x01;
+/// How far an Equalizer step is offset on the wire: a step of −10 is sent
+/// as 0.
+const EQUALIZER_STEP_OFFSET: i8 = 10;
+/// How many steps an Equalizer curve has on the wire: Clear Bass, then each
+/// Band.
+const CURVE_STEPS: usize = 1 + WH_1000XM5_BANDS.len();
 
 /// NCASM params as the Device reports and takes them, bytes 3–6 of a 0x17
 /// RET, NTFY or SET.
@@ -236,7 +240,7 @@ impl Session {
                 payload.extend(
                     std::iter::once(*clear_bass)
                         .chain(bands.iter().copied())
-                        .map(|step| (step + EQ_STEP_OFFSET) as u8),
+                        .map(|step| (step + EQUALIZER_STEP_OFFSET) as u8),
                 );
             }
             None => payload.push(0),
@@ -389,7 +393,7 @@ impl Session {
                 if data[0] == command::EQEBB_RET_STATUS {
                     self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
                 }
-                vec![Update::EqualizerUnavailable(status == EQ_DISABLE)]
+                vec![Update::EqualizerUnavailable(status == EQUALIZER_DISABLE)]
             }
             [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
                 if self.identified && steps.len() == n as usize =>
@@ -429,13 +433,17 @@ impl Session {
 }
 
 /// The Equalizer the Device reports as `preset` and the `steps` that follow
-/// it. Six steps are Clear Bass then the five Bands. Any other count is kept
+/// it. A whole curve is Clear Bass then each Band. Any other count is kept
 /// as the Preset alone.
 fn equalizer(preset: u8, steps: &[u8]) -> Equalizer {
     let steps: Option<Vec<i8>> = match steps.len() {
-        6 => steps
+        CURVE_STEPS => steps
             .iter()
-            .map(|&step| i8::try_from(step).ok().map(|step| step - EQ_STEP_OFFSET))
+            .map(|&step| {
+                i8::try_from(step)
+                    .ok()
+                    .map(|step| step - EQUALIZER_STEP_OFFSET)
+            })
             .collect(),
         _ => None,
     };

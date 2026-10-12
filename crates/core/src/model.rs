@@ -88,7 +88,7 @@ impl Model {
                         Preset::editable(0xa2, "Custom 2"),
                     ],
                     bands: Some(Bands {
-                        frequencies: vec!["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"],
+                        frequencies: WH_1000XM5_BANDS.to_vec(),
                         range: StepRange { min: -10, max: 10 },
                     }),
                     clear_bass: Some(StepRange { min: -10, max: 10 }),
@@ -97,6 +97,9 @@ impl Model {
         }
     }
 }
+
+/// The WH-1000XM5's Bands, as their centre frequencies, lowest first.
+pub(crate) const WH_1000XM5_BANDS: [&str; 5] = ["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"];
 
 /// What a Device can be asked to do. Empty until its Model is identified.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
