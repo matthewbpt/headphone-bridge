@@ -3,63 +3,61 @@ import { setAmbientLevel, setNoiseCancellingLevel } from "./deviceList";
 import { usePendingSetting } from "./usePendingSetting";
 
 /**
- * Everything the window knows about Levels. A Level belongs to exactly one
- * Noise Control Mode, and a mode can have several Levels; adding a Level to
- * the window is one entry here.
+ * A Level, named by its field in both the Device and its Capabilities: the
+ * name reads the reported value and the range.
  */
-const LEVELS: {
-  key: string;
-  mode: NoiseControlMode;
-  title: string;
-  /** The Level's range, or null when the Device's Model doesn't have it. */
-  range: (device: Device) => LevelRange | null;
-  /** The reported Level; null until the Device first reports it. */
-  reported: (device: Device) => number | null;
-  /** Asks the Device at this address for a Level. */
-  set: (address: string, level: number) => Promise<void>;
-}[] = [
+type Level = "ambientLevel" | "noiseCancellingLevel";
+
+/**
+ * Everything the window knows about Levels, in the order they show. A Level
+ * belongs to exactly one Noise Control Mode, and a mode can have several
+ * Levels; adding a Level to the window is one entry here.
+ */
+const LEVELS: Record<
+  Level,
   {
-    key: "ambientLevel",
-    mode: "ambient",
-    title: "Ambient Level",
-    range: (device) => device.capabilities.ambientLevel,
-    reported: (device) => device.ambientLevel,
-    set: setAmbientLevel,
-  },
-  {
-    key: "noiseCancellingLevel",
+    mode: NoiseControlMode;
+    title: string;
+    /** Asks the Device at this address for a Level. */
+    set: (address: string, level: number) => Promise<void>;
+  }
+> = {
+  ambientLevel: { mode: "ambient", title: "Ambient Level", set: setAmbientLevel },
+  noiseCancellingLevel: {
     mode: "noiseCancelling",
     title: "Noise Cancelling Level",
-    range: (device) => device.capabilities.noiseCancellingLevel,
-    reported: (device) => device.noiseCancellingLevel,
     set: setNoiseCancellingLevel,
   },
-];
+};
 
 /** A slider for each Level of the shown mode that the Device's Model has. */
 export function Levels({
   device,
-  shown,
+  shownMode,
 }: {
   device: Device;
   /** The Pending mode, else the Chosen Mode. */
-  shown: NoiseControlMode | null;
+  shownMode: NoiseControlMode | null;
 }) {
-  return LEVELS.filter((level) => level.mode === shown).map((level) => {
-    const range = level.range(device);
-    return (
-      range && (
-        // Keyed by Level, so each keeps its own Pending value and error.
-        <LevelSlider
-          key={level.key}
-          title={level.title}
-          level={level.reported(device)}
-          range={range}
-          set={(asked) => level.set(device.address, asked)}
-        />
-      )
-    );
-  });
+  return (Object.keys(LEVELS) as Level[])
+    .filter((level) => LEVELS[level].mode === shownMode)
+    .map((level) => {
+      // Null when the Device's Model doesn't have the Level.
+      const range = device.capabilities[level];
+      const { title, set } = LEVELS[level];
+      return (
+        range && (
+          // Keyed by Level, so each keeps its own Pending value and error.
+          <LevelSlider
+            key={level}
+            title={title}
+            reported={device[level]}
+            range={range}
+            set={(asked) => set(device.address, asked)}
+          />
+        )
+      );
+    });
 }
 
 /** Above this many steps, notches crowd the track; it shows the value instead. */
@@ -71,20 +69,20 @@ const MAX_NOTCHES = 10;
  */
 function LevelSlider({
   title,
-  level,
+  reported,
   range,
   set,
 }: {
   title: string;
-  /** The reported level; null until the Device first reports it. */
-  level: number | null;
+  /** The reported Level; null until the Device first reports it. */
+  reported: number | null;
   range: LevelRange;
-  /** Asks the Device for a level. */
+  /** Asks the Device for a Level. */
   set: (level: number) => Promise<void>;
 }) {
-  // Dragging across notches asks for each level in turn.
+  // Dragging across notches asks for each Level in turn.
   const { shown, pending, error, request } = usePendingSetting(
-    level,
+    reported,
     set,
     (asked) => `${title} ${asked}`,
   );

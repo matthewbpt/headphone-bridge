@@ -133,7 +133,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               )}
             </>
           )}
-          <Levels device={device} shown={mode.shown} />
+          <Levels device={device} shownMode={mode.shown} />
         </section>
       )}
     </>
