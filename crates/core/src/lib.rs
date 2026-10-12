@@ -126,16 +126,16 @@ struct Tracked {
     retries: u32,
     /// The Device's place in the order of Attaches, while it is Attached.
     attach_order: Option<u64>,
-    /// When a Device that is Powering Off, and acknowledged it, is given up
-    /// on if it is still Connected.
+    /// When a Device that is Powering Off, and acknowledged it or closed its
+    /// control link, is given up on if it is still Connected.
     power_off_deadline: Option<Instant>,
 }
 
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// How long a Device that acknowledged a Power Off has to stop being
-/// Connected before Powering Off ends and the Power Off is reported as failed.
+/// How long a Device that acknowledged a Power Off, or closed its control
+/// link first, has to stop being Connected before Powering Off ends and the Power Off is reported as failed.
 const POWER_OFF_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a Sony request waits for its ACK before it is sent again.
@@ -417,13 +417,18 @@ impl<P: Platform> State<P> {
                 }
             }
             // The control link closing is part of switching off: the Device
-            // stays Powering Off until it stops being Connected. A Power Off
-            // the Device never acknowledged fails like any other request.
+            // stays Powering Off until it stops being Connected, or until the
+            // deadline: a link that closes before the ACK stands in for it.
+            // A Power Off the Device never acknowledged fails like any other
+            // request.
             LinkEventKind::Ended(ref reason)
                 if device.state == DeviceState::PoweringOff
                     && *reason != NotAttachedReason::NoResponse =>
             {
                 tracked.session = None;
+                tracked
+                    .power_off_deadline
+                    .get_or_insert(Instant::now() + POWER_OFF_TIMEOUT);
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;

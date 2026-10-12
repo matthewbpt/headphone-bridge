@@ -76,13 +76,37 @@ async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() 
     drop(link);
 
     assert!(
-        !os.attempts_within(Duration::from_secs(600)).await,
+        !os.attempts_within(Duration::from_secs(9)).await,
         "no reattach is scheduled"
     );
     assert_eq!(
         core.device_list().devices[0].state,
         DeviceState::PoweringOff
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_whose_link_closed_before_the_ack_and_stays_connected_didnt_power_off() {
+    let (core, mut os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+    assert_eq!(os.next_attempt().await, xm5().address, "the first Attach");
+
+    // The link closes before the Device acknowledges, and it stays Connected.
+    drop(link);
+    tokio::time::sleep(Duration::from_secs(9)).await;
+    assert_eq!(
+        core.device_list().devices[0].state,
+        DeviceState::PoweringOff
+    );
+
+    let list = wait_for(&core, |list| list.devices[0].power_off_failed).await;
+    assert_eq!(list.devices[0].state, DeviceState::Attaching);
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
 }
 
 #[tokio::test]
