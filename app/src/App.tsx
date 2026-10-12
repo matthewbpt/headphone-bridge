@@ -4,6 +4,7 @@ import {
   reasonText,
   retryAttach,
   setAmbientLevel,
+  setNoiseCancellingLevel,
   setNoiseControlMode,
   useDeviceList,
   useLabels,
@@ -158,6 +159,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               title="Noise Cancelling Level"
               level={device.noiseCancellingLevel}
               range={noiseCancellingLevel}
+              set={(level) => setNoiseCancellingLevel(device.address, level)}
             />
           )}
         </section>

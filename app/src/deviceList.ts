@@ -125,6 +125,11 @@ export function setAmbientLevel(address: string, level: number): Promise<void> {
   return invoke("set_ambient_level", { address, level });
 }
 
+/** Asks the Device to set the Noise Cancelling Level, in the Model's own steps. */
+export function setNoiseCancellingLevel(address: string, level: number): Promise<void> {
+  return invoke("set_noise_cancelling_level", { address, level });
+}
+
 /**
  * The latest Device list snapshot from the core, or null until the first one
  * arrives. The UI holds no device state beyond this.

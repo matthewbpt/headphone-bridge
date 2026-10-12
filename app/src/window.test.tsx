@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Device } from "./deviceList";
+import type { Battery, Device } from "./deviceList";
 import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
@@ -464,16 +464,139 @@ describe("Noise Cancelling Level", () => {
     expect(slider()).not.toBeInTheDocument();
   });
 
-  it("only shows the level: − and + and the track are disabled", async () => {
-    renderWindow(
-      new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 2 }))),
+  const at = (noiseCancellingLevel: number | null, battery?: Battery) =>
+    only(
+      buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel, ...(battery && { battery }) }),
     );
+  const set = (level: number) => ({
+    command: "set_noise_cancelling_level",
+    args: { address: BUDS_ADDRESS, level },
+  });
 
-    expect(
-      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
-    ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
+  it("moves one step on − and +", async () => {
+    const core = new FakeCore(at(2));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    core.emit(at(3));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+
+    expect(core.sent()).toEqual([set(3), set(2), set(1)]);
+  });
+
+  it("stops − and + at the Model's range limits", async () => {
+    const core = new FakeCore(at(0));
+    renderWindow(core);
+
+    expect(await screen.findByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeEnabled();
+
+    core.emit(at(4));
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeEnabled();
+    expect(core.sent()).toEqual([]);
+  });
+
+  it("asks for each level in turn while dragging, pending until the last one lands", async () => {
+    const core = new FakeCore(at(0));
+    renderWindow(core);
+    const track = await screen.findByRole("slider", { name: "Noise Cancelling Level" });
+
+    for (const value of ["1", "2", "3"]) fireEvent.change(track, { target: { value } });
+    expect(core.sent()).toEqual([set(1), set(2), set(3)]);
+
+    core.emit(at(1));
+    core.emit(at(2));
+    expect(slider()).toHaveValue("3");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(3));
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows a level pending until a snapshot confirms it", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(2));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps a return to the confirmed level pending until the level asked before it has landed", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    expect(core.sent()).toEqual([set(2), set(1)]);
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    // A snapshot from before the Device applied either level confirms nothing.
+    core.emit(at(1, { kind: "headphones", level: 50 }));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(2));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(1));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+    const more = await screen.findByRole("button", { name: "More" });
+    freezeClock();
+
+    fireEvent.click(more);
+    act(() => vi.advanceTimersByTime(9_900));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Noise Cancelling Level 2 wasn't confirmed by the Device",
+    );
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the core rejects a level", async () => {
+    const core = new FakeCore(at(1));
+    core.answer("set_noise_cancelling_level", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Less" }));
+    await core.release("set_noise_cancelling_level", { reject: "notAttached" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't set Noise Cancelling Level 0: notAttached",
+    );
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("sends the chosen level to the Device", async () => {
+    const core = new FakeCore(
+      only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 1 })),
+    );
+    renderWindow(core);
+
+    const slider = await screen.findByRole("slider", { name: /Noise Cancelling Level/ });
+    fireEvent.change(slider, { target: { value: "3" } });
+
+    expect(core.sent()).toEqual([
+      { command: "set_noise_cancelling_level", args: { address: BUDS_ADDRESS, level: 3 } },
+    ]);
   });
 });
 

@@ -63,6 +63,7 @@ export class FakeCore {
         return Promise.resolve(structuredClone(this.deviceList));
       case "set_noise_control_mode":
       case "set_ambient_level":
+      case "set_noise_cancelling_level":
       case "retry_attach":
         return this.record(command, args);
       case "frame_log":
@@ -107,7 +108,11 @@ export class FakeCore {
 }
 
 /** The commands the fake core records. */
-export type Command = "set_noise_control_mode" | "set_ambient_level" | "retry_attach";
+export type Command =
+  | "set_noise_control_mode"
+  | "set_ambient_level"
+  | "set_noise_cancelling_level"
+  | "retry_attach";
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };
