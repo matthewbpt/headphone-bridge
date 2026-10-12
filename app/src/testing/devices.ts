@@ -30,7 +30,24 @@ const xm5Capabilities: Capabilities = {
   ambientLevel: { min: 1, max: 20 },
   noiseCancellingLevel: null,
   powerOff: true,
-  equalizer: null,
+  equalizer: {
+    presets: [
+      { id: 0x00, name: "Off", editable: false, selectable: true },
+      { id: 0x10, name: "Bright", editable: false, selectable: true },
+      { id: 0x11, name: "Excited", editable: false, selectable: true },
+      { id: 0x12, name: "Mellow", editable: false, selectable: true },
+      { id: 0x13, name: "Relaxed", editable: false, selectable: true },
+      { id: 0x14, name: "Vocal", editable: false, selectable: true },
+      { id: 0x15, name: "Treble Boost", editable: false, selectable: true },
+      { id: 0x16, name: "Bass Boost", editable: false, selectable: true },
+      { id: 0x17, name: "Speech", editable: false, selectable: true },
+      { id: 0xa0, name: "Manual", editable: true, selectable: true },
+      { id: 0xa1, name: "Custom 1", editable: true, selectable: true },
+      { id: 0xa2, name: "Custom 2", editable: true, selectable: true },
+    ],
+    bands: null,
+    clearBass: null,
+  },
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -67,7 +84,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 12,
     noiseCancellingLevel: null,
-    equalizer: null,
+    equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 },
     battery: { kind: "headphones", level: 70 },
     powerOffFailed: false,
     reportedAt: null,

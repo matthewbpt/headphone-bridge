@@ -861,8 +861,71 @@ describe("Equalizer", () => {
     expect(screen.queryByRole("group", { name: "Equalizer" })).not.toBeInTheDocument();
   });
 
+  it("lists the XM5's Presets under Sony's names, with the current one selected", async () => {
+    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x12, bands: null, clearBass: null } }))));
+
+    expect(await optionNames()).toEqual([
+      "Off",
+      "Bright",
+      "Excited",
+      "Mellow",
+      "Relaxed",
+      "Vocal",
+      "Treble Boost",
+      "Bass Boost",
+      "Speech",
+      "Manual",
+      "Custom 1",
+      "Custom 2",
+    ]);
+    expect(await preset()).toHaveDisplayValue("Mellow");
+  });
+
+  it("sends the XM5's Preset alone, Pending until a snapshot confirms it with its curve", async () => {
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Custom 2");
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa2, bands: null, clearBass: null } },
+      },
+    ]);
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa2, bands: [4, 2, 0, -2, -4], clearBass: 0 } })));
+
+    expect(await preset()).toHaveDisplayValue("Custom 2");
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows and sets each Device's own Presets with two Connected", async () => {
+    const core = new FakeCore({
+      devices: [buds4Pro(), xm5({ equalizer: { preset: 0x00, bands: null, clearBass: null } })],
+      primary: BUDS_ADDRESS,
+    });
+    renderWindow(core);
+    expect(await preset()).toHaveDisplayValue("Normal");
+
+    await userEvent.click(screen.getByRole("tab", { name: /WH-1000XM5/ }));
+    expect(await preset()).toHaveDisplayValue("Off");
+    await userEvent.selectOptions(await preset(), "Speech");
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0x17, bands: null, clearBass: null } },
+      },
+    ]);
+  });
+
   it("isn't shown for a Model without an Equalizer", async () => {
-    renderWindow(new FakeCore(only(xm5())));
+    const capabilities = { ...buds4Pro().capabilities, equalizer: null };
+    renderWindow(new FakeCore(only(buds4Pro({ capabilities, equalizer: null }))));
 
     expect(await screen.findByRole("radiogroup", { name: "Noise Control Mode" })).toBeVisible();
     expect(screen.queryByRole("group", { name: "Equalizer" })).not.toBeInTheDocument();
