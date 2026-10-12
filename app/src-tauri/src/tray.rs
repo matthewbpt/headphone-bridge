@@ -416,6 +416,7 @@ mod tests {
             ambient_level: None,
             noise_cancelling_level: None,
             equalizer: None,
+            equalizer_unavailable: false,
             battery: Some(Battery::Buds {
                 left: Some(80),
                 right: Some(75),
@@ -532,6 +533,7 @@ mod tests {
                 ambient_level: None,
                 noise_cancelling_level: None,
                 equalizer: None,
+                equalizer_unavailable: false,
                 battery: Some(Battery::Headphones { level: 70 }),
                 power_off_failed: false,
                 reported_at: None,
@@ -593,6 +595,7 @@ mod tests {
             ambient_level: None,
             noise_cancelling_level: None,
             equalizer: None,
+            equalizer_unavailable: false,
             battery: Some(Battery::Headphones { level: 70 }),
             power_off_failed: false,
             reported_at: None,

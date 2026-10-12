@@ -102,13 +102,13 @@ async fn setting_a_preset_sends_it_alone_and_waits_for_the_device() {
     // EQEBB_SET_PARAM: Bass Boost, no steps.
     assert_eq!(
         written(&mut link).await,
-        sony_frame(0, &[0x58, 0x00, 0x16, 0x00])
+        sony_frame(1, &[0x58, 0x00, 0x16, 0x00])
     );
     // The ACK is only a receipt. A battery notification after it shows it
     // has been handled.
-    link.send.send(sony_ack(1)).unwrap();
+    link.send.send(sony_ack(0)).unwrap();
     link.send
-        .send(sony_frame(1, &[0x25, 0x00, 68, 0x00]))
+        .send(sony_frame(0, &[0x25, 0x00, 68, 0x00]))
         .unwrap();
     let list = wait_for(&core, |list| {
         list.devices[0].battery == Some(Battery::Headphones { level: 68 })
@@ -119,7 +119,7 @@ async fn setting_a_preset_sends_it_alone_and_waits_for_the_device() {
     // The Device confirms with Bass Boost's curve.
     link.send
         .send(sony_frame(
-            0,
+            1,
             &[0x59, 0x00, 0x16, 0x06, 0x0a, 0x10, 0x0d, 0x0a, 0x0a, 0x0a],
         ))
         .unwrap();
@@ -147,12 +147,12 @@ async fn a_preset_set_waits_for_the_last_request_to_be_acked() {
 
     assert_eq!(
         written(&mut link).await,
-        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
     );
-    link.send.send(sony_ack(1)).unwrap();
+    link.send.send(sony_ack(0)).unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x58, 0x00, 0xa0, 0x00])
+        sony_frame(0, &[0x58, 0x00, 0xa0, 0x00])
     );
 }
 
@@ -249,6 +249,67 @@ async fn a_preset_set_before_the_device_reports_its_equalizer_is_rejected() {
         .unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(0, &[0x58, 0x00, 0x16, 0x00])
+        sony_frame(1, &[0x58, 0x00, 0x16, 0x00])
     );
+}
+
+#[tokio::test]
+async fn attaching_reads_whether_the_equalizer_is_unavailable() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    // Up to the app's ACK of the NCASM reply.
+    replay(&mut link, &fixture("wh-1000xm5/attach")[..20]).await;
+
+    // EQEBB_GET_STATUS, answered DISABLE.
+    assert_eq!(written(&mut link).await, sony_frame(1, &[0x52, 0x00]));
+    link.send.send(sony_ack(0)).unwrap();
+    link.send.send(sony_frame(1, &[0x53, 0x00, 0x01])).unwrap();
+    assert_eq!(written(&mut link).await, sony_ack(0));
+    // Then the Equalizer itself.
+    assert_eq!(written(&mut link).await, sony_frame(0, &[0x56, 0x00]));
+
+    let list = wait_for(&core, |list| list.devices[0].equalizer_unavailable).await;
+    assert_eq!(list.devices[0].equalizer, None);
+}
+
+#[tokio::test]
+async fn the_attach_fixture_reports_the_equalizer_available() {
+    let (core, _os, _link) = attached_xm5().await;
+
+    assert!(!core.device_list().devices[0].equalizer_unavailable);
+}
+
+#[tokio::test]
+async fn the_device_reporting_its_equalizer_disabled_and_enabled_toggles_it_live() {
+    let (core, _os, mut link) = attached_xm5().await;
+
+    // EQEBB_NTFY_STATUS: DISABLE, e.g. while another sound feature is on.
+    link.send.send(sony_frame(0, &[0x55, 0x00, 0x01])).unwrap();
+    wait_for(&core, |list| list.devices[0].equalizer_unavailable).await;
+    // Then ENABLE.
+    link.send.send(sony_frame(1, &[0x55, 0x00, 0x00])).unwrap();
+    let list = wait_for(&core, |list| !list.devices[0].equalizer_unavailable).await;
+    // The Equalizer is kept throughout.
+    assert_eq!(list.devices[0].equalizer, Some(bright()));
+    for _ in 0..2 {
+        assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+    }
+}
+
+#[tokio::test]
+async fn a_set_while_the_equalizer_is_unavailable_is_rejected_and_nothing_is_sent() {
+    let (core, _os, mut link) = attached_xm5().await;
+    link.send.send(sony_frame(0, &[0x55, 0x00, 0x01])).unwrap();
+    wait_for(&core, |list| list.devices[0].equalizer_unavailable).await;
+    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+
+    let result = core
+        .command(Command::SetEqualizer(xm5().address, preset(0x16)))
+        .await;
+
+    assert_eq!(result, Err(CommandError::EqualizerUnavailable));
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "nothing else written");
 }

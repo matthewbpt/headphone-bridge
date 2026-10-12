@@ -594,6 +594,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::Equalizer(equalizer)) => {
                 device.equalizer = Some(equalizer);
             }
+            LinkEventKind::Update(Update::EqualizerUnavailable(unavailable)) => {
+                device.equalizer_unavailable = unavailable;
+            }
             LinkEventKind::Update(Update::PowerOffAcknowledged) => {
                 if device.state == DeviceState::PoweringOff {
                     tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
@@ -652,6 +655,9 @@ impl<P: Platform> State<P> {
                 check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
                 if device.equalizer.is_none() {
                     return Err(CommandError::SettingsNotReported);
+                }
+                if device.equalizer_unavailable {
+                    return Err(CommandError::EqualizerUnavailable);
                 }
                 session.send(SessionCommand::SetEqualizer(equalizer))
             }

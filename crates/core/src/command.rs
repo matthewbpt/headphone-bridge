@@ -46,6 +46,9 @@ pub enum CommandError {
     /// Ambient Level yet, so a set couldn't keep the other unchanged. Or it
     /// hasn't reported its Equalizer yet.
     SettingsNotReported,
+    /// The Device is Equalizer Unavailable: it refuses Equalizer changes for
+    /// now.
+    EqualizerUnavailable,
     /// The frame log file couldn't be opened.
     FrameLogUnavailable(String),
 }

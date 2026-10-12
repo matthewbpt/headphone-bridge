@@ -23,6 +23,8 @@ pub enum Update {
     /// The Equalizer the Device is applying. Its Preset may be one the
     /// Model's Capability doesn't list.
     Equalizer(Equalizer),
+    /// Whether the Device refuses Equalizer changes for now.
+    EqualizerUnavailable(bool),
     /// The Device acknowledged a request to Power Off. It should stop being
     /// Connected soon after.
     PowerOffAcknowledged,

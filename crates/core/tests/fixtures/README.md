@@ -67,6 +67,6 @@ file.
     a notification, firmware 2.5.1.
   - `real-noise-control` and `real-power-off` were recorded before the app
     read the Equalizer on Attach. Their replays re-base them with
-    `support::with_equalizer_read`, which inserts a synthetic Equalizer read
-    and flips the sequence numbers of the app's later requests and their
-    ACKs.
+    `support::with_equalizer_read`, which inserts synthetic reads of the
+    Equalizer's Status and params. The two reads leave the sequence numbers
+    of every later frame as recorded.

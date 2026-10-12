@@ -289,9 +289,10 @@ fn sony_decode(frame: &[u8]) -> (u8, u8, Vec<u8>) {
 
 /// A real WH-1000XM5 capture recorded before the app read the Equalizer on
 /// Attach, re-based onto an Attach that does. After the app ACKs the NCASM
-/// reply, it inserts the app's `EQEBB_GET_PARAM` and the Device's ACK and
-/// `equalizer_reply`, then flips the sequence number of every later data
-/// frame the app sends and of every ACK the Device sends for one.
+/// reply, it inserts the app's `EQEBB_GET_STATUS`, the Device's ACK and an
+/// ENABLE reply, then the app's `EQEBB_GET_PARAM`, the Device's ACK and
+/// `equalizer_reply`, each reply ACKed by the app. The two reads leave every
+/// later sequence number as recorded.
 pub fn with_equalizer_read(records: &[FrameRecord], equalizer_reply: &[u8]) -> Vec<FrameRecord> {
     let ncasm_reply = records
         .iter()
@@ -307,37 +308,29 @@ pub fn with_equalizer_read(records: &[FrameRecord], equalizer_reply: &[u8]) -> V
         .map(|r| sony_decode(&r.bytes))
         .find(|(data_type, _, _)| *data_type == 0x0c)
         .expect("the NCASM GET");
-    let seq = 1 - ncasm_get_seq;
     let at = ncasm_reply + 2;
     let record = |direction, bytes| FrameRecord {
         direction,
         bytes,
         ..records[at - 1].clone()
     };
+    let read = |seq: u8, device_seq: u8, request: &[u8], reply: &[u8]| {
+        [
+            record(Direction::Sent, sony_frame(seq, request)),
+            record(Direction::Received, sony_ack(1 - seq)),
+            record(Direction::Received, sony_frame(device_seq, reply)),
+            record(Direction::Sent, sony_ack(1 - device_seq)),
+        ]
+    };
     let mut rebased = records[..at].to_vec();
-    rebased.extend([
-        record(Direction::Sent, sony_frame(seq, &[0x56, 0x00])),
-        record(Direction::Received, sony_ack(1 - seq)),
-        record(
-            Direction::Received,
-            sony_frame(1 - device_seq, equalizer_reply),
-        ),
-        record(Direction::Sent, sony_ack(device_seq)),
-    ]);
-    rebased.extend(records[at..].iter().map(|r| {
-        let (data_type, seq, data) = sony_decode(&r.bytes);
-        let flips = matches!(
-            (r.direction, data_type),
-            (Direction::Sent, 0x0c) | (Direction::Received, 0x01)
-        );
-        FrameRecord {
-            bytes: if flips {
-                sony_encode(data_type, 1 - seq, &data)
-            } else {
-                r.bytes.clone()
-            },
-            ..r.clone()
-        }
-    }));
+    let (seq, device_seq) = (1 - ncasm_get_seq, 1 - device_seq);
+    rebased.extend(read(seq, device_seq, &[0x52, 0x00], &[0x53, 0x00, 0x00]));
+    rebased.extend(read(
+        1 - seq,
+        1 - device_seq,
+        &[0x56, 0x00],
+        equalizer_reply,
+    ));
+    rebased.extend_from_slice(&records[at..]);
     rebased
 }

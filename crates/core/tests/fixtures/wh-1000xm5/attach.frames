@@ -4,7 +4,7 @@
 # protocol info reply is the XM5 fw 1.1.3 one; the support function list is
 # made up but, like the real fw 2.5.1 one, lists battery 0x20 and NC/ASM 0x6b
 # (NCASM type 0x17). Battery: 70 %. Noise control: Ambient, Focus on Voice on,
-# Ambient Level 10. Equalizer: Bright, Clear Bass +2, Bands -1 0 +3 +5 +10.
+# Ambient Level 10. Equalizer: available, Bright, Clear Bass +2, Bands -1 0 +3 +5 +10.
 # Then a battery notification of 69 %.
 # GET protocol info
 2026-10-11T12:00:00.000Z sony >> 3e 0c 00 00 00 00 02 00 00 0e 3c
@@ -31,10 +31,15 @@
 2026-10-11T12:00:00.170Z wh-1000xm5 << 3e 01 01 00 00 00 00 02 3c
 2026-10-11T12:00:00.180Z wh-1000xm5 << 3e 0c 00 00 00 00 07 67 17 01 01 01 01 0a 9f 3c
 2026-10-11T12:00:00.190Z wh-1000xm5 >> 3e 01 01 00 00 00 00 02 3c
-# GET Equalizer
-2026-10-11T12:00:00.200Z wh-1000xm5 >> 3e 0c 01 00 00 00 02 56 00 65 3c
+# GET Equalizer status
+2026-10-11T12:00:00.200Z wh-1000xm5 >> 3e 0c 01 00 00 00 02 52 00 61 3c
 2026-10-11T12:00:00.210Z wh-1000xm5 << 3e 01 00 00 00 00 00 01 3c
-2026-10-11T12:00:00.220Z wh-1000xm5 << 3e 0c 01 00 00 00 0a 57 00 10 06 0c 09 0a 0d 0f 14 d3 3c
+2026-10-11T12:00:00.220Z wh-1000xm5 << 3e 0c 01 00 00 00 03 53 00 00 63 3c
 2026-10-11T12:00:00.230Z wh-1000xm5 >> 3e 01 00 00 00 00 00 01 3c
-2026-10-11T12:00:00.240Z wh-1000xm5 << 3e 0c 00 00 00 00 04 25 00 45 00 7a 3c
-2026-10-11T12:00:00.250Z wh-1000xm5 >> 3e 01 01 00 00 00 00 02 3c
+# GET Equalizer
+2026-10-11T12:00:00.240Z wh-1000xm5 >> 3e 0c 00 00 00 00 02 56 00 64 3c
+2026-10-11T12:00:00.250Z wh-1000xm5 << 3e 01 01 00 00 00 00 02 3c
+2026-10-11T12:00:00.260Z wh-1000xm5 << 3e 0c 00 00 00 00 0a 57 00 10 06 0c 09 0a 0d 0f 14 d2 3c
+2026-10-11T12:00:00.270Z wh-1000xm5 >> 3e 01 01 00 00 00 00 02 3c
+2026-10-11T12:00:00.280Z wh-1000xm5 << 3e 0c 01 00 00 00 04 25 00 45 00 7b 3c
+2026-10-11T12:00:00.290Z wh-1000xm5 >> 3e 01 00 00 00 00 00 01 3c

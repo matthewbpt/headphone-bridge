@@ -39,6 +39,9 @@ mod command {
     pub const NCASM_RET_PARAM: u8 = 0x67;
     pub const NCASM_SET_PARAM: u8 = 0x68;
     pub const NCASM_NTFY_PARAM: u8 = 0x69;
+    pub const EQEBB_GET_STATUS: u8 = 0x52;
+    pub const EQEBB_RET_STATUS: u8 = 0x53;
+    pub const EQEBB_NTFY_STATUS: u8 = 0x55;
     pub const EQEBB_GET_PARAM: u8 = 0x56;
     pub const EQEBB_RET_PARAM: u8 = 0x57;
     pub const EQEBB_SET_PARAM: u8 = 0x58;
@@ -74,6 +77,8 @@ const CHANGED: u8 = 0x01;
 
 /// `EqEbbInquiredType::PRESET_EQ`.
 const PRESET_EQ: u8 = 0x00;
+/// `EqEbbStatus::DISABLE`: the Device refuses Equalizer changes for now.
+const EQ_DISABLE: u8 = 0x01;
 /// How far a step is offset on the wire: a step of −10 is sent as 0.
 const EQ_STEP_OFFSET: i8 = 10;
 
@@ -331,7 +336,7 @@ impl Session {
                     _ => NoiseControlMode::Ambient,
                 };
                 if data[0] == command::NCASM_RET_PARAM {
-                    self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                    self.request(vec![command::EQEBB_GET_STATUS, PRESET_EQ]);
                 }
                 let mut updates = vec![Update::ChosenMode(mode)];
                 let range = Model::Wh1000Xm5.capabilities().ambient_level;
@@ -339,6 +344,14 @@ impl Session {
                     updates.push(Update::AmbientLevel(level));
                 }
                 updates
+            }
+            [command::EQEBB_RET_STATUS | command::EQEBB_NTFY_STATUS, PRESET_EQ, status]
+                if self.identified =>
+            {
+                if data[0] == command::EQEBB_RET_STATUS {
+                    self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                }
+                vec![Update::EqualizerUnavailable(status == EQ_DISABLE)]
             }
             [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
                 if self.identified && steps.len() == n as usize =>
