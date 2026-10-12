@@ -604,6 +604,35 @@ describe("Noise Cancelling Level", () => {
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
 
+  it("shows and sets each Device's own level with two Connected", async () => {
+    const otherAddress = "AA:BB:CC:00:00:03";
+    const home = buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 1 });
+    const work = buds4Pro({
+      address: otherAddress,
+      name: "Work Buds4 Pro",
+      chosenMode: "noiseCancelling",
+      noiseCancellingLevel: 3,
+    });
+    const core = new FakeCore({ devices: [home, work], primary: BUDS_ADDRESS });
+    renderWindow(core);
+
+    expect(
+      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
+    ).toHaveValue("1");
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(slider()).toHaveValue("2");
+
+    await userEvent.click(screen.getByRole("tab", { name: /Work Buds4 Pro/ }));
+    expect(slider()).toHaveValue("3");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(core.sent()).toEqual([
+      set(2),
+      { command: "set_noise_cancelling_level", args: { address: otherAddress, level: 4 } },
+    ]);
+  });
+
   it("sends the chosen level to the Device", async () => {
     const core = new FakeCore(
       only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 1 })),
