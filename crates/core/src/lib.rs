@@ -297,14 +297,26 @@ fn check_equalizer(
     equalizer: &Equalizer,
 ) -> Result<(), CommandError> {
     let capability = capability.ok_or(CommandError::MissingCapability)?;
-    if !capability
+    let preset = capability
         .preset(equalizer.preset)
-        .is_some_and(|preset| preset.selectable)
-    {
-        return Err(CommandError::UnavailablePreset);
+        .filter(|preset| preset.selectable)
+        .ok_or(CommandError::UnavailablePreset)?;
+    if let Some(bands) = &equalizer.bands {
+        let range = capability
+            .bands
+            .as_ref()
+            .ok_or(CommandError::MissingCapability)?;
+        if !preset.editable {
+            return Err(CommandError::FixedPreset);
+        }
+        if bands.len() != range.frequencies.len()
+            || !bands.iter().all(|&band| range.range.contains(band))
+        {
+            return Err(CommandError::OutOfRange);
+        }
     }
-    // No Model's Bands or Clear Bass can be set yet.
-    if equalizer.bands.is_some() || equalizer.clear_bass.is_some() {
+    // No Model's Clear Bass can be set yet.
+    if equalizer.clear_bass.is_some() {
         return Err(CommandError::MissingCapability);
     }
     Ok(())
@@ -650,11 +662,20 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
-            Command::SetEqualizer(address, equalizer) => {
+            Command::SetEqualizer(address, mut equalizer) => {
                 let (device, session) = self.attached(&address)?;
                 check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
-                if device.equalizer.is_none() {
-                    return Err(CommandError::SettingsNotReported);
+                let reported = device
+                    .equalizer
+                    .as_ref()
+                    .ok_or(CommandError::SettingsNotReported)?;
+                // Bands are sent with Clear Bass, kept as last reported.
+                if equalizer.bands.is_some() && equalizer.clear_bass.is_none() {
+                    equalizer.clear_bass = Some(
+                        reported
+                            .clear_bass
+                            .ok_or(CommandError::SettingsNotReported)?,
+                    );
                 }
                 if device.equalizer_unavailable {
                     return Err(CommandError::EqualizerUnavailable);
@@ -988,9 +1009,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
-                    SessionCommand::SetEqualizer(equalizer) => {
-                        session.set_equalizer_preset(equalizer.preset)
-                    }
+                    SessionCommand::SetEqualizer(equalizer) => session.set_equalizer(&equalizer),
                     SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {

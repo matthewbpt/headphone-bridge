@@ -87,7 +87,10 @@ impl Model {
                         Preset::editable(0xa1, "Custom 1"),
                         Preset::editable(0xa2, "Custom 2"),
                     ],
-                    bands: None,
+                    bands: Some(Bands {
+                        frequencies: vec!["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"],
+                        range: StepRange { min: -10, max: 10 },
+                    }),
                     clear_bass: None,
                 }),
             },

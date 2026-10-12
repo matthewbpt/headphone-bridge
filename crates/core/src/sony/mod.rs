@@ -206,11 +206,23 @@ impl Session {
         self.set_noise_control(params);
     }
 
-    /// Asks the Device to switch its Equalizer to `preset`, leaving its curve
-    /// to the Device. The Device confirms with a notification of the new
-    /// params.
-    pub fn set_equalizer_preset(&mut self, preset: u8) {
-        self.request(vec![command::EQEBB_SET_PARAM, PRESET_EQ, preset, 0]);
+    /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
+    /// to the Device; Bands are sent with Clear Bass, which must then be
+    /// given too. The Device confirms with a notification of the new params.
+    pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
+        let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset];
+        match (equalizer.clear_bass, &equalizer.bands) {
+            (Some(clear_bass), Some(bands)) => {
+                payload.push(1 + bands.len() as u8);
+                payload.extend(
+                    std::iter::once(clear_bass)
+                        .chain(bands.iter().copied())
+                        .map(|step| (step + EQ_STEP_OFFSET) as u8),
+                );
+            }
+            _ => payload.push(0),
+        }
+        self.request(payload);
     }
 
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
