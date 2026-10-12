@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { whyRejected } from "./core";
 
 /** How long a value asked of the Device stays Pending if it never reports it. */
 const PENDING_TIMEOUT_MS = 10_000;
@@ -16,9 +17,9 @@ const PENDING_TIMEOUT_MS = 10_000;
  * `reported` is the Device's latest value, null until it reports one.
  * `command` asks the Device for a value and resolves once the core accepts
  * it. `name` names a value in the errors: "<name> wasn't confirmed by the
- * Device" after 10 s, "Couldn't set <name>: <error>" when the core rejects
- * it. The latest `command` and `name` are always used, so neither has to be
- * a stable reference.
+ * Device" after 10 s, "Couldn't set <name>: <why>" when the core rejects
+ * it, with the rejection in words as the why. The latest `command` and
+ * `name` are always used, so neither has to be a stable reference.
  */
 export function usePendingSetting<T>(
   reported: T | null,
@@ -63,7 +64,7 @@ export function usePendingSetting<T>(
     setError(null);
     setAsked((asked) => [...asked, value]);
     commandRef.current(value).catch((e) => {
-      fail(`Couldn't set ${nameRef.current(value)}: ${e}`);
+      fail(`Couldn't set ${nameRef.current(value)}: ${whyRejected(e)}`);
     });
   };
 

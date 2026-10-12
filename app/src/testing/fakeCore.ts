@@ -1,4 +1,5 @@
 import { act } from "react";
+import type { Commands } from "../core";
 import type { DeviceList, Labels } from "../deviceList";
 
 /**
@@ -13,7 +14,7 @@ import type { DeviceList, Labels } from "../deviceList";
 export class FakeCore {
   private deviceList: DeviceList;
   private readonly listeners = new Set<(event: { payload: DeviceList }) => void>();
-  private readonly answers = new Map<Command, Answer>();
+  private readonly answers = new Map<AnsweredCommand, Answer>();
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
@@ -33,13 +34,17 @@ export class FakeCore {
   /**
    * How the core answers every later call of `command`: accept it at once
    * (the default), reject it with an error, or hold it until `release`.
+   * Turning the frame log on or off is answered at once: accepted or rejected.
    */
-  answer(command: Command, answer: Answer) {
+  answer<C extends AnsweredCommand>(
+    command: C,
+    answer: C extends RecordedCommand ? Answer : Exclude<Answer, "hold">,
+  ) {
     this.answers.set(command, answer);
   }
 
   /** Answers the oldest held call of `command`. */
-  async release(command: Command, answer: Exclude<Answer, "hold"> = "accept") {
+  async release(command: RecordedCommand, answer: Exclude<Answer, "hold"> = "accept") {
     const call = this.calls.find((call) => call.command === command && call.held);
     if (!call) throw new Error(`no held ${command} call to release`);
     call.held = false;
@@ -56,25 +61,31 @@ export class FakeCore {
 
   /** The window's `invoke`, for `@tauri-apps/api/core`. */
   invoke(command: string, args: Record<string, unknown> = {}): Promise<unknown> {
-    switch (command) {
-      case "labels":
-        return Promise.resolve(structuredClone(LABELS));
-      case "device_list":
-        return Promise.resolve(structuredClone(this.deviceList));
-      case "set_noise_control_mode":
-      case "set_ambient_level":
-      case "set_noise_cancelling_level":
-      case "retry_attach":
-        return this.record(command, args);
-      case "frame_log":
-        return Promise.resolve(this.frameLog);
-      case "set_frame_log":
-        this.frameLog = args.enabled ? "/tmp/headphone-bridge-frames.log" : null;
-        return Promise.resolve(this.frameLog);
-      default:
-        return Promise.reject(`the fake core has no command ${command}`);
+    if (!Object.hasOwn(this.commands, command)) {
+      return Promise.reject(`the fake core has no command ${command}`);
     }
+    const answer = this.commands[command as keyof Commands] as (args: unknown) => Promise<unknown>;
+    return answer(args);
   }
+
+  /** How the fake core answers each of the window's commands. */
+  private readonly commands: {
+    [C in keyof Commands]: (args: Commands[C]["args"]) => Promise<Commands[C]["result"]>;
+  } = {
+    labels: () => Promise.resolve(structuredClone(LABELS)),
+    device_list: () => Promise.resolve(structuredClone(this.deviceList)),
+    set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
+    set_ambient_level: (args) => this.record("set_ambient_level", args),
+    set_noise_cancelling_level: (args) => this.record("set_noise_cancelling_level", args),
+    retry_attach: (args) => this.record("retry_attach", args),
+    frame_log: () => Promise.resolve(this.frameLog),
+    set_frame_log: ({ enabled }) => {
+      const answer = this.answers.get("set_frame_log") ?? "accept";
+      if (typeof answer === "object") return Promise.reject(answer.reject);
+      this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
+      return Promise.resolve(this.frameLog);
+    },
+  };
 
   /** The window's `listen`, for `@tauri-apps/api/event`. */
   listen(event: string, handler: (event: { payload: DeviceList }) => void): () => void {
@@ -96,7 +107,7 @@ export class FakeCore {
     },
   };
 
-  private record(command: Command, args: Record<string, unknown>): Promise<void> {
+  private record<C extends RecordedCommand>(command: C, args: Commands[C]["args"]): Promise<void> {
     const answer = this.answers.get(command) ?? "accept";
     let settle!: Call["settle"];
     const promise = new Promise<void>((resolve, reject) => (settle = { resolve, reject }));
@@ -108,17 +119,20 @@ export class FakeCore {
 }
 
 /** The commands the fake core records. */
-export type Command =
+export type RecordedCommand =
   | "set_noise_control_mode"
   | "set_ambient_level"
   | "set_noise_cancelling_level"
   | "retry_attach";
 
+/** The commands a test can tell the fake core how to answer. */
+type AnsweredCommand = RecordedCommand | "set_frame_log";
+
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };
 
 export interface SentCommand {
-  command: Command;
+  command: RecordedCommand;
   args: Record<string, unknown>;
 }
 

@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
-import { reasonText, retryAttach, setNoiseControlMode, useDeviceList, useLabels } from "./deviceList";
+import { reasonText } from "./deviceList";
+import { retryAttach, setNoiseControlMode, useDeviceList, useLabels, whyRejected } from "./core";
 import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
@@ -232,7 +233,7 @@ function RetryButton({ address }: { address: string }) {
         className="button"
         onClick={() => {
           setError(null);
-          retryAttach(address).catch((e) => setError(`Couldn't retry: ${e}`));
+          retryAttach(address).catch((e) => setError(`Couldn't retry: ${whyRejected(e)}`));
         }}
       >
         Retry

@@ -1,5 +1,5 @@
+import { setAmbientLevel, setNoiseCancellingLevel } from "./core";
 import type { Device, LevelRange, NoiseControlMode } from "./deviceList";
-import { setAmbientLevel, setNoiseCancellingLevel } from "./deviceList";
 import { usePendingSetting } from "./usePendingSetting";
 
 /**
