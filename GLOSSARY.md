@@ -54,6 +54,10 @@ _Avoid_: Selected mode, user mode, setting
 The Noise Control Mode the Device is applying right now. Usually equal to the Chosen Mode, but can differ temporarily, e.g. while an earbud is out of the ear.
 _Avoid_: Actual mode, current mode, real mode
 
+**Level**:
+An adjustable setting that belongs to one Noise Control Mode, expressed in the Model's own steps. A mode can have several Levels. Ambient Level and Noise Cancelling Level are Levels.
+_Avoid_: Strength, intensity, slider
+
 **Ambient Level**:
 How much outside sound Ambient lets through, expressed in the Model's own steps.
 _Avoid_: Ambient volume, transparency level
