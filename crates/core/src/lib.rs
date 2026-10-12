@@ -417,8 +417,12 @@ impl<P: Platform> State<P> {
                 }
             }
             // The control link closing is part of switching off: the Device
-            // stays Powering Off until it stops being Connected.
-            LinkEventKind::Ended(_) if device.state == DeviceState::PoweringOff => {
+            // stays Powering Off until it stops being Connected. A Power Off
+            // the Device never acknowledged fails like any other request.
+            LinkEventKind::Ended(ref reason)
+                if device.state == DeviceState::PoweringOff
+                    && *reason != NotAttachedReason::NoResponse =>
+            {
                 tracked.session = None;
             }
             LinkEventKind::Ended(reason) => {
@@ -430,6 +434,7 @@ impl<P: Platform> State<P> {
                 );
                 tracked.session = None;
                 tracked.attach_order = None;
+                tracked.power_off_deadline = None;
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -509,17 +514,36 @@ impl<P: Platform> State<P> {
 
     /// Ends Powering Off for every Device still Connected past its deadline,
     /// and reports that it didn't Power Off.
+    /// A Device whose control link is still open is Attached again; one
+    /// whose link closed is Attached afresh, as a newly Connected Device is.
     fn power_off_timed_out(&mut self) {
         let now = Instant::now();
-        for tracked in self.devices.values_mut() {
-            if tracked
-                .power_off_deadline
-                .is_none_or(|deadline| deadline > now)
-            {
-                continue;
-            }
+        let timed_out: Vec<DeviceAddress> = self
+            .devices
+            .iter()
+            .filter(|(_, tracked)| tracked.power_off_deadline.is_some_and(|d| d <= now))
+            .map(|(address, _)| address.clone())
+            .collect();
+        for address in timed_out {
+            let tracked = self.devices.get_mut(&address).expect("listed above");
             tracked.power_off_deadline = None;
-            tracked.device.state = DeviceState::Attached;
+            if tracked.session.is_some() {
+                tracked.device.state = DeviceState::Attached;
+            } else {
+                let device = &tracked.device;
+                tracked.device = Device::unidentified(
+                    device.address.clone(),
+                    device.name.clone(),
+                    DeviceState::Attaching,
+                );
+                tracked.attach_order = None;
+                tracked.retries = 0;
+                let vendor = tracked.vendor;
+                let session = self.attach(&address, vendor, Duration::ZERO);
+                let tracked = self.devices.get_mut(&address).expect("listed above");
+                tracked.session = Some(session);
+            }
+            let tracked = self.devices.get_mut(&address).expect("listed above");
             tracked.device.power_off_failed = true;
         }
     }
