@@ -72,6 +72,14 @@ export function notAttached(device: Device, state: Device["state"]): Device {
   };
 }
 
+/**
+ * A Device Detached during the same Connected spell, e.g. while it reattaches:
+ * nothing reported, but the core keeps its Model and Capabilities.
+ */
+export function reattaching(device: Device, state: Device["state"]): Device {
+  return { ...notAttached(device, state), model: device.model, capabilities: device.capabilities };
+}
+
 /** A Device list of one Device, Primary while it's Attached. */
 export function only(device: Device): DeviceList {
   return {

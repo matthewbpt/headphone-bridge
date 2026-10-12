@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    Command, CommandError, Core, DeviceState, NoiseControlMode, NotAttachedReason,
+    Command, CommandError, Core, DeviceState, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
     buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, DeviceLink,
@@ -76,13 +76,37 @@ async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() 
     drop(link);
 
     assert!(
-        !os.attempts_within(Duration::from_secs(600)).await,
+        !os.attempts_within(Duration::from_secs(9)).await,
         "no reattach is scheduled"
     );
     assert_eq!(
         core.device_list().devices[0].state,
         DeviceState::PoweringOff
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_whose_link_closed_before_the_ack_and_stays_connected_didnt_power_off() {
+    let (core, mut os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+    assert_eq!(os.next_attempt().await, xm5().address, "the first Attach");
+
+    // The link closes before the Device acknowledges, and it stays Connected.
+    drop(link);
+    tokio::time::sleep(Duration::from_secs(9)).await;
+    assert_eq!(
+        core.device_list().devices[0].state,
+        DeviceState::PoweringOff
+    );
+
+    let list = wait_for(&core, |list| list.devices[0].power_off_failed).await;
+    assert_eq!(list.devices[0].state, DeviceState::Attaching);
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
+    wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
 }
 
 #[tokio::test]
@@ -149,10 +173,14 @@ async fn a_device_that_didnt_power_off_and_closed_its_link_is_attached_again() {
         core.device_list().devices[0].state,
         DeviceState::PoweringOff
     );
-    wait_for(&core, |list| {
+    let list = wait_for(&core, |list| {
         list.devices[0].power_off_failed && list.devices[0].state == DeviceState::Attaching
     })
     .await;
+    assert!(
+        list.devices[0].capabilities.power_off,
+        "the window keeps showing ⏻, disabled"
+    );
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
     let list = wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
@@ -203,6 +231,50 @@ async fn a_power_off_that_is_never_acknowledged_follows_the_no_ack_path() {
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
     wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_xm5_keeps_its_power_off_capability_while_reattaching_but_refuses_it() {
+    let (core, mut os, link) = attached_xm5().await;
+
+    drop(link);
+    let list = wait_for(&core, |list| {
+        list.devices[0].state
+            == DeviceState::NotAttached {
+                reason: NotAttachedReason::LinkDropped,
+            }
+    })
+    .await;
+    assert_eq!(list.devices[0].model, Some(Model::Wh1000Xm5));
+    assert!(list.devices[0].capabilities.power_off);
+    assert_eq!(
+        core.command(Command::PowerOff(xm5().address)).await,
+        Err(CommandError::NotAttached)
+    );
+
+    let mut link = os.next_link().await;
+    let list = wait_for(&core, |list| {
+        list.devices[0].state == DeviceState::Attaching
+    })
+    .await;
+    assert!(list.devices[0].capabilities.power_off);
+    for command in [
+        Command::PowerOff(xm5().address),
+        Command::SetNoiseControlMode(xm5().address, NoiseControlMode::Ambient),
+        Command::SetAmbientLevel(xm5().address, 3),
+    ] {
+        assert_eq!(
+            core.command(command.clone()).await,
+            Err(CommandError::NotAttached),
+            "{command:?}"
+        );
+    }
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(0, &[0x00, 0x00]),
+        "only the attach's first read"
+    );
+    assert!(link.written.try_recv().is_err(), "nothing more was written");
 }
 
 #[tokio::test]

@@ -25,7 +25,8 @@ pub struct Device {
     pub address: DeviceAddress,
     /// The name the OS reports, which the listener may have changed.
     pub name: String,
-    /// `None` until the Model is identified, and for unsupported Models.
+    /// `None` until the Model is identified, and for unsupported Models. Kept
+    /// while the Device is Attached again, as long as it stays Connected.
     pub model: Option<Model>,
     pub state: DeviceState,
     pub capabilities: Capabilities,
@@ -55,7 +56,7 @@ pub struct Device {
 
 impl Device {
     /// A Device whose Model isn't known, nor anything it reports: when it is
-    /// first Connected, and again whenever it is Detached.
+    /// first Connected.
     pub(crate) fn unidentified(address: DeviceAddress, name: String, state: DeviceState) -> Device {
         Device {
             address,
@@ -70,6 +71,18 @@ impl Device {
             noise_cancelling_level: None,
             battery: None,
             power_off_failed: false,
+        }
+    }
+
+    /// This Device once Detached, in `state`. What it reported is dropped,
+    /// but it keeps its Model and Capabilities: it's the same Device while it
+    /// stays Connected. Commands are refused by its state, not its
+    /// Capabilities, until it is Attached again.
+    pub(crate) fn detached(&self, state: DeviceState) -> Device {
+        Device {
+            model: self.model,
+            capabilities: self.capabilities.clone(),
+            ..Device::unidentified(self.address.clone(), self.name.clone(), state)
         }
     }
 
