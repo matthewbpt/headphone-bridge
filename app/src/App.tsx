@@ -1,17 +1,10 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import type { Battery, Device, Labels, LevelRange, NoiseControlMode } from "./deviceList";
-import {
-  reasonText,
-  retryAttach,
-  setAmbientLevel,
-  setNoiseCancellingLevel,
-  setNoiseControlMode,
-  useDeviceList,
-  useLabels,
-} from "./deviceList";
+import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
+import { reasonText, retryAttach, setNoiseControlMode, useDeviceList, useLabels } from "./deviceList";
 import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
+import { Levels } from "./Levels";
 import { usePendingSetting } from "./usePendingSetting";
 
 export function App() {
@@ -103,8 +96,8 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 
 function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   // Held here rather than in the selector, so the rest of the Device view
-  // can treat a Pending mode as Chosen: the level slider comes and goes the
-  // moment a mode is clicked, and goes back if the Device refuses.
+  // can treat a Pending mode as Chosen: a Level comes and goes the moment a
+  // mode is clicked, and goes back if the Device refuses.
   const mode = usePendingSetting(
     device.chosenMode,
     (chosen: NoiseControlMode) => setNoiseControlMode(device.address, chosen),
@@ -112,8 +105,6 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   );
 
   const attached = device.state.kind === "attached";
-  const ambientLevel = device.capabilities.ambientLevel;
-  const noiseCancellingLevel = device.capabilities.noiseCancellingLevel;
   return (
     <>
       <section className="hero">
@@ -142,22 +133,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               )}
             </>
           )}
-          {ambientLevel && mode.shown === "ambient" && (
-            <LevelSlider
-              title="Ambient Level"
-              level={device.ambientLevel}
-              range={ambientLevel}
-              set={(level) => setAmbientLevel(device.address, level)}
-            />
-          )}
-          {noiseCancellingLevel && mode.shown === "noiseCancelling" && (
-            <LevelSlider
-              title="Noise Cancelling Level"
-              level={device.noiseCancellingLevel}
-              range={noiseCancellingLevel}
-              set={(level) => setNoiseCancellingLevel(device.address, level)}
-            />
-          )}
+          <Levels device={device} shownMode={mode.shown} />
         </section>
       )}
     </>
@@ -244,91 +220,6 @@ function NoiseControlModeSelector({
           <span className="mode__label">{labels.modes[mode]}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-/** Above this many steps, notches crowd the track; it shows the value instead. */
-const MAX_NOTCHES = 10;
-
-/**
- * A level, in the Model's own steps. A level set here shows a dashed thumb
- * until the Device reports it.
- */
-function LevelSlider({
-  title,
-  level,
-  range,
-  set,
-}: {
-  title: string;
-  /** The reported level; null until the Device first reports it. */
-  level: number | null;
-  range: LevelRange;
-  /** Asks the Device for a level. */
-  set: (level: number) => Promise<void>;
-}) {
-  // Dragging across notches asks for each level in turn.
-  const { shown, pending, error, request } = usePendingSetting(
-    level,
-    set,
-    (asked) => `${title} ${asked}`,
-  );
-  const choose = (asked: number) => request(Math.min(range.max, Math.max(range.min, asked)));
-
-  const steps = range.max - range.min + 1;
-  const notched = steps <= MAX_NOTCHES;
-  return (
-    <div className="level">
-      <div className="level__title">{title}</div>
-      <div className="level__row">
-        <button
-          className="level__step"
-          aria-label="Less"
-          disabled={shown === null || shown <= range.min}
-          onClick={() => shown !== null && choose(shown - 1)}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden>
-            <path d="M3 8H13" />
-          </svg>
-        </button>
-        <div className="level__track" data-pending={pending !== null}>
-          {notched && (
-            <div className="level__notches" aria-hidden>
-              {Array.from({ length: steps }, (_, i) => (
-                <span key={i} className="level__notch" data-testid="notch" />
-              ))}
-            </div>
-          )}
-          <input
-            type="range"
-            min={range.min}
-            max={range.max}
-            step={1}
-            value={shown ?? range.min}
-            disabled={shown === null}
-            aria-label={title}
-            aria-busy={pending !== null}
-            onChange={(e) => choose(Number(e.target.value))}
-          />
-        </div>
-        <button
-          className="level__step"
-          aria-label="More"
-          disabled={shown === null || shown >= range.max}
-          onClick={() => shown !== null && choose(shown + 1)}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden>
-            <path d="M3 8H13M8 3V13" />
-          </svg>
-        </button>
-        {!notched && <output className="level__value">{shown ?? "–"}</output>}
-      </div>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
