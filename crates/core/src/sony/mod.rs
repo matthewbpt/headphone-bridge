@@ -291,7 +291,7 @@ impl Session {
                 };
                 let mut updates = vec![Update::ChosenMode(mode)];
                 let range = Model::Wh1000Xm5.capabilities().ambient_level;
-                if range.is_some_and(|range| (range.min..=range.max).contains(&level)) {
+                if range.is_some_and(|range| range.contains(level)) {
                     updates.push(Update::AmbientLevel(level));
                 }
                 updates

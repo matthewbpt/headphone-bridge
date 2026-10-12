@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Device } from "./deviceList";
+import type { Battery, Device } from "./deviceList";
 import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
@@ -349,6 +349,301 @@ describe("Ambient Level", () => {
 
     expect(core.sent()).toEqual([
       { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 3 } },
+    ]);
+  });
+});
+
+describe("Noise Cancelling Level", () => {
+  const slider = () => screen.queryByRole("slider", { name: "Noise Cancelling Level" });
+
+  it("is shown only while Noise Cancelling is the Chosen Mode", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
+    renderWindow(core);
+
+    expect(await mode("Ambient")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+
+    core.emit(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("appears the moment Noise Cancelling is clicked, before the Device confirms", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await mode("Noise Cancelling"));
+
+    expect(await mode("Noise Cancelling")).not.toBeChecked();
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("disappears the moment another mode is clicked, before the Device confirms", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+    expect(
+      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(await mode("Adaptive"));
+
+    expect(await mode("Noise Cancelling")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  it("goes back to the confirmed Chosen Mode when the core rejects the change", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
+    core.answer("set_noise_control_mode", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await mode("Ambient"));
+    expect(slider()).not.toBeInTheDocument();
+
+    await core.release("set_noise_control_mode", { reject: "notAttached" });
+    expect(slider()).toBeInTheDocument();
+  });
+
+  it("goes back to the confirmed Chosen Mode when the Device doesn't confirm within 10 s", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
+    renderWindow(core);
+    const noiseCancelling = await mode("Noise Cancelling");
+    freezeClock();
+
+    fireEvent.click(noiseCancelling);
+    act(() => vi.advanceTimersByTime(9_900));
+    expect(slider()).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  it("follows a switch to or from Noise Cancelling made on the Device, and isn't shown in Adaptive", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "off", effectiveMode: "off" })));
+    renderWindow(core);
+    expect(await mode("Off")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+
+    core.emit(
+      only(buds4Pro({ chosenMode: "noiseCancelling", effectiveMode: "noiseCancelling" })),
+    );
+    expect(slider()).toBeInTheDocument();
+
+    core.emit(only(buds4Pro({ chosenMode: "adaptive", effectiveMode: "adaptive" })));
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  it("shows a notch per step of the Buds4 Pro's 5 steps, and no value", async () => {
+    renderWindow(
+      new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 3 }))),
+    );
+
+    expect(
+      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
+    ).toHaveValue("3");
+    expect(screen.getAllByTestId("notch")).toHaveLength(5);
+    expect(screen.queryByText("3")).not.toBeInTheDocument();
+  });
+
+  it("is disabled until the Device reports the level", async () => {
+    renderWindow(
+      new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: null }))),
+    );
+
+    expect(
+      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+  });
+
+  it("stays while an earbud is out and the Effective Mode has dropped to Off", async () => {
+    renderWindow(
+      new FakeCore(
+        only(
+          buds4Pro({
+            chosenMode: "noiseCancelling",
+            effectiveMode: "off",
+            effectiveModeReason: "budOutOfEar",
+            noiseCancellingLevel: 2,
+          }),
+        ),
+      ),
+    );
+
+    expect(await screen.findByText("Paused: an earbud is out of the ear")).toBeVisible();
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toBeEnabled();
+  });
+
+  it("isn't shown for a WH-1000XM5", async () => {
+    renderWindow(new FakeCore(only(xm5({ chosenMode: "noiseCancelling" }))));
+
+    expect(await mode("Noise Cancelling")).toBeChecked();
+    expect(slider()).not.toBeInTheDocument();
+  });
+
+  const at = (noiseCancellingLevel: number | null, battery?: Battery) =>
+    only(
+      buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel, ...(battery && { battery }) }),
+    );
+  const set = (level: number) => ({
+    command: "set_noise_cancelling_level",
+    args: { address: BUDS_ADDRESS, level },
+  });
+
+  it("moves one step on − and +", async () => {
+    const core = new FakeCore(at(2));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    core.emit(at(3));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+
+    expect(core.sent()).toEqual([set(3), set(2), set(1)]);
+  });
+
+  it("stops − and + at the Model's range limits", async () => {
+    const core = new FakeCore(at(0));
+    renderWindow(core);
+
+    expect(await screen.findByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeEnabled();
+
+    core.emit(at(4));
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeEnabled();
+    expect(core.sent()).toEqual([]);
+  });
+
+  it("asks for each level in turn while dragging, pending until the last one lands", async () => {
+    const core = new FakeCore(at(0));
+    renderWindow(core);
+    const track = await screen.findByRole("slider", { name: "Noise Cancelling Level" });
+
+    for (const value of ["1", "2", "3"]) fireEvent.change(track, { target: { value } });
+    expect(core.sent()).toEqual([set(1), set(2), set(3)]);
+
+    core.emit(at(1));
+    core.emit(at(2));
+    expect(slider()).toHaveValue("3");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(3));
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows a level pending until a snapshot confirms it", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(2));
+    expect(slider()).toHaveValue("2");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps a return to the confirmed level pending until the level asked before it has landed", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    await userEvent.click(screen.getByRole("button", { name: "Less" }));
+    expect(core.sent()).toEqual([set(2), set(1)]);
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    // A snapshot from before the Device applied either level confirms nothing.
+    core.emit(at(1, { kind: "headphones", level: 50 }));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(2));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(1));
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the Device doesn't confirm a level within 10 s", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+    const more = await screen.findByRole("button", { name: "More" });
+    freezeClock();
+
+    fireEvent.click(more);
+    act(() => vi.advanceTimersByTime(9_900));
+    expect(slider()).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Noise Cancelling Level 2 wasn't confirmed by the Device",
+    );
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows an error when the core rejects a level", async () => {
+    const core = new FakeCore(at(1));
+    core.answer("set_noise_cancelling_level", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Less" }));
+    await core.release("set_noise_cancelling_level", { reject: "notAttached" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't set Noise Cancelling Level 0: notAttached",
+    );
+    expect(slider()).toHaveValue("1");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("shows and sets each Device's own level with two Connected", async () => {
+    const otherAddress = "AA:BB:CC:00:00:03";
+    const home = buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 1 });
+    const work = buds4Pro({
+      address: otherAddress,
+      name: "Work Buds4 Pro",
+      chosenMode: "noiseCancelling",
+      noiseCancellingLevel: 3,
+    });
+    const core = new FakeCore({ devices: [home, work], primary: BUDS_ADDRESS });
+    renderWindow(core);
+
+    expect(
+      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
+    ).toHaveValue("1");
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(slider()).toHaveValue("2");
+
+    await userEvent.click(screen.getByRole("tab", { name: /Work Buds4 Pro/ }));
+    expect(slider()).toHaveValue("3");
+    expect(slider()).toHaveAttribute("aria-busy", "false");
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(core.sent()).toEqual([
+      set(2),
+      { command: "set_noise_cancelling_level", args: { address: otherAddress, level: 4 } },
+    ]);
+  });
+
+  it("sends the chosen level to the Device", async () => {
+    const core = new FakeCore(
+      only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 1 })),
+    );
+    renderWindow(core);
+
+    const slider = await screen.findByRole("slider", { name: /Noise Cancelling Level/ });
+    fireEvent.change(slider, { target: { value: "3" } });
+
+    expect(core.sent()).toEqual([
+      { command: "set_noise_cancelling_level", args: { address: BUDS_ADDRESS, level: 3 } },
     ]);
   });
 });

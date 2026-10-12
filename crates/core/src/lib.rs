@@ -26,7 +26,7 @@ pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
 use frame_log::{Direction, FrameLog};
-pub use model::{AmbientLevelRange, Capabilities, Model};
+pub use model::{Capabilities, LevelRange, Model};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
 
@@ -143,6 +143,15 @@ fn backoff(retries: u32) -> Duration {
     Duration::from_secs(1u64 << retries.min(5)).min(Duration::from_secs(30))
 }
 
+/// Rejects `level` unless a Device with the level Capability `range` has it.
+fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !range.contains(level) {
+        return Err(CommandError::OutOfRange);
+    }
+    Ok(())
+}
+
 impl NotAttachedReason {
     /// Whether trying again by itself might Attach the Device. Not when only
     /// the listener can fix the cause, e.g. by quitting the app holding the
@@ -183,9 +192,12 @@ impl Drop for LinkSession {
 }
 
 /// A command for the Device, already checked against its Capabilities.
+// Named after the `Command`s they come from.
+#[allow(clippy::enum_variant_names)]
 enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
+    SetNoiseCancellingLevel(u8),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -378,6 +390,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::AmbientLevel(level)) => {
                 device.ambient_level = Some(level);
             }
+            LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
+                device.noise_cancelling_level = Some(level);
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device::unidentified(
@@ -411,15 +426,15 @@ impl<P: Platform> State<P> {
             }
             Command::SetAmbientLevel(address, level) => {
                 let (device, session) = self.attached(&address)?;
-                let range = device
-                    .capabilities
-                    .ambient_level
-                    .ok_or(CommandError::MissingCapability)?;
-                if !(range.min..=range.max).contains(&level) {
-                    return Err(CommandError::OutOfRange);
-                }
+                check_level(device.capabilities.ambient_level, level)?;
                 device.settings_reported()?;
                 session.send(SessionCommand::SetAmbientLevel(level))
+            }
+            Command::SetNoiseCancellingLevel(address, level) => {
+                let (device, session) = self.attached(&address)?;
+                check_level(device.capabilities.noise_cancelling_level, level)?;
+                device.settings_reported()?;
+                session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
@@ -554,6 +569,9 @@ async fn run_samsung_session(
                         session.set_noise_control_mode(mode)
                     }
                     SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
+                    SessionCommand::SetNoiseCancellingLevel(level) => {
+                        session.set_noise_cancelling_level(level)
+                    }
                 };
                 for frame in frames {
                     if !send(slug, frame) {
@@ -638,6 +656,11 @@ async fn run_sony_session(
                         session.set_noise_control_mode(mode)
                     }
                     SessionCommand::SetAmbientLevel(level) => session.set_ambient_level(level),
+                    // No Sony Model has a Noise Cancelling Level, so the
+                    // command is rejected before it gets here.
+                    SessionCommand::SetNoiseCancellingLevel(_) => {
+                        debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
+                    }
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;

@@ -58,6 +58,10 @@ _Avoid_: Actual mode, current mode, real mode
 How much outside sound Ambient lets through, expressed in the Model's own steps.
 _Avoid_: Ambient volume, transparency level
 
+**Noise Cancelling Level**:
+How strongly Noise Cancelling suppresses outside sound, expressed in the Model's own steps.
+_Avoid_: ANC level, NC strength, noise reduction level
+
 **Status**:
 Read-only facts reported by a Device, such as battery charge and Effective Mode.
 _Avoid_: Info, state

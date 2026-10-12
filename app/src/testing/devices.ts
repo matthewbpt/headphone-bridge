@@ -8,11 +8,13 @@ export const XM5_ADDRESS = "AA:BB:CC:00:00:02";
 const buds4ProCapabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient", "adaptive"],
   ambientLevel: { min: 0, max: 4 },
+  noiseCancellingLevel: { min: 0, max: 4 },
 };
 
 const xm5Capabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient"],
   ambientLevel: { min: 1, max: 20 },
+  noiseCancellingLevel: null,
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -27,6 +29,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     effectiveMode: "ambient",
     effectiveModeReason: null,
     ambientLevel: 1,
+    noiseCancellingLevel: 4,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     ...overrides,
   };
@@ -44,6 +47,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     effectiveMode: "noiseCancelling",
     effectiveModeReason: null,
     ambientLevel: 12,
+    noiseCancellingLevel: null,
     battery: { kind: "headphones", level: 70 },
     ...overrides,
   };
@@ -54,11 +58,12 @@ export function notAttached(device: Device, state: Device["state"]): Device {
   return {
     ...device,
     state,
-    capabilities: { noiseControlModes: [], ambientLevel: null },
+    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,
     ambientLevel: null,
+    noiseCancellingLevel: null,
     battery: null,
   };
 }

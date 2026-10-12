@@ -28,6 +28,8 @@ export interface Device {
   effectiveModeReason: EffectiveModeReason | null;
   /** In the Model's own steps, within `capabilities.ambientLevel`. Null until reported. */
   ambientLevel: number | null;
+  /** In the Model's own steps, within `capabilities.noiseCancellingLevel`. Null until reported. */
+  noiseCancellingLevel: number | null;
   /** Null until the Device first reports it. */
   battery: Battery | null;
 }
@@ -55,11 +57,12 @@ export type EffectiveModeReason = "budOutOfEar" | "unknown";
 
 export interface Capabilities {
   noiseControlModes: NoiseControlMode[];
-  ambientLevel: AmbientLevelRange | null;
+  ambientLevel: LevelRange | null;
+  noiseCancellingLevel: LevelRange | null;
 }
 
-/** The Model's Ambient Level steps, both ends included. */
-export interface AmbientLevelRange {
+/** A level Capability's steps in the Model's own units, both ends included. */
+export interface LevelRange {
   min: number;
   max: number;
 }
@@ -120,6 +123,11 @@ export function retryAttach(address: string): Promise<void> {
 /** Asks the Device to set the Ambient Level, in the Model's own steps. */
 export function setAmbientLevel(address: string, level: number): Promise<void> {
   return invoke("set_ambient_level", { address, level });
+}
+
+/** Asks the Device to set the Noise Cancelling Level, in the Model's own steps. */
+export function setNoiseCancellingLevel(address: string, level: number): Promise<void> {
+  return invoke("set_noise_cancelling_level", { address, level });
 }
 
 /**

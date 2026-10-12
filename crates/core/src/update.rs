@@ -18,4 +18,6 @@ pub enum Update {
     EffectiveMode(NoiseControlMode, Option<EffectiveModeReason>),
     /// In the Model's own steps, within its Capabilities' range.
     AmbientLevel(u8),
+    /// In the Model's own steps, within its Capabilities' range.
+    NoiseCancellingLevel(u8),
 }
