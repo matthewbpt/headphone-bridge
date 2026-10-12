@@ -1,4 +1,5 @@
 import { act } from "react";
+import type { Commands } from "../core";
 import type { DeviceList, Labels } from "../deviceList";
 
 /**
@@ -56,25 +57,29 @@ export class FakeCore {
 
   /** The window's `invoke`, for `@tauri-apps/api/core`. */
   invoke(command: string, args: Record<string, unknown> = {}): Promise<unknown> {
-    switch (command) {
-      case "labels":
-        return Promise.resolve(structuredClone(LABELS));
-      case "device_list":
-        return Promise.resolve(structuredClone(this.deviceList));
-      case "set_noise_control_mode":
-      case "set_ambient_level":
-      case "set_noise_cancelling_level":
-      case "retry_attach":
-        return this.record(command, args);
-      case "frame_log":
-        return Promise.resolve(this.frameLog);
-      case "set_frame_log":
-        this.frameLog = args.enabled ? "/tmp/headphone-bridge-frames.log" : null;
-        return Promise.resolve(this.frameLog);
-      default:
-        return Promise.reject(`the fake core has no command ${command}`);
+    if (!Object.hasOwn(this.commands, command)) {
+      return Promise.reject(`the fake core has no command ${command}`);
     }
+    const answer = this.commands[command as keyof Commands] as (args: unknown) => Promise<unknown>;
+    return answer(args);
   }
+
+  /** How the fake core answers each of the window's commands. */
+  private readonly commands: {
+    [C in keyof Commands]: (args: Commands[C]["args"]) => Promise<Commands[C]["result"]>;
+  } = {
+    labels: () => Promise.resolve(structuredClone(LABELS)),
+    device_list: () => Promise.resolve(structuredClone(this.deviceList)),
+    set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
+    set_ambient_level: (args) => this.record("set_ambient_level", args),
+    set_noise_cancelling_level: (args) => this.record("set_noise_cancelling_level", args),
+    retry_attach: (args) => this.record("retry_attach", args),
+    frame_log: () => Promise.resolve(this.frameLog),
+    set_frame_log: ({ enabled }) => {
+      this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
+      return Promise.resolve(this.frameLog);
+    },
+  };
 
   /** The window's `listen`, for `@tauri-apps/api/event`. */
   listen(event: string, handler: (event: { payload: DeviceList }) => void): () => void {
@@ -96,7 +101,7 @@ export class FakeCore {
     },
   };
 
-  private record(command: Command, args: Record<string, unknown>): Promise<void> {
+  private record<C extends Command>(command: C, args: Commands[C]["args"]): Promise<void> {
     const answer = this.answers.get(command) ?? "accept";
     let settle!: Call["settle"];
     const promise = new Promise<void>((resolve, reject) => (settle = { resolve, reject }));
@@ -108,11 +113,10 @@ export class FakeCore {
 }
 
 /** The commands the fake core records. */
-export type Command =
-  | "set_noise_control_mode"
-  | "set_ambient_level"
-  | "set_noise_cancelling_level"
-  | "retry_attach";
+export type Command = keyof Pick<
+  Commands,
+  "set_noise_control_mode" | "set_ambient_level" | "set_noise_cancelling_level" | "retry_attach"
+>;
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };

@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
-import { reasonText, retryAttach, setNoiseControlMode, useDeviceList, useLabels } from "./deviceList";
+import { reasonText } from "./deviceList";
+import { retryAttach, setNoiseControlMode, useDeviceList, useLabels } from "./core";
 import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
