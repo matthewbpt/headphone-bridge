@@ -45,7 +45,7 @@ pub struct Session {
     /// The mode the app last asked for, until the Device confirms it.
     pending_mode: Option<NoiseControlMode>,
     /// The Ambient Level the app last asked for, until the Device confirms it.
-    pending_level: Option<u8>,
+    pending_ambient_level: Option<u8>,
     /// The Noise Cancelling Level the app last asked for, until the Device
     /// confirms it. Kept apart from the Ambient Level's, so that sets of the
     /// two can't confirm each other.
@@ -81,7 +81,7 @@ impl Session {
     /// (frame log, 2026-10-11). Like a mode set it is followed by
     /// `MANAGER_INFO`, whose extended status also reports the level.
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
-        self.pending_level = Some(level);
+        self.pending_ambient_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
     }
 
@@ -183,8 +183,8 @@ impl Session {
                         }
                         _ => Vec::new(),
                     },
-                    id::AMBIENT_VOLUME if self.pending_level == Some(p[1]) => {
-                        self.pending_level = None;
+                    id::AMBIENT_VOLUME if self.pending_ambient_level == Some(p[1]) => {
+                        self.pending_ambient_level = None;
                         self.ambient_level(p.get(1)).into_iter().collect()
                     }
                     id::NOISE_REDUCTION_LEVEL
