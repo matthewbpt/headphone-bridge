@@ -111,6 +111,19 @@ async fn set_ambient_level(
 }
 
 #[tauri::command]
+async fn set_noise_cancelling_level(
+    core: State<'_, Core>,
+    address: String,
+    level: u8,
+) -> Result<(), CommandError> {
+    core.command(Command::SetNoiseCancellingLevel(
+        DeviceAddress(address),
+        level,
+    ))
+    .await
+}
+
+#[tauri::command]
 async fn retry_attach(core: State<'_, Core>, address: String) -> Result<(), CommandError> {
     core.command(Command::RetryAttach(DeviceAddress(address)))
         .await
@@ -202,6 +215,7 @@ pub fn run() {
             device_list,
             set_noise_control_mode,
             set_ambient_level,
+            set_noise_cancelling_level,
             retry_attach,
             frame_log,
             set_frame_log
