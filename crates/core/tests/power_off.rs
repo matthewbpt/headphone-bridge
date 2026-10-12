@@ -349,3 +349,43 @@ async fn written(link: &mut DeviceLink) -> Vec<u8> {
         .expect("timed out waiting for the core to write")
         .expect("link closed")
 }
+
+#[tokio::test]
+async fn real_xm5_power_offs_replay_from_their_frame_log() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    let records = fixture("wh-1000xm5/real-power-off");
+    // Each session starts with the first request of an Attach.
+    let first_request = &records[0].bytes;
+    let session_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| &r.bytes == first_request)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(session_at.len(), 2);
+
+    for (i, &start) in session_at.iter().enumerate() {
+        let end = session_at.get(i + 1).copied().unwrap_or(records.len());
+        let session = &records[start..end];
+        // The Power Off is the session's last sent data frame, then its ACK.
+        let power_off_at = session.len() - 2;
+
+        os.observe(Observation::DeviceConnected(xm5()));
+        let mut link = os.next_link().await;
+        replay(&mut link, &session[..power_off_at]).await;
+        wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
+        core.command(Command::PowerOff(xm5().address))
+            .await
+            .unwrap();
+        replay(&mut link, &session[power_off_at..]).await;
+        assert_eq!(
+            core.device_list().devices[0].state,
+            DeviceState::PoweringOff
+        );
+        drop(link);
+
+        os.observe(Observation::DeviceDisconnected(xm5().address));
+        wait_for(&core, |list| list.devices.is_empty()).await;
+    }
+}
