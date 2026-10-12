@@ -62,6 +62,10 @@ _Avoid_: Ambient volume, transparency level
 How strongly Noise Cancelling suppresses outside sound, expressed in the Model's own steps.
 _Avoid_: ANC level, NC strength, noise reduction level
 
+**Pending**:
+The state of a setting value the app has asked a Device for, until the Device reports it, the request is rejected, or it times out. A Pending value is shown as if it already applied.
+_Avoid_: Optimistic, in flight, unconfirmed
+
 **Status**:
 Read-only facts reported by a Device, such as battery charge and Effective Mode.
 _Avoid_: Info, state

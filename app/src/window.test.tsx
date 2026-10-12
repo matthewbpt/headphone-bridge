@@ -294,6 +294,23 @@ describe("Ambient Level", () => {
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
 
+  it("drops a pending level when the Device reports a level that wasn't asked for", async () => {
+    const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
+    renderWindow(core);
+    const slider = await screen.findByRole("slider", { name: "Ambient Level" });
+    freezeClock();
+
+    fireEvent.change(slider, { target: { value: "3" } });
+    expect(slider).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 0 })));
+    expect(slider).toHaveValue("0");
+    expect(slider).toHaveAttribute("aria-busy", "false");
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("shows an error when a return to the confirmed level isn't confirmed within 10 s", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
     renderWindow(core);
@@ -568,6 +585,23 @@ describe("Noise Cancelling Level", () => {
     core.emit(at(1));
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("drops a pending level when the Device reports a level that wasn't asked for", async () => {
+    const core = new FakeCore(at(1));
+    renderWindow(core);
+    const slider = await screen.findByRole("slider", { name: "Noise Cancelling Level" });
+    freezeClock();
+
+    fireEvent.change(slider, { target: { value: "3" } });
+    expect(slider).toHaveAttribute("aria-busy", "true");
+
+    core.emit(at(0));
+    expect(slider).toHaveValue("0");
+    expect(slider).toHaveAttribute("aria-busy", "false");
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows an error when the Device doesn't confirm a level within 10 s", async () => {

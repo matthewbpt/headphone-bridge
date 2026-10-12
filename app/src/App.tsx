@@ -12,7 +12,7 @@ import {
 import { BatteryGlyph, DevicePicture, ModeIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
-import { usePendingCommand } from "./usePendingCommand";
+import { usePendingSetting } from "./usePendingSetting";
 
 export function App() {
   return (
@@ -49,7 +49,7 @@ function DeviceListView() {
       {devices.length > 1 && (
         <DevicePills devices={devices} selected={selected} primary={primary} onPick={setPicked} />
       )}
-      {/* Keyed, so pending state doesn't carry over to another Device. */}
+      {/* Keyed, so Pending state doesn't carry over to another Device. */}
       <DeviceView key={selected.address} device={selected} labels={labels} />
     </>
   );
@@ -102,20 +102,16 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 }
 
 function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
-  // The mode asked for, until the next snapshot moves the Chosen Mode. Held
-  // here rather than in the selector, so the rest of the Device view can
-  // treat a pending mode as Chosen.
-  const mode = usePendingCommand((mode: NoiseControlMode) => labels.modes[mode]);
-  const { clear: clearMode } = mode;
-  useEffect(clearMode, [device.chosenMode, clearMode]);
-
-  const chooseMode = (chosen: NoiseControlMode) =>
-    mode.send(chosen, () => setNoiseControlMode(device.address, chosen));
+  // Held here rather than in the selector, so the rest of the Device view
+  // can treat a Pending mode as Chosen: the level slider comes and goes the
+  // moment a mode is clicked, and goes back if the Device refuses.
+  const mode = usePendingSetting(
+    device.chosenMode,
+    (chosen: NoiseControlMode) => setNoiseControlMode(device.address, chosen),
+    (chosen) => labels.modes[chosen],
+  );
 
   const attached = device.state.kind === "attached";
-  // A pending mode counts as Chosen, so the slider comes and goes the
-  // moment a mode is clicked, and goes back if the Device refuses.
-  const shownMode = mode.pending ?? device.chosenMode;
   const ambientLevel = device.capabilities.ambientLevel;
   const noiseCancellingLevel = device.capabilities.noiseCancellingLevel;
   return (
@@ -132,9 +128,9 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
                 supported={device.capabilities.noiseControlModes}
                 chosen={device.chosenMode}
                 pending={mode.pending}
-                shown={shownMode}
+                shown={mode.shown}
                 labels={labels}
-                onChoose={chooseMode}
+                onChoose={mode.request}
               />
               {device.effectiveModeReason && (
                 <p className="hint">{labels.hints[device.effectiveModeReason]}</p>
@@ -146,7 +142,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               )}
             </>
           )}
-          {ambientLevel && shownMode === "ambient" && (
+          {ambientLevel && mode.shown === "ambient" && (
             <LevelSlider
               title="Ambient Level"
               level={device.ambientLevel}
@@ -154,7 +150,7 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
               set={(level) => setAmbientLevel(device.address, level)}
             />
           )}
-          {noiseCancellingLevel && shownMode === "noiseCancelling" && (
+          {noiseCancellingLevel && mode.shown === "noiseCancelling" && (
             <LevelSlider
               title="Noise Cancelling Level"
               level={device.noiseCancellingLevel}
@@ -203,7 +199,7 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
 
 /**
  * Round icon buttons joined by a track, after the Galaxy Buds app. The
- * Chosen Mode is filled; a pending mode takes the fill, dimmed and ringed,
+ * Chosen Mode is filled; a Pending mode takes the fill, dimmed and ringed,
  * until the Device confirms it.
  */
 function NoiseControlModeSelector({
@@ -217,7 +213,7 @@ function NoiseControlModeSelector({
   supported: NoiseControlMode[];
   chosen: NoiseControlMode | null;
   pending: NoiseControlMode | null;
-  /** The pending mode, else the Chosen Mode: the one filled. */
+  /** The Pending mode, else the Chosen Mode: the one filled. */
   shown: NoiseControlMode | null;
   labels: Labels;
   onChoose: (mode: NoiseControlMode) => void;
@@ -272,20 +268,13 @@ function LevelSlider({
   /** Asks the Device for a level. */
   set: (level: number) => Promise<void>;
 }) {
-  // The levels asked for, until snapshots report them. Dragging across
-  // notches asks for each in turn. Only a change of level confirms one: a
-  // snapshot still reporting the old level says nothing about those asked.
-  const { pending, error, send, confirm } = usePendingCommand(
-    (asked: number) => `${title} ${asked}`,
+  // Dragging across notches asks for each level in turn.
+  const { shown, pending, error, request } = usePendingSetting(
+    level,
+    set,
+    (asked) => `${title} ${asked}`,
   );
-  useEffect(() => confirm(level), [level, confirm]);
-
-  const shown = pending ?? level;
-  const choose = (asked: number) => {
-    asked = Math.min(range.max, Math.max(range.min, asked));
-    if (asked === shown) return;
-    send(asked, () => set(asked));
-  };
+  const choose = (asked: number) => request(Math.min(range.max, Math.max(range.min, asked)));
 
   const steps = range.max - range.min + 1;
   const notched = steps <= MAX_NOTCHES;
