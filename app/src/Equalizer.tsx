@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { setEqualizer } from "./core";
-import type { Bands, Device, Equalizer as EqualizerValue, EqualizerCapability, StepRange } from "./deviceList";
-import { usePendingSetting } from "./usePendingSetting";
+import type {
+  Bands,
+  Device,
+  Equalizer as EqualizerValue,
+  EqualizerCapability,
+  Preset,
+  StepRange,
+} from "./deviceList";
+import { sameValue, usePendingSetting } from "./usePendingSetting";
 
 /**
  * The Equalizer card, drawn from the Model's Capability alone: a Preset
  * dropdown listing the Model's Presets under its own names and, once the
  * Device reports them, the curve as a slider per Band and a Clear Bass
  * slider. A picked Preset or a released slider is Pending until the Device
- * reports it. While the Device is
- * Equalizer Unavailable the card stays, disabled, and says why.
+ * reports it, and a Preset picked alone settles on that Preset whatever its
+ * curve. While the Device is Equalizer Unavailable the card stays, disabled, and says why.
  */
 export function Equalizer({
   device,
@@ -23,14 +30,22 @@ export function Equalizer({
 }) {
   // A Pending curve is the whole value the Device should report, so its
   // report settles it. Only what the Model lets the app set is sent.
-  const { shown, pending, error, request } = usePendingSetting(
+  const { shown: shownAsked, pending, error, request } = usePendingSetting(
     device.equalizer,
     (asked: EqualizerValue) => setEqualizer(device.address, settable(capability, asked)),
     (asked) => `${presetName(capability, asked.preset)} ${asked.bands ? "curve" : "Preset"}`,
+    settles,
   );
+  // A Preset picked alone keeps showing the reported curve until the
+  // Device reports the Preset's own.
+  const shown = shownAsked && {
+    ...shownAsked,
+    bands: shownAsked.bands ?? device.equalizer?.bands ?? null,
+    clearBass: shownAsked.clearBass ?? device.equalizer?.clearBass ?? null,
+  };
   // A Preset the Model doesn't list, e.g. one added by a firmware update,
   // selects nothing. Neither does one not reported yet.
-  const listed = shown !== null && capability.presets.some((preset) => preset.id === shown.preset);
+  const listed = shown !== null && preset(capability, shown.preset) !== undefined;
 
   /**
    * Asks for the shown curve with `edit` applied: on the shown Preset if its
@@ -39,10 +54,11 @@ export function Equalizer({
    */
   const requestCurve = (edit: Pick<EqualizerValue, "bands"> | Pick<EqualizerValue, "clearBass">) => {
     if (shown === null) return;
-    const editable = capability.presets.find((preset) => preset.id === shown.preset)?.editable;
-    const preset = editable ? shown.preset : capability.presets.find((preset) => preset.editable)?.id;
-    if (preset === undefined) return;
-    request({ ...shown, preset, ...edit });
+    const id = preset(capability, shown.preset)?.editable
+      ? shown.preset
+      : capability.presets.find((preset) => preset.editable)?.id;
+    if (id === undefined) return;
+    request({ ...shown, preset: id, ...edit });
   };
 
   return (
@@ -195,12 +211,29 @@ function ClearBass({
   );
 }
 
+/**
+ * Whether the Device reporting `reported` settles `asked`: on its Preset,
+ * with the asked Bands and Clear Bass where `asked` gives them.
+ */
+function settles(asked: EqualizerValue, reported: EqualizerValue): boolean {
+  return (
+    asked.preset === reported.preset &&
+    (asked.bands === null || sameValue(asked.bands, reported.bands)) &&
+    (asked.clearBass === null || asked.clearBass === reported.clearBass)
+  );
+}
+
 /** `asked`, with what the Model doesn't let the app set left unchanged. */
 function settable(capability: EqualizerCapability, asked: EqualizerValue): EqualizerValue {
   return { ...asked, clearBass: capability.clearBass ? asked.clearBass : null };
 }
 
+/** The Model's Preset with wire id `id`, if it lists one. */
+function preset(capability: EqualizerCapability, id: number): Preset | undefined {
+  return capability.presets.find((preset) => preset.id === id);
+}
+
 /** The Model's name for the Preset with wire id `id`. */
 function presetName(capability: EqualizerCapability, id: number): string {
-  return capability.presets.find((preset) => preset.id === id)?.name ?? String(id);
+  return preset(capability, id)?.name ?? String(id);
 }

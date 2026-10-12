@@ -917,6 +917,37 @@ describe("Equalizer", () => {
     expect(await preset()).toHaveAttribute("aria-busy", "false");
   });
 
+  it("keeps the newest XM5 Preset Pending until it lands, past the one picked before it", async () => {
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Custom 1");
+    await userEvent.selectOptions(await preset(), "Custom 2");
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa1, bands: [1, 1, 1, 1, 1], clearBass: 0 } })));
+    expect(await preset()).toHaveDisplayValue("Custom 2");
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa2, bands: [4, 2, 0, -2, -4], clearBass: 0 } })));
+    expect(await preset()).toHaveDisplayValue("Custom 2");
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("keeps showing the reported curve and Clear Bass while an XM5 Preset is Pending", async () => {
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Custom 2");
+
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+    expect(bandValues()).toEqual([-1, 0, 3, 5, 10]);
+    expect(await screen.findByRole("slider", { name: "Clear Bass" })).toHaveValue("2");
+  });
+
   it("shows and sets each Device's own Presets with two Connected", async () => {
     const core = new FakeCore({
       devices: [buds4Pro(), xm5({ equalizer: { preset: 0x00, bands: null, clearBass: null } })],

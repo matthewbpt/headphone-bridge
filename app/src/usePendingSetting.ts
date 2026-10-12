@@ -13,7 +13,8 @@ const PENDING_TIMEOUT_MS = 10_000;
  * has moved somewhere else, so it drops every Pending value. Only a change of
  * the reported value settles them: a snapshot still reporting the old value
  * says nothing about those asked. Values are compared by their contents, so
- * a compound value such as an Equalizer settles on a reported copy.
+ * a compound value such as an Equalizer settles on a reported copy, unless
+ * `settles` says when a reported value settles one asked.
  *
  * `reportedNow` is the Device's latest value, null until it reports one.
  * `command` asks the Device for a value and resolves once the core accepts
@@ -26,6 +27,7 @@ export function usePendingSetting<T>(
   reportedNow: T | null,
   command: (value: T) => Promise<void>,
   name: (value: T) => string,
+  settles: (asked: T, reported: T) => boolean = sameValue,
 ) {
   const reported = useStable(reportedNow);
   const [asked, setAsked] = useState<T[]>([]);
@@ -51,7 +53,7 @@ export function usePendingSetting<T>(
     if (Object.is(settledAgainst.current, reported)) return;
     settledAgainst.current = reported;
     setAsked((asked) => {
-      const i = asked.findIndex((v) => sameValue(v, reported));
+      const i = reported === null ? -1 : asked.findIndex((v) => settles(v, reported));
       return i < 0 ? [] : asked.slice(i + 1);
     });
   }, [reported]);
@@ -88,7 +90,7 @@ function useStable<T>(value: T): T {
 }
 
 /** Whether two setting values have the same contents. */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
