@@ -42,7 +42,7 @@ pub struct Core {
 
 /// What the core is asked for, in the order it's asked.
 enum Request {
-    Command(Command, oneshot::Sender<Result<(), CommandError>>),
+    Command(Command, Reply),
     /// A hold on the Device at the address, or on every Connected Device.
     Hold(u64, Option<DeviceAddress>),
     EndHold(u64),
@@ -141,7 +141,9 @@ impl Core {
         self.requests
             .send(Request::Command(command, reply))
             .expect("core task stopped");
-        response.await.expect("core task stopped")
+        // A reply handed on to a session is dropped if the session ends
+        // before answering, which leaves the Device not Attached.
+        response.await.unwrap_or(Err(CommandError::NotAttached))
     }
 
     /// Holds every Connected Device, now and as they Connect, until the
@@ -375,9 +377,14 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
-    SetEqualizer(Equalizer),
+    /// Answered by the session, as only it knows whether the Equalizer can
+    /// be sent.
+    SetEqualizer(Equalizer, Reply),
     PowerOff,
 }
+
+/// Where a command's acceptance or rejection is sent.
+type Reply = oneshot::Sender<Result<(), CommandError>>;
 
 #[derive(Debug, Clone, Copy)]
 enum Vendor {
@@ -419,6 +426,9 @@ impl<P: Platform> State<P> {
                 Some(observation) = observations.recv() => self.observe(observation),
                 Some(event) = link_events.recv() => self.link_event(event),
                 request = requests.recv() => match request {
+                    Some(Request::Command(Command::SetEqualizer(address, equalizer), reply)) => {
+                        self.set_equalizer(&address, equalizer, reply);
+                    }
                     Some(Request::Command(command, reply)) => {
                         let _ = reply.send(self.command(command));
                     }
@@ -647,6 +657,33 @@ impl<P: Platform> State<P> {
         }
     }
 
+    /// Checks `equalizer` and hands it, with `reply`, to the Device's
+    /// session, which answers once it knows whether it can send it.
+    fn set_equalizer(&mut self, address: &DeviceAddress, equalizer: Equalizer, reply: Reply) {
+        let checked = self.attached(address).and_then(|(device, session)| {
+            check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
+            if device.equalizer_unavailable {
+                return Err(CommandError::EqualizerUnavailable);
+            }
+            if device.equalizer.is_none() {
+                return Err(CommandError::SettingsNotReported);
+            }
+            Ok(session)
+        });
+        match checked {
+            Ok(session) => {
+                // A session that has ended drops the reply, answering
+                // NotAttached.
+                let _ = session
+                    .commands
+                    .send(SessionCommand::SetEqualizer(equalizer, reply));
+            }
+            Err(error) => {
+                let _ = reply.send(Err(error));
+            }
+        }
+    }
+
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
             Command::SetNoiseControlMode(address, mode) => {
@@ -669,17 +706,7 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
-            Command::SetEqualizer(address, equalizer) => {
-                let (device, session) = self.attached(&address)?;
-                check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
-                if device.equalizer_unavailable {
-                    return Err(CommandError::EqualizerUnavailable);
-                }
-                if device.equalizer.is_none() {
-                    return Err(CommandError::SettingsNotReported);
-                }
-                session.send(SessionCommand::SetEqualizer(equalizer))
-            }
+            Command::SetEqualizer(..) => unreachable!("answered by set_equalizer"),
             Command::PowerOff(address) => {
                 let (device, session) = self.attached(&address)?;
                 if !device.capabilities.power_off {
@@ -909,7 +936,8 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
-                    SessionCommand::SetEqualizer(equalizer) => {
+                    SessionCommand::SetEqualizer(equalizer, reply) => {
+                        let _ = reply.send(Ok(()));
                         session.set_equalizer_preset(equalizer.preset)
                     }
                     // No Samsung Model can Power Off, so the command is
@@ -1007,7 +1035,9 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
-                    SessionCommand::SetEqualizer(equalizer) => session.set_equalizer(&equalizer),
+                    SessionCommand::SetEqualizer(equalizer, reply) => {
+                        let _ = reply.send(session.set_equalizer(&equalizer));
+                    }
                     SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {

@@ -428,7 +428,7 @@ async fn clear_bass_alone_keeps_bands_just_sent_and_not_yet_reported() {
 }
 
 #[tokio::test]
-async fn clear_bass_alone_sends_nothing_while_the_device_reports_no_bands_to_keep() {
+async fn clear_bass_alone_is_rejected_while_the_device_reports_no_bands_to_keep() {
     let (core, _os, mut link) = attached_xm5().await;
     // The Device reports Manual without its curve.
     link.send
@@ -450,7 +450,7 @@ async fn clear_bass_alone_sends_nothing_while_the_device_reports_no_bands_to_kee
         ))
         .await;
 
-    assert_eq!(result, Ok(()));
+    assert_eq!(result, Err(CommandError::SettingsNotReported));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }
@@ -622,7 +622,7 @@ async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equ
 }
 
 #[tokio::test]
-async fn bands_alone_send_nothing_while_the_device_reports_no_clear_bass_to_keep() {
+async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
     let (core, _os, mut link) = attached_xm5().await;
     // The Device reports Manual without its curve.
     link.send
@@ -641,7 +641,7 @@ async fn bands_alone_send_nothing_while_the_device_reports_no_clear_bass_to_keep
         ))
         .await;
 
-    assert_eq!(result, Ok(()));
+    assert_eq!(result, Err(CommandError::SettingsNotReported));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }

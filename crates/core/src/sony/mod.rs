@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 
 use uuid::{uuid, Uuid};
 
-use crate::command::{Equalizer, NoiseControlMode};
+use crate::command::{CommandError, Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
 use crate::model::{Model, WH_1000XM5_BANDS};
 pub use crate::update::Update;
@@ -218,9 +218,9 @@ impl Session {
     /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
     /// to the Device. Bands and Clear Bass are sent together, so one given
     /// alone keeps the other as last reported or sent; with none to keep,
-    /// nothing is sent. The Device confirms with a notification of the new
-    /// params.
-    pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
+    /// it is rejected as not reported and nothing is sent. The Device
+    /// confirms with a notification of the new params.
+    pub fn set_equalizer(&mut self, equalizer: &Equalizer) -> Result<(), CommandError> {
         let curve = match (&equalizer.bands, equalizer.clear_bass) {
             (None, None) => None,
             (bands, clear_bass) => {
@@ -228,7 +228,7 @@ impl Session {
                 let bands = bands.clone().or_else(|| kept?.bands.clone());
                 let clear_bass = clear_bass.or_else(|| kept?.clear_bass);
                 let (Some(bands), Some(clear_bass)) = (bands, clear_bass) else {
-                    return;
+                    return Err(CommandError::SettingsNotReported);
                 };
                 Some((bands, clear_bass))
             }
@@ -253,6 +253,7 @@ impl Session {
             });
         }
         self.request(payload);
+        Ok(())
     }
 
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
