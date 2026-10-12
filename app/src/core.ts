@@ -55,22 +55,38 @@ const WORDS: {
 };
 
 /**
+ * The core's reason as the name it's sent under, with the message it carries
+ * if any, or null when `error` isn't shaped like one.
+ */
+function reasonOf(error: unknown): [key: string, message?: unknown] | null {
+  if (typeof error === "string") return [error];
+  if (typeof error === "object" && error !== null) {
+    const entries = Object.entries(error);
+    if (entries.length === 1) return entries[0];
+  }
+  return null;
+}
+
+/**
  * Why a command was rejected, in words: the core's reason from `WORDS`, or
  * anything else (such as a transport failure) in its own string form.
  */
 function inWords(error: unknown): string {
-  if (typeof error === "string" && Object.hasOwn(WORDS, error)) {
-    const words = WORDS[error as CommandErrorKey];
-    if (typeof words === "string") return words;
-  }
-  if (typeof error === "object" && error !== null) {
-    const keys = Object.keys(error);
-    if (keys.length === 1 && Object.hasOwn(WORDS, keys[0])) {
-      const words = WORDS[keys[0] as CommandErrorKey];
-      if (typeof words === "function") return words((error as Record<string, never>)[keys[0]]);
-    }
+  const reason = reasonOf(error);
+  if (reason && Object.hasOwn(WORDS, reason[0])) {
+    const words = WORDS[reason[0] as CommandErrorKey];
+    if (typeof words === "string" && reason.length === 1) return words;
+    if (typeof words === "function" && reason.length === 2) return words(reason[1] as never);
   }
   return String(error);
+}
+
+/**
+ * Why a command below was rejected, in words, for a caller's `catch`: the
+ * message of the `Error` it rejects with.
+ */
+export function whyRejected(rejection: unknown): string {
+  return rejection instanceof Error ? rejection.message : inWords(rejection);
 }
 
 /** Sends `command`; when the core rejects it, rejects with an `Error` whose message is why, in words. */
@@ -107,7 +123,7 @@ export function retryAttach(address: string): Promise<void> {
  * Turns the frame log on or off. Resolves with the file it's logging to, or
  * null once it's off.
  */
-export function setFrameLog(enabled: boolean): Promise<string | null> {
+function setFrameLog(enabled: boolean): Promise<string | null> {
   return send("set_frame_log", { enabled });
 }
 
