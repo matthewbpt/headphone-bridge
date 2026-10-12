@@ -13,6 +13,8 @@ pub enum Command {
     SetAmbientLevel(DeviceAddress, u8),
     /// Sets the Noise Cancelling Level, in the Model's own steps.
     SetNoiseCancellingLevel(DeviceAddress, u8),
+    /// Powers Off the Device: it switches off and stops being Connected.
+    PowerOff(DeviceAddress),
     /// Tries again to Attach a Connected Device that isn't Attached.
     RetryAttach(DeviceAddress),
     /// Switches the frame log on, appending to the given file, or off (`None`).

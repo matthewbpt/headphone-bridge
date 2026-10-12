@@ -33,6 +33,7 @@ mod command {
     pub const CONNECT_RET_SUPPORT_FUNCTION: u8 = 0x07;
     pub const POWER_GET_STATUS: u8 = 0x22;
     pub const POWER_RET_STATUS: u8 = 0x23;
+    pub const POWER_SET_STATUS: u8 = 0x24;
     pub const POWER_NTFY_STATUS: u8 = 0x25;
     pub const NCASM_GET_PARAM: u8 = 0x66;
     pub const NCASM_RET_PARAM: u8 = 0x67;
@@ -49,6 +50,7 @@ const MODEL_NAME: u8 = 0x01;
 mod power {
     pub const BATTERY: u8 = 0x00;
     pub const BATTERY_WITH_THRESHOLD: u8 = 0x08;
+    pub const POWER_OFF: u8 = 0x03;
 }
 
 /// `FunctionType`s in the support function list.
@@ -178,6 +180,13 @@ impl Session {
         };
         params.level = level;
         self.set_noise_control(params);
+    }
+
+    /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
+    pub fn power_off(&mut self) {
+        /// `PowerOffSettingValue::ON`.
+        const ON: u8 = 0x01;
+        self.request(vec![command::POWER_SET_STATUS, power::POWER_OFF, ON]);
     }
 
     fn set_noise_control(&mut self, params: NoiseControl) {

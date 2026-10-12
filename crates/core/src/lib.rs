@@ -198,6 +198,7 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
+    PowerOff,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -436,6 +437,16 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
+            Command::PowerOff(address) => {
+                let (device, session) = self.attached(&address)?;
+                if !device.capabilities.power_off {
+                    return Err(CommandError::MissingCapability);
+                }
+                session.send(SessionCommand::PowerOff)?;
+                let tracked = self.devices.get_mut(&address).expect("checked above");
+                tracked.device.state = DeviceState::PoweringOff;
+                Ok(())
+            }
             Command::RetryAttach(address) => {
                 let tracked = self.supported(&address)?;
                 if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
@@ -572,6 +583,12 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
+                    // No Samsung Model can Power Off, so the command is
+                    // rejected before it gets here.
+                    SessionCommand::PowerOff => {
+                        debug_assert!(false, "no Samsung Model can Power Off");
+                        Vec::new()
+                    }
                 };
                 for frame in frames {
                     if !send(slug, frame) {
@@ -661,6 +678,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
+                    SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {
                     return NotAttachedReason::LinkDropped;
