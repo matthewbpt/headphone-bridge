@@ -1,0 +1,505 @@
+/* The window's one stylesheet. The theme is a set of custom properties that
+   follows the OS light or dark setting; the dark look is the Galaxy Buds
+   app's: near-black cards and a blue accent. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f2f2f6;
+  --card: #ffffff;
+  --text: #121214;
+  --muted: #6c6c72;
+  --accent: #2f6bf0;
+  --accent-text: #ffffff;
+  --circle: #e6e6ec;
+  --circle-icon: #6c6c72;
+  --track: #dcdce3;
+  --divider: #e3e3e8;
+  --danger: #c4372f;
+  /* The Device pictures: a dark body, light metal stems and a grey
+     stand-in for unknown Models. */
+  --art-body: #2d3036;
+  --art-body-shade: #1c1e22;
+  --art-tip: #4a4e56;
+  --art-metal: #c4c8ce;
+  --art-metal-shade: #a2a7ae;
+  --art-grille: #7a7f87;
+  --art-generic: #9a9aa3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #050607;
+    --card: #1c1c1e;
+    --text: #f4f4f6;
+    --muted: #9a9aa0;
+    --accent: #3b7cff;
+    --accent-text: #ffffff;
+    --circle: #3a3a3d;
+    --circle-icon: #b8b8be;
+    --track: #2e2e31;
+    --divider: #2e2e31;
+    --danger: #ff6b5f;
+    --art-body: #33363c;
+    --art-body-shade: #24262a;
+    --art-tip: #4c5058;
+    --art-metal: #b9bdc4;
+    --art-metal-shade: #8e939b;
+    --art-grille: #5d6168;
+    --art-generic: #6e6e76;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Ubuntu, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The window: header, switcher and Device on top, Settings at the bottom. */
+
+.window {
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 18px 16px 16px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Only the picture gives way when the column is too tall for the window
+   (two Devices, a hint and the slider); everything else keeps its size. */
+.window > * {
+  flex-shrink: 0;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 22px;
+  padding: 16px 14px;
+}
+
+.empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Header: the Device's OS name, and its Model when that differs. */
+
+.header {
+  padding: 0 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin-top: 1px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Device switcher: a pill per Connected Device, the Primary dotted. */
+
+.pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 2px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--circle);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pill[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.pill__primary {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+/* The Device's picture, with its Status underneath: the battery once
+   Attached, else Attaching or the reason it isn't. */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.device-picture {
+  flex: 0 1 140px;
+  width: 190px;
+  min-height: 96px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+  font-weight: 600;
+}
+
+.status--column {
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 400;
+  text-align: center;
+  max-width: 320px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.battery__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.battery__separator,
+.battery__label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.battery-glyph {
+  width: 18px;
+  height: 10px;
+  color: var(--muted);
+}
+
+.battery-glyph__fill {
+  fill: var(--text);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--track);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 20px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Settings: collapsed at the bottom, the Developer section inside it. */
+
+.settings {
+  margin-top: auto;
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.settings summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.settings > summary {
+  font-weight: 600;
+}
+
+.settings > div,
+.settings > details {
+  margin-top: 10px;
+}
+
+/* Noise Control Mode: round icon buttons joined by a track. The filled
+   circle is the Chosen Mode, or the pending mode, dimmed and ringed, until
+   the Device confirms it. */
+
+.modes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), 1fr);
+}
+
+.modes__track {
+  position: absolute;
+  top: 25px;
+  height: 5px;
+  margin-top: -2.5px;
+  left: calc(100% / var(--count) / 2);
+  right: calc(100% / var(--count) / 2);
+  background: var(--track);
+}
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0 2px;
+  background: none;
+  cursor: pointer;
+}
+
+.mode:disabled {
+  cursor: default;
+}
+
+.mode__circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--circle);
+  color: var(--circle-icon);
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode:not(:disabled):hover .mode__circle {
+  filter: brightness(1.08);
+}
+
+.mode-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.mode__label {
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.mode[data-filled="true"] .mode__circle {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.mode[data-filled="true"] .mode__label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mode[aria-busy="true"] .mode__circle {
+  opacity: 0.6;
+}
+
+.mode[aria-busy="true"] .mode__circle::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.hint {
+  margin: 14px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.card .error {
+  margin: 10px 4px 0;
+  text-align: center;
+}
+
+/* Ambient Level: a pill track between − and +, with a notch per step when
+   the Model has few enough steps, else the current value. */
+
+.level {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.level__title {
+  margin: 0 4px 6px;
+}
+
+.level__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.level__step {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.level__step:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.level__step svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.level__track {
+  --thumb: 24px;
+  position: relative;
+  flex: 1;
+  height: var(--thumb);
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.level__notches {
+  position: absolute;
+  inset: 0 calc(var(--thumb) / 2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.level__notch {
+  width: 7px;
+  height: 7px;
+  margin: 0 -3.5px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.level__track input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.level__track input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.level__track[data-pending="true"] input::-webkit-slider-thumb {
+  border-style: dashed;
+}
+
+.level__track[data-pending="true"] input::-moz-range-thumb {
+  border-style: dashed;
+}
+
+.level__track input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.level__value {
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
