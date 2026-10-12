@@ -607,3 +607,93 @@ button {
 .equalizer:disabled select {
   opacity: 0.5;
 }
+
+.equalizer__bands {
+  --thumb: 20px;
+  --height: 120px;
+  position: relative;
+  display: flex;
+  margin-top: 12px;
+}
+
+/* Spans the thumbs' travel, so the line meets each knob's centre. */
+.equalizer__line {
+  position: absolute;
+  top: calc(var(--thumb) / 2);
+  left: 0;
+  width: 100%;
+  height: calc(var(--height) - var(--thumb));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.equalizer__line polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.equalizer__bands[data-pending="true"] .equalizer__line polyline {
+  stroke-dasharray: 4 3;
+}
+
+.equalizer__band {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.equalizer__band input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: var(--thumb);
+  height: var(--height);
+  margin: 0;
+  background: linear-gradient(var(--track), var(--track)) center / 4px 100% no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.equalizer__band input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  position: relative;
+  z-index: 1;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.equalizer__band input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--card);
+}
+
+.equalizer__bands[data-pending="true"] input::-webkit-slider-thumb {
+  border-style: dashed;
+}
+
+.equalizer__bands[data-pending="true"] input::-moz-range-thumb {
+  border-style: dashed;
+}
+
+.equalizer__band input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.equalizer:disabled .equalizer__bands {
+  opacity: 0.5;
+}

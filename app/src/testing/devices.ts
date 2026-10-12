@@ -45,7 +45,7 @@ const xm5Capabilities: Capabilities = {
       { id: 0xa1, name: "Custom 1", editable: true, selectable: true },
       { id: 0xa2, name: "Custom 2", editable: true, selectable: true },
     ],
-    bands: null,
+    bands: { frequencies: ["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"], range: { min: -10, max: 10 } },
     clearBass: null,
   },
 };

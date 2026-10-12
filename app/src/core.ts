@@ -59,6 +59,7 @@ export type CommandError =
   | "missingCapability"
   | "outOfRange"
   | "unavailablePreset"
+  | "fixedPreset"
   | "settingsNotReported"
   | "equalizerUnavailable"
   | { frameLogUnavailable: string };
@@ -88,6 +89,7 @@ const WORDS: {
   missingCapability: "the Model doesn't have that setting",
   outOfRange: "that value is outside the Model's range",
   unavailablePreset: "the app can't pick that Preset",
+  fixedPreset: "that Preset's Bands can't be changed",
   settingsNotReported: "the Device hasn't reported its settings yet",
   equalizerUnavailable: "the Device isn't taking Equalizer changes right now",
   frameLogUnavailable: (message) => message,

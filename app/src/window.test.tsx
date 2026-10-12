@@ -937,6 +937,152 @@ describe("Equalizer", () => {
     ]);
   });
 
+  const band = (frequency: string) => screen.findByRole("slider", { name: `${frequency} Band` });
+  const bandValues = () =>
+    screen.getAllByRole<HTMLInputElement>("slider", { name: / Band$/ }).map((slider) => Number(slider.value));
+
+  it("draws the XM5's reported curve as a Band slider per frequency, lowest first", async () => {
+    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } }))));
+
+    const bands = await screen.findAllByRole("slider", { name: / Band$/ });
+    expect(bands.map((slider) => slider.getAttribute("aria-label"))).toEqual([
+      "400 Hz Band",
+      "1 kHz Band",
+      "2.5 kHz Band",
+      "6.3 kHz Band",
+      "16 kHz Band",
+    ]);
+    expect(bandValues()).toEqual([-1, 0, 3, 5, 10]);
+    expect(await band("400 Hz")).toHaveAttribute("min", "-10");
+    expect(await band("400 Hz")).toHaveAttribute("max", "10");
+  });
+
+  it("draws no curve until the XM5 reports its Bands", async () => {
+    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: null, clearBass: null } }))));
+
+    expect(await preset()).toHaveDisplayValue("Bright");
+    expect(screen.queryByRole("slider", { name: / Band$/ })).not.toBeInTheDocument();
+  });
+
+  it("sends nothing while a Band is dragged, then the whole curve once it's released, staying on Custom 1", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await band("1 kHz");
+
+    fireEvent.change(slider, { target: { value: "4" } });
+    fireEvent.change(slider, { target: { value: "6" } });
+    expect(core.sent()).toEqual([]);
+    expect(bandValues()).toEqual([-1, 6, 3, 5, 10]);
+
+    fireEvent.pointerUp(slider);
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: null } },
+      },
+    ]);
+    expect(await preset()).toHaveDisplayValue("Custom 1");
+  });
+
+  it("moves a fixed Preset onto Manual when a Band is released, starting from that Preset's curve", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await band("16 kHz");
+
+    fireEvent.change(slider, { target: { value: "7" } });
+    fireEvent.pointerUp(slider);
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: null } },
+      },
+    ]);
+    expect(await preset()).toHaveDisplayValue("Manual");
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+    expect(bandValues()).toEqual([-1, 0, 3, 5, 7]);
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 } })));
+
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+    expect(bandValues()).toEqual([-1, 0, 3, 5, 7]);
+  });
+
+  it("sends a Band moved from the keyboard once the key is let go", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await band("400 Hz");
+
+    slider.focus();
+    expect(slider).toHaveFocus();
+    fireEvent.change(slider, { target: { value: "0" } });
+    expect(core.sent()).toEqual([]);
+    fireEvent.keyUp(slider, { key: "ArrowUp" });
+
+    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
+      { preset: 0xa0, bands: [0, 0, 3, 5, 10], clearBass: null },
+    ]);
+  });
+
+  it("keeps the newest curve Pending when two Bands are released in a row, until it lands", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    renderWindow(core);
+
+    fireEvent.change(await band("400 Hz"), { target: { value: "3" } });
+    fireEvent.pointerUp(await band("400 Hz"));
+    fireEvent.change(await band("16 kHz"), { target: { value: "-4" } });
+    fireEvent.pointerUp(await band("16 kHz"));
+    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
+      { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: null },
+      { preset: 0xa0, bands: [3, 0, 0, 0, -4], clearBass: null },
+    ]);
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: 2 } })));
+    expect(bandValues()).toEqual([3, 0, 0, 0, -4]);
+    expect(await preset()).toHaveAttribute("aria-busy", "true");
+
+    core.emit(only(xm5({ equalizer: { preset: 0xa0, bands: [3, 0, 0, 0, -4], clearBass: 2 } })));
+    expect(bandValues()).toEqual([3, 0, 0, 0, -4]);
+    expect(await preset()).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("goes back to the reported curve and shows why when the core rejects a Band", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    core.answer("set_equalizer", "hold");
+    renderWindow(core);
+
+    fireEvent.change(await band("1 kHz"), { target: { value: "5" } });
+    fireEvent.pointerUp(await band("1 kHz"));
+    await core.release("set_equalizer", { reject: "fixedPreset" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't set Manual curve: that Preset's Bands can't be changed",
+    );
+    expect(bandValues()).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("goes back to the reported curve when the Device doesn't confirm a Band within 10 s", async () => {
+    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    renderWindow(core);
+    const slider = await band("1 kHz");
+    freezeClock();
+
+    fireEvent.change(slider, { target: { value: "5" } });
+    fireEvent.pointerUp(slider);
+    expect(bandValues()).toEqual([0, 5, 0, 0, 0]);
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("Manual curve wasn't confirmed by the Device");
+    expect(bandValues()).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("disables the Bands while the Device is Powering Off", async () => {
+    renderWindow(new FakeCore(only(xm5({ state: { kind: "poweringOff" } }))));
+
+    expect(await band("400 Hz")).toBeDisabled();
+  });
+
   it("isn't shown for a Model without an Equalizer", async () => {
     const capabilities = { ...buds4Pro().capabilities, equalizer: null };
     renderWindow(new FakeCore(only(buds4Pro({ capabilities, equalizer: null }))));
@@ -1186,7 +1332,9 @@ describe("Power Off", () => {
     for (const radio of radios) expect(radio).toBeDisabled();
     expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
-    expect(screen.getByRole("slider")).toBeDisabled();
+    const sliders = screen.getAllByRole("slider");
+    expect(sliders).toHaveLength(6);
+    for (const slider of sliders) expect(slider).toBeDisabled();
   });
 
   it("shows why the core refused Power Off", async () => {
@@ -1214,7 +1362,9 @@ describe("Power Off", () => {
     for (const radio of screen.getAllByRole("radio")) {
       if (radio.getAttribute("aria-checked") === "false") expect(radio).toBeEnabled();
     }
-    expect(screen.getByRole("slider")).toBeEnabled();
+    const sliders = screen.getAllByRole("slider");
+    expect(sliders).toHaveLength(6);
+    for (const slider of sliders) expect(slider).toBeEnabled();
   });
 
   it("still says a Device didn't Power Off while it is Attached again", async () => {
