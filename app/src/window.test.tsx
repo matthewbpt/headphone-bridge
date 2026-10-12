@@ -885,4 +885,19 @@ describe("Settings", () => {
     await userEvent.click(screen.getByText("Developer"));
     expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
   });
+
+  it("shows why the frame log couldn't be opened", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    core.answer("set_frame_log", { reject: { frameLogUnavailable: "Permission denied (os error 13)" } });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+
+    expect(
+      await screen.findByText("Couldn't open the frame log: Permission denied (os error 13)"),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeChecked();
+  });
 });

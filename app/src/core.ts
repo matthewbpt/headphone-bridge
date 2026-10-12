@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { DeviceList, Labels, NoiseControlMode } from "./deviceList";
 
 // The window's only way in to the core: its commands, as named and typed
-// functions, and the hooks that follow its snapshots and labels.
+// functions, and the hooks that follow its snapshots, labels and frame log.
 
 /**
  * Every command the window sends the core, by the name the shell handles it
@@ -101,6 +101,31 @@ export function setNoiseCancellingLevel(address: string, level: number): Promise
 /** Tries again to Attach a Connected Device that isn't Attached. */
 export function retryAttach(address: string): Promise<void> {
   return send("retry_attach", { address });
+}
+
+/**
+ * Turns the frame log on or off. Resolves with the file it's logging to, or
+ * null once it's off.
+ */
+export function setFrameLog(enabled: boolean): Promise<string | null> {
+  return send("set_frame_log", { enabled });
+}
+
+/**
+ * The frame log's file: null while it's off, undefined until it's known. Turning
+ * it on or off through `setEnabled` follows the file; when the core rejects
+ * that, it rejects with why, in words, and the file is unchanged.
+ */
+export function useFrameLog(): {
+  file: string | null | undefined;
+  setEnabled: (enabled: boolean) => Promise<void>;
+} {
+  const [file, setFile] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    send("frame_log", {}).then(setFile);
+  }, []);
+  const setEnabled = useCallback((enabled: boolean) => setFrameLog(enabled).then(setFile), []);
+  return { file, setEnabled };
 }
 
 /** The labels, or null until they arrive. */
