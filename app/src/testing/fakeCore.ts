@@ -15,6 +15,7 @@ export class FakeCore {
   private deviceList: DeviceList;
   private readonly listeners = new Set<(event: { payload: DeviceList }) => void>();
   private readonly answers = new Map<Command, Answer>();
+  private frameLogAnswer: FrameLogAnswer = "accept";
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
@@ -34,9 +35,13 @@ export class FakeCore {
   /**
    * How the core answers every later call of `command`: accept it at once
    * (the default), reject it with an error, or hold it until `release`.
+   * Turning the frame log on or off is answered at once: accepted or rejected.
    */
-  answer(command: Command, answer: Answer) {
-    this.answers.set(command, answer);
+  answer(command: Command, answer: Answer): void;
+  answer(command: "set_frame_log", answer: FrameLogAnswer): void;
+  answer(command: Command | "set_frame_log", answer: Answer) {
+    if (command === "set_frame_log") this.frameLogAnswer = answer as FrameLogAnswer;
+    else this.answers.set(command, answer);
   }
 
   /** Answers the oldest held call of `command`. */
@@ -76,6 +81,7 @@ export class FakeCore {
     retry_attach: (args) => this.record("retry_attach", args),
     frame_log: () => Promise.resolve(this.frameLog),
     set_frame_log: ({ enabled }) => {
+      if (this.frameLogAnswer !== "accept") return Promise.reject(this.frameLogAnswer.reject);
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
@@ -120,6 +126,9 @@ export type Command = keyof Pick<
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };
+
+/** Accept turning the frame log on or off, or reject it with the core's error. */
+export type FrameLogAnswer = Exclude<Answer, "hold">;
 
 export interface SentCommand {
   command: Command;
