@@ -15,6 +15,7 @@ async fn a_command_for_a_device_that_is_not_connected_is_rejected() {
         Command::SetNoiseControlMode(unknown.clone(), NoiseControlMode::NoiseCancelling),
         Command::SetAmbientLevel(unknown.clone(), 2),
         Command::SetNoiseCancellingLevel(unknown.clone(), 2),
+        Command::PowerOff(unknown.clone()),
     ] {
         assert_eq!(
             core.command(command.clone()).await,
