@@ -33,11 +33,54 @@ export type CommandError =
   | "settingsNotReported"
   | { frameLogUnavailable: string };
 
+/** Each reason the core gives, as the name it's sent under. */
+type CommandErrorKey = CommandError extends infer E ? (E extends string ? E : keyof E) : never;
+
+/**
+ * Each reason in words, for the listener. A reason that carries a message is
+ * worded from it. The type makes every reason in `CommandError` need words.
+ */
+const WORDS: {
+  [K in CommandErrorKey]: K extends CommandError
+    ? string
+    : (message: Extract<CommandError, Record<K, unknown>>[K]) => string;
+} = {
+  unknownDevice: "the Device isn't Connected",
+  notAttached: "the Device isn't Attached",
+  unsupportedModel: "the Model isn't supported",
+  missingCapability: "the Model doesn't have that setting",
+  outOfRange: "that value is outside the Model's range",
+  settingsNotReported: "the Device hasn't reported its settings yet",
+  frameLogUnavailable: (message) => message,
+};
+
+/**
+ * Why a command was rejected, in words: the core's reason from `WORDS`, or
+ * anything else (such as a transport failure) in its own string form.
+ */
+function inWords(error: unknown): string {
+  if (typeof error === "string" && Object.hasOwn(WORDS, error)) {
+    const words = WORDS[error as CommandErrorKey];
+    if (typeof words === "string") return words;
+  }
+  if (typeof error === "object" && error !== null) {
+    const keys = Object.keys(error);
+    if (keys.length === 1 && Object.hasOwn(WORDS, keys[0])) {
+      const words = WORDS[keys[0] as CommandErrorKey];
+      if (typeof words === "function") return words((error as Record<string, never>)[keys[0]]);
+    }
+  }
+  return String(error);
+}
+
+/** Sends `command`; when the core rejects it, rejects with an `Error` whose message is why, in words. */
 function send<C extends keyof Commands>(
   command: C,
   args: Commands[C]["args"],
 ): Promise<Commands[C]["result"]> {
-  return invoke<Commands[C]["result"]>(command, args);
+  return invoke<Commands[C]["result"]>(command, args).catch((error: unknown) => {
+    throw new Error(inWords(error));
+  });
 }
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */

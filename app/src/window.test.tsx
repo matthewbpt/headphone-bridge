@@ -64,7 +64,7 @@ describe("Noise Control Mode", () => {
 
     await core.release("set_noise_control_mode", { reject: "notAttached" });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't set Ambient: notAttached");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't set Ambient: the Device isn't Attached");
     expect(await mode("Ambient")).toHaveAttribute("aria-busy", "false");
     expect(await mode("Ambient")).not.toBeChecked();
     expect(await mode("Noise Cancelling")).toBeChecked();
@@ -352,7 +352,7 @@ describe("Ambient Level", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Less" }));
     await core.release("set_ambient_level", { reject: "notAttached" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Ambient Level 0: notAttached");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Ambient Level 0: the Device isn't Attached");
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
@@ -632,7 +632,7 @@ describe("Noise Cancelling Level", () => {
     await core.release("set_noise_cancelling_level", { reject: "notAttached" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Couldn't set Noise Cancelling Level 0: notAttached",
+      "Couldn't set Noise Cancelling Level 0: the Device isn't Attached",
     );
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "false");
@@ -764,6 +764,32 @@ describe("a Device that isn't Attached", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
 
     expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
+  });
+
+  it("shows why the core rejected Retry", async () => {
+    const core = new FakeCore(
+      only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
+    );
+    core.answer("retry_attach", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await core.release("retry_attach", { reject: "unknownDevice" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't retry: the Device isn't Connected");
+  });
+
+  it("shows a rejection that isn't one of the core's reasons as it is", async () => {
+    const core = new FakeCore(
+      only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
+    );
+    core.answer("retry_attach", "hold");
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await core.release("retry_attach", { reject: "the shell went away" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't retry: the shell went away");
   });
 
   it("shows an unsupported Model's reason without Retry", async () => {

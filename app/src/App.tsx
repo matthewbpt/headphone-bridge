@@ -233,7 +233,7 @@ function RetryButton({ address }: { address: string }) {
         className="button"
         onClick={() => {
           setError(null);
-          retryAttach(address).catch((e) => setError(`Couldn't retry: ${e}`));
+          retryAttach(address).catch((e: Error) => setError(`Couldn't retry: ${e.message}`));
         }}
       >
         Retry
