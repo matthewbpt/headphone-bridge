@@ -634,8 +634,16 @@ button {
   stroke-linejoin: round;
 }
 
-.equalizer__bands[data-pending="true"] .equalizer__line polyline {
-  stroke-dasharray: 4 3;
+/* A released curve is dimmed until the Device confirms it, like a picked
+   Preset. Dashes would break the small knobs into arcs in WebKitGTK. */
+.equalizer__bands[data-pending="true"] .equalizer__line {
+  opacity: 0.6;
+}
+
+/* Only the ring fades, so the knob still hides the line behind it. */
+.equalizer__bands[data-pending="true"],
+.equalizer__clear-bass[data-pending="true"] {
+  --knob: color-mix(in srgb, var(--accent) 60%, var(--card));
 }
 
 .equalizer__band {
@@ -679,7 +687,7 @@ button {
   height: var(--thumb);
   box-sizing: border-box;
   border-radius: 50%;
-  border: 3px solid var(--accent);
+  border: 3px solid var(--knob, var(--accent));
   background: var(--card);
 }
 
@@ -688,16 +696,8 @@ button {
   height: var(--thumb);
   box-sizing: border-box;
   border-radius: 50%;
-  border: 3px solid var(--accent);
+  border: 3px solid var(--knob, var(--accent));
   background: var(--card);
-}
-
-.equalizer__bands[data-pending="true"] input::-webkit-slider-thumb {
-  border-style: dashed;
-}
-
-.equalizer__bands[data-pending="true"] input::-moz-range-thumb {
-  border-style: dashed;
 }
 
 .equalizer__band input:focus-visible {
@@ -737,7 +737,7 @@ button {
   height: var(--thumb);
   box-sizing: border-box;
   border-radius: 50%;
-  border: 3px solid var(--accent);
+  border: 3px solid var(--knob, var(--accent));
   background: var(--card);
 }
 
@@ -746,16 +746,8 @@ button {
   height: var(--thumb);
   box-sizing: border-box;
   border-radius: 50%;
-  border: 3px solid var(--accent);
+  border: 3px solid var(--knob, var(--accent));
   background: var(--card);
-}
-
-.equalizer__clear-bass[data-pending="true"] input::-webkit-slider-thumb {
-  border-style: dashed;
-}
-
-.equalizer__clear-bass[data-pending="true"] input::-moz-range-thumb {
-  border-style: dashed;
 }
 
 .equalizer__clear-bass input:focus-visible {
