@@ -39,7 +39,8 @@ function DeviceListView() {
     devices[0];
   return (
     <>
-      <Header device={selected} labels={labels} />
+      {/* Keyed, so a refused Power Off isn't reported on another Device. */}
+      <Header key={`header-${selected.address}`} device={selected} labels={labels} />
       {devices.length > 1 && (
         <DevicePills devices={devices} selected={selected} primary={primary} onPick={setPicked} />
       )}
@@ -87,21 +88,24 @@ function DevicePills({
 /**
  * The Device's OS name, and its Model when that says something the name
  * doesn't. At the right, Power Off, as in Sony's Sound Connect app, for a
- * Model that has the Capability. Below, whether the last Power Off failed.
+ * Model that has the Capability. Below, one alert: why the core refused Power
+ * Off, else whether the last Power Off failed.
  */
 function Header({ device, labels }: { device: Device; labels: Labels }) {
+  const [refused, setRefused] = useState<string | null>(null);
   const model = device.model && labels.models[device.model];
+  // The failure is kept while the Device is Attached again, when the button is disabled.
+  const alert = refused ?? (device.powerOffFailed ? `${device.name} didn't Power Off` : null);
   return (
     <header className="header">
       <div className="header__names">
         <h1 className="title">{device.name}</h1>
         {model && model !== device.name && <div className="subtitle">{model}</div>}
       </div>
-      {device.capabilities.powerOff && <PowerOffButton device={device} />}
-      {/* Kept while the Device is Attached again, when the button is disabled. */}
-      {device.powerOffFailed && (
+      {device.capabilities.powerOff && <PowerOffButton device={device} onRefused={setRefused} />}
+      {alert && (
         <p className="error header__error" role="alert">
-          {device.name} didn't power off
+          {alert}
         </p>
       )}
     </header>
@@ -109,28 +113,20 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 }
 
 /** Icon only, with no confirmation step. */
-function PowerOffButton({ device }: { device: Device }) {
-  const [error, setError] = useState<string | null>(null);
+function PowerOffButton({ device, onRefused }: { device: Device; onRefused: (error: string | null) => void }) {
   return (
-    <>
-      <button
-        className="icon-button"
-        title="Power Off"
-        aria-label="Power Off"
-        disabled={device.state.kind !== "attached"}
-        onClick={() => {
-          setError(null);
-          powerOff(device.address).catch((e) => setError(`Couldn't Power Off: ${whyRejected(e)}`));
-        }}
-      >
-        <PowerIcon />
-      </button>
-      {error && (
-        <p className="error header__error" role="alert">
-          {error}
-        </p>
-      )}
-    </>
+    <button
+      className="icon-button"
+      title="Power Off"
+      aria-label="Power Off"
+      disabled={device.state.kind !== "attached"}
+      onClick={() => {
+        onRefused(null);
+        powerOff(device.address).catch((e) => onRefused(`Couldn't Power Off: ${whyRejected(e)}`));
+      }}
+    >
+      <PowerIcon />
+    </button>
   );
 }
 
