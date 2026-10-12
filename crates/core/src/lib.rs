@@ -394,6 +394,11 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            // The control link closing is part of switching off: the Device
+            // stays Powering Off until it stops being Connected.
+            LinkEventKind::Ended(_) if device.state == DeviceState::PoweringOff => {
+                tracked.session = None;
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device::unidentified(

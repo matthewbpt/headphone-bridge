@@ -60,6 +60,25 @@ async fn a_device_that_is_powering_off_refuses_every_command() {
     assert!(link.written.try_recv().is_err(), "nothing more was written");
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() {
+    let (core, mut os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+    assert_eq!(os.next_attempt().await, xm5().address, "the first Attach");
+
+    // The Device closes the control link as it switches off.
+    drop(link);
+
+    assert!(
+        !os.attempts_within(Duration::from_secs(600)).await,
+        "no reattach is scheduled"
+    );
+    assert_eq!(core.device_list().devices[0].state, DeviceState::PoweringOff);
+}
+
 #[tokio::test]
 async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothing() {
     let (platform, mut os) = fake_platform();
