@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFrameLog } from "./core";
+import { useFrameLog, whyRejected } from "./core";
 
 /**
  * The frame log developer setting: while it's on, every frame sent to or
@@ -13,7 +13,7 @@ export function FrameLogSetting() {
 
   const toggle = (enabled: boolean) => {
     setError(null);
-    setEnabled(enabled).catch((e: Error) => setError(e.message));
+    setEnabled(enabled).catch((e) => setError(whyRejected(e)));
   };
 
   if (file === undefined) return null;
