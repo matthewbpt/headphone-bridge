@@ -91,7 +91,7 @@ impl Model {
                         frequencies: vec!["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"],
                         range: StepRange { min: -10, max: 10 },
                     }),
-                    clear_bass: None,
+                    clear_bass: Some(StepRange { min: -10, max: 10 }),
                 }),
             },
         }

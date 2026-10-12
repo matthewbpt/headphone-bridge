@@ -42,7 +42,8 @@ pub enum CommandError {
     OutOfRange,
     /// The Preset isn't one of the Model's, or is one the app can't pick.
     UnavailablePreset,
-    /// Bands were given for a Preset whose Bands can't be changed.
+    /// Bands or Clear Bass were given for a Preset whose curve can't be
+    /// changed.
     FixedPreset,
     /// The Device is Attached but hasn't reported its Noise Control Mode and
     /// Ambient Level yet, so a set couldn't keep the other unchanged. Or it

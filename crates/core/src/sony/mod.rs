@@ -207,8 +207,9 @@ impl Session {
     }
 
     /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
-    /// to the Device; Bands are sent with Clear Bass, which must then be
-    /// given too. The Device confirms with a notification of the new params.
+    /// to the Device; Bands and Clear Bass are sent together, so both must
+    /// then be given. The Device confirms with a notification of the new
+    /// params.
     pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
         let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset];
         match (equalizer.clear_bass, &equalizer.bands) {

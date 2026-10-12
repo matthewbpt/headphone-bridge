@@ -315,9 +315,16 @@ fn check_equalizer(
             return Err(CommandError::OutOfRange);
         }
     }
-    // No Model's Clear Bass can be set yet.
-    if equalizer.clear_bass.is_some() {
-        return Err(CommandError::MissingCapability);
+    if let Some(clear_bass) = equalizer.clear_bass {
+        let range = capability
+            .clear_bass
+            .ok_or(CommandError::MissingCapability)?;
+        if !preset.editable {
+            return Err(CommandError::FixedPreset);
+        }
+        if !range.contains(clear_bass) {
+            return Err(CommandError::OutOfRange);
+        }
     }
     Ok(())
 }
@@ -669,11 +676,20 @@ impl<P: Platform> State<P> {
                     .equalizer
                     .as_ref()
                     .ok_or(CommandError::SettingsNotReported)?;
-                // Bands are sent with Clear Bass, kept as last reported.
+                // Bands and Clear Bass are sent together, so one given alone
+                // keeps the other as last reported.
                 if equalizer.bands.is_some() && equalizer.clear_bass.is_none() {
                     equalizer.clear_bass = Some(
                         reported
                             .clear_bass
+                            .ok_or(CommandError::SettingsNotReported)?,
+                    );
+                }
+                if equalizer.clear_bass.is_some() && equalizer.bands.is_none() {
+                    equalizer.bands = Some(
+                        reported
+                            .bands
+                            .clone()
                             .ok_or(CommandError::SettingsNotReported)?,
                     );
                 }

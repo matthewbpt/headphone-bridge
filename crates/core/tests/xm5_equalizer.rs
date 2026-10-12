@@ -24,7 +24,7 @@ async fn attached_xm5() -> (Core, FakeOs, DeviceLink) {
 }
 
 #[tokio::test]
-async fn the_capabilities_list_sonys_presets_and_five_bands_and_only_manual_and_the_customs_are_editable(
+async fn the_capabilities_list_sonys_presets_five_bands_and_clear_bass_and_only_manual_and_the_customs_are_editable(
 ) {
     let (core, _os, _link) = attached_xm5().await;
 
@@ -58,7 +58,7 @@ async fn the_capabilities_list_sonys_presets_and_five_bands_and_only_manual_and_
                 frequencies: vec!["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"],
                 range: StepRange { min: -10, max: 10 },
             }),
-            clear_bass: None,
+            clear_bass: Some(StepRange { min: -10, max: 10 }),
         })
     );
 }
@@ -317,13 +317,155 @@ async fn a_curve_without_one_value_per_band_is_rejected_before_anything_is_sent(
     .await;
 }
 
+/// Starts a core with an Attached WH-1000XM5 that Sony's app has moved
+/// onto Manual, with Clear Bass +1 and Bands −10, +10, 0, −2 and +2.
+async fn xm5_on_manual() -> (Core, FakeOs, DeviceLink) {
+    let (core, os, mut link) = attached_xm5().await;
+    link.send
+        .send(sony_frame(
+            0,
+            &[0x59, 0x00, 0xa0, 0x06, 0x0b, 0x00, 0x14, 0x0a, 0x08, 0x0c],
+        ))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].equalizer.as_ref().map(|eq| eq.preset) == Some(0xa0)
+    })
+    .await;
+    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+    (core, os, link)
+}
+
 #[tokio::test]
-async fn clear_bass_is_rejected_until_the_app_can_set_it() {
-    let clear_bass = Equalizer {
-        clear_bass: Some(0),
+async fn changing_clear_bass_sends_it_first_in_the_curve_and_waits_for_the_device() {
+    let (core, _os, mut link) = xm5_on_manual().await;
+    let louder = Equalizer {
+        preset: 0xa0,
+        bands: Some(vec![-10, 10, 0, -2, 2]),
+        clear_bass: Some(7),
+    };
+
+    core.command(Command::SetEqualizer(xm5().address, louder.clone()))
+        .await
+        .unwrap();
+
+    // EQEBB_SET_PARAM: Manual, six steps each + 10, Clear Bass first.
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(
+            1,
+            &[0x58, 0x00, 0xa0, 0x06, 0x11, 0x00, 0x14, 0x0a, 0x08, 0x0c]
+        )
+    );
+    link.send.send(sony_ack(0)).unwrap();
+    link.send
+        .send(sony_frame(
+            1,
+            &[0x59, 0x00, 0xa0, 0x06, 0x11, 0x00, 0x14, 0x0a, 0x08, 0x0c],
+        ))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].equalizer == Some(louder.clone())
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn clear_bass_alone_is_sent_with_the_reported_bands() {
+    let (core, _os, mut link) = xm5_on_manual().await;
+    let softer = Equalizer {
+        clear_bass: Some(-3),
         ..preset(0xa0)
     };
-    rejected(clear_bass, CommandError::MissingCapability).await;
+
+    core.command(Command::SetEqualizer(xm5().address, softer))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(
+            1,
+            &[0x58, 0x00, 0xa0, 0x06, 0x07, 0x00, 0x14, 0x0a, 0x08, 0x0c]
+        )
+    );
+}
+
+#[tokio::test]
+async fn clear_bass_alone_is_rejected_while_the_device_reports_no_bands_to_keep() {
+    let (core, _os, mut link) = attached_xm5().await;
+    // The Device reports Manual without its curve.
+    link.send
+        .send(sony_frame(0, &[0x59, 0x00, 0xa0, 0x00]))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].equalizer == Some(preset(0xa0))
+    })
+    .await;
+    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+
+    let result = core
+        .command(Command::SetEqualizer(
+            xm5().address,
+            Equalizer {
+                clear_bass: Some(3),
+                ..preset(0xa0)
+            },
+        ))
+        .await;
+
+    assert_eq!(result, Err(CommandError::SettingsNotReported));
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "nothing else written");
+}
+
+#[tokio::test]
+async fn a_clear_bass_change_from_sonys_app_appears_live() {
+    let (core, _os, mut link) = xm5_on_manual().await;
+
+    // Sony's app raises Clear Bass to +10, leaving the Bands.
+    link.send
+        .send(sony_frame(
+            1,
+            &[0x59, 0x00, 0xa0, 0x06, 0x14, 0x00, 0x14, 0x0a, 0x08, 0x0c],
+        ))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].equalizer
+            == Some(Equalizer {
+                preset: 0xa0,
+                bands: Some(vec![-10, 10, 0, -2, 2]),
+                clear_bass: Some(10),
+            })
+    })
+    .await;
+    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
+}
+
+fn clear_bass(preset: u8, clear_bass: i8) -> Equalizer {
+    Equalizer {
+        bands: Some(vec![0, 0, 0, 0, 0]),
+        clear_bass: Some(clear_bass),
+        ..self::preset(preset)
+    }
+}
+
+#[tokio::test]
+async fn clear_bass_for_a_fixed_preset_is_rejected_before_anything_is_sent() {
+    rejected(
+        Equalizer {
+            clear_bass: Some(3),
+            ..preset(0x10)
+        },
+        CommandError::FixedPreset,
+    )
+    .await;
+    rejected(clear_bass(0x16, 3), CommandError::FixedPreset).await;
+}
+
+#[tokio::test]
+async fn clear_bass_outside_the_range_is_rejected_before_anything_is_sent() {
+    rejected(clear_bass(0xa0, 11), CommandError::OutOfRange).await;
+    rejected(clear_bass(0xa0, -11), CommandError::OutOfRange).await;
 }
 
 #[tokio::test]
