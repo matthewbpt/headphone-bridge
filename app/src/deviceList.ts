@@ -1,7 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
-
 // Mirrors the core's Device list snapshot (crates/core/src/device_list.rs).
 export interface DeviceList {
   devices: Device[];
@@ -72,16 +68,6 @@ export type Battery =
   | { kind: "buds"; left: number | null; right: number | null; case: number | null }
   | { kind: "headphones"; level: number };
 
-/** Why the core rejected a command before sending anything. */
-export type CommandError =
-  | "unknownDevice"
-  | "notAttached"
-  | "unsupportedModel"
-  | "missingCapability"
-  | "outOfRange"
-  | "settingsNotReported"
-  | { frameLogUnavailable: string };
-
 /**
  * The labels for a Device's state and settings, shared with the tray menu
  * (app/src-tauri/src/labels.rs), so the two can't drift apart.
@@ -99,59 +85,4 @@ export interface Labels {
 export function reasonText(labels: Labels, reason: NotAttachedReason): string {
   if (reason.kind === "other") return reason.message;
   return labels.reasons.find((label) => label.reason.kind === reason.kind)?.text ?? reason.kind;
-}
-
-/** The labels, or null until they arrive. */
-export function useLabels(): Labels | null {
-  const [labels, setLabels] = useState<Labels | null>(null);
-  useEffect(() => {
-    invoke<Labels>("labels").then(setLabels);
-  }, []);
-  return labels;
-}
-
-/** Asks the Device to switch mode. Resolves once the core accepts the command. */
-export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
-  return invoke("set_noise_control_mode", { address, mode });
-}
-
-/** Tries again to Attach a Connected Device that isn't Attached. */
-export function retryAttach(address: string): Promise<void> {
-  return invoke("retry_attach", { address });
-}
-
-/** Asks the Device to set the Ambient Level, in the Model's own steps. */
-export function setAmbientLevel(address: string, level: number): Promise<void> {
-  return invoke("set_ambient_level", { address, level });
-}
-
-/** Asks the Device to set the Noise Cancelling Level, in the Model's own steps. */
-export function setNoiseCancellingLevel(address: string, level: number): Promise<void> {
-  return invoke("set_noise_cancelling_level", { address, level });
-}
-
-/**
- * The latest Device list snapshot from the core, or null until the first one
- * arrives. The UI holds no device state beyond this.
- */
-export function useDeviceList(): DeviceList | null {
-  const [deviceList, setDeviceList] = useState<DeviceList | null>(null);
-
-  useEffect(() => {
-    let receivedEvent = false;
-    const unlisten = listen<DeviceList>("device-list", (event) => {
-      receivedEvent = true;
-      setDeviceList(event.payload);
-    });
-    // Snapshots emitted before the listener was registered are missed, so
-    // start from the current one unless an event has already superseded it.
-    invoke<DeviceList>("device_list").then((current) => {
-      if (!receivedEvent) setDeviceList(current);
-    });
-    return () => {
-      unlisten.then((stop) => stop());
-    };
-  }, []);
-
-  return deviceList;
 }
