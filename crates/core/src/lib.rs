@@ -669,32 +669,14 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
-            Command::SetEqualizer(address, mut equalizer) => {
+            Command::SetEqualizer(address, equalizer) => {
                 let (device, session) = self.attached(&address)?;
                 check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
                 if device.equalizer_unavailable {
                     return Err(CommandError::EqualizerUnavailable);
                 }
-                let reported = device
-                    .equalizer
-                    .as_ref()
-                    .ok_or(CommandError::SettingsNotReported)?;
-                // Bands and Clear Bass are sent together, so one given alone
-                // keeps the other as last reported.
-                if equalizer.bands.is_some() && equalizer.clear_bass.is_none() {
-                    equalizer.clear_bass = Some(
-                        reported
-                            .clear_bass
-                            .ok_or(CommandError::SettingsNotReported)?,
-                    );
-                }
-                if equalizer.clear_bass.is_some() && equalizer.bands.is_none() {
-                    equalizer.bands = Some(
-                        reported
-                            .bands
-                            .clone()
-                            .ok_or(CommandError::SettingsNotReported)?,
-                    );
+                if device.equalizer.is_none() {
+                    return Err(CommandError::SettingsNotReported);
                 }
                 session.send(SessionCommand::SetEqualizer(equalizer))
             }

@@ -391,7 +391,44 @@ async fn clear_bass_alone_is_sent_with_the_reported_bands() {
 }
 
 #[tokio::test]
-async fn clear_bass_alone_is_rejected_while_the_device_reports_no_bands_to_keep() {
+async fn clear_bass_alone_keeps_bands_just_sent_and_not_yet_reported() {
+    let (core, _os, mut link) = xm5_on_manual().await;
+
+    core.command(Command::SetEqualizer(
+        xm5().address,
+        bands(0xa0, vec![1, 2, 3, 4, 5]),
+    ))
+    .await
+    .unwrap();
+    core.command(Command::SetEqualizer(
+        xm5().address,
+        Equalizer {
+            clear_bass: Some(-3),
+            ..preset(0xa0)
+        },
+    ))
+    .await
+    .unwrap();
+
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(
+            1,
+            &[0x58, 0x00, 0xa0, 0x06, 0x0b, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
+        )
+    );
+    link.send.send(sony_ack(0)).unwrap();
+    assert_eq!(
+        written(&mut link).await,
+        sony_frame(
+            0,
+            &[0x58, 0x00, 0xa0, 0x06, 0x07, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
+        )
+    );
+}
+
+#[tokio::test]
+async fn clear_bass_alone_sends_nothing_while_the_device_reports_no_bands_to_keep() {
     let (core, _os, mut link) = attached_xm5().await;
     // The Device reports Manual without its curve.
     link.send
@@ -413,7 +450,7 @@ async fn clear_bass_alone_is_rejected_while_the_device_reports_no_bands_to_keep(
         ))
         .await;
 
-    assert_eq!(result, Err(CommandError::SettingsNotReported));
+    assert_eq!(result, Ok(()));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }
@@ -585,7 +622,7 @@ async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equ
 }
 
 #[tokio::test]
-async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
+async fn bands_alone_send_nothing_while_the_device_reports_no_clear_bass_to_keep() {
     let (core, _os, mut link) = attached_xm5().await;
     // The Device reports Manual without its curve.
     link.send
@@ -604,7 +641,7 @@ async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
         ))
         .await;
 
-    assert_eq!(result, Err(CommandError::SettingsNotReported));
+    assert_eq!(result, Ok(()));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }

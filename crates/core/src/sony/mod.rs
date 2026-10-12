@@ -135,6 +135,10 @@ pub struct Session {
     /// field of these and sends the rest back as they were. `None` until the
     /// Device first reports them.
     noise_control: Option<NoiseControl>,
+    /// The Equalizer last reported, or since sent. Bands and Clear Bass are
+    /// sent together, so a set giving one keeps the other from here. `None`
+    /// until the Device first reports it.
+    equalizer: Option<Equalizer>,
 }
 
 impl Session {
@@ -148,6 +152,7 @@ impl Session {
             outgoing: Vec::new(),
             identified: false,
             noise_control: None,
+            equalizer: None,
         };
         session.request(vec![command::CONNECT_GET_PROTOCOL_INFO, FIXED_VALUE]);
         session
@@ -207,21 +212,41 @@ impl Session {
     }
 
     /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
-    /// to the Device; Bands and Clear Bass are sent together, so both must
-    /// then be given. The Device confirms with a notification of the new
+    /// to the Device. Bands and Clear Bass are sent together, so one given
+    /// alone keeps the other as last reported or sent; with none to keep,
+    /// nothing is sent. The Device confirms with a notification of the new
     /// params.
     pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
+        let curve = match (&equalizer.bands, equalizer.clear_bass) {
+            (None, None) => None,
+            (bands, clear_bass) => {
+                let kept = self.equalizer.as_ref();
+                let bands = bands.clone().or_else(|| kept?.bands.clone());
+                let clear_bass = clear_bass.or_else(|| kept?.clear_bass);
+                let (Some(bands), Some(clear_bass)) = (bands, clear_bass) else {
+                    return;
+                };
+                Some((bands, clear_bass))
+            }
+        };
         let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset];
-        match (equalizer.clear_bass, &equalizer.bands) {
-            (Some(clear_bass), Some(bands)) => {
+        match &curve {
+            Some((bands, clear_bass)) => {
                 payload.push(1 + bands.len() as u8);
                 payload.extend(
-                    std::iter::once(clear_bass)
+                    std::iter::once(*clear_bass)
                         .chain(bands.iter().copied())
                         .map(|step| (step + EQ_STEP_OFFSET) as u8),
                 );
             }
-            _ => payload.push(0),
+            None => payload.push(0),
+        }
+        if let Some((bands, clear_bass)) = curve {
+            self.equalizer = Some(Equalizer {
+                preset: equalizer.preset,
+                bands: Some(bands),
+                clear_bass: Some(clear_bass),
+            });
         }
         self.request(payload);
     }
@@ -369,7 +394,9 @@ impl Session {
             [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
                 if self.identified && steps.len() == n as usize =>
             {
-                vec![Update::Equalizer(equalizer(preset, steps))]
+                let equalizer = equalizer(preset, steps);
+                self.equalizer = Some(equalizer.clone());
+                vec![Update::Equalizer(equalizer)]
             }
             _ => Vec::new(),
         }
