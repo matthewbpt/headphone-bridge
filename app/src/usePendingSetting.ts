@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 const PENDING_TIMEOUT_MS = 10_000;
 
 /**
- * A setting the window asks the Device for, Pending until the Device reports
- * it. Values asked in turn queue up, oldest first, and the newest is the one
- * shown. The Device applies them in order, so a reported value settles every
- * value asked up to it; an earlier value landing late can't clear a later
- * one. A reported value that wasn't asked for means the Device has moved
- * somewhere else, so it drops every Pending value. Only a change of the
- * reported value settles them: a snapshot still reporting the old value says
- * nothing about those asked.
+ * A setting value the app has asked the Device for, Pending until the Device
+ * reports it. Values asked in turn queue up, oldest first, and the newest is
+ * the one shown. The Device applies them in order, so a reported value
+ * settles every value asked up to it; an earlier value landing late can't
+ * clear a later one. A reported value that wasn't asked for means the Device
+ * has moved somewhere else, so it drops every Pending value. Only a change of
+ * the reported value settles them: a snapshot still reporting the old value
+ * says nothing about those asked.
  *
  * `reported` is the Device's latest value, null until it reports one.
  * `command` asks the Device for a value and resolves once the core accepts
@@ -34,6 +34,12 @@ export function usePendingSetting<T>(
   const pending = asked.length > 0 ? asked[asked.length - 1] : null;
   const shown = pending ?? reported;
 
+  /** Drops every Pending value and shows `message`. */
+  const fail = (message: string) => {
+    setAsked([]);
+    setError(message);
+  };
+
   useEffect(
     () =>
       setAsked((asked) => {
@@ -46,8 +52,7 @@ export function usePendingSetting<T>(
   useEffect(() => {
     if (pending === null) return;
     const timer = setTimeout(() => {
-      setAsked([]);
-      setError(`${nameRef.current(pending)} wasn't confirmed by the Device`);
+      fail(`${nameRef.current(pending)} wasn't confirmed by the Device`);
     }, PENDING_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [pending]);
@@ -58,8 +63,7 @@ export function usePendingSetting<T>(
     setError(null);
     setAsked((asked) => [...asked, value]);
     commandRef.current(value).catch((e) => {
-      setAsked([]);
-      setError(`Couldn't set ${nameRef.current(value)}: ${e}`);
+      fail(`Couldn't set ${nameRef.current(value)}: ${e}`);
     });
   };
 
