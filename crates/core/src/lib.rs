@@ -131,6 +131,16 @@ struct Tracked {
     power_off_deadline: Option<Instant>,
 }
 
+impl Tracked {
+    /// Detaches the Device, closing its control link, and puts it in `state`.
+    fn detach(&mut self, state: DeviceState) {
+        self.device = self.device.detached(state);
+        self.session = None;
+        self.attach_order = None;
+        self.power_off_deadline = None;
+    }
+}
+
 /// How long a Device has to identify itself once its control link is open.
 const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -292,18 +302,30 @@ impl<P: Platform> State<P> {
                 reason: NotAttachedReason::UnsupportedModel,
             }
         };
-        let mut tracked = Tracked {
-            device: Device::unidentified(identity.address.clone(), identity.name, state),
+        let address = identity.address.clone();
+        let tracked = Tracked {
+            device: Device::unidentified(identity.address, identity.name, state),
             vendor,
             session: None,
             retries: 0,
             attach_order: None,
             power_off_deadline: None,
         };
+        self.devices.insert(address.clone(), tracked);
         if attach {
-            tracked.session = Some(self.attach(&identity.address, vendor, Duration::ZERO));
+            self.reattach(&address, Duration::ZERO);
         }
-        self.devices.insert(identity.address, tracked);
+    }
+
+    /// Starts a new session for the tracked Device at `address` that opens
+    /// the control link after `delay`, in place of any session it had.
+    fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
+        let Some(vendor) = self.devices.get(address).map(|tracked| tracked.vendor) else {
+            return;
+        };
+        let session = self.attach(address, vendor, delay);
+        let tracked = self.devices.get_mut(address).expect("tracked above");
+        tracked.session = Some(session);
     }
 
     /// Starts a session that opens the control link after `delay`.
@@ -432,17 +454,11 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                *device = device.detached(DeviceState::NotAttached { reason });
-                tracked.session = None;
-                tracked.attach_order = None;
-                tracked.power_off_deadline = None;
+                tracked.detach(DeviceState::NotAttached { reason });
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
-                    let vendor = tracked.vendor;
-                    let session = self.attach(&event.address, vendor, delay);
-                    let tracked = self.devices.get_mut(&event.address).expect("tracked");
-                    tracked.session = Some(session);
+                    self.reattach(&event.address, delay);
                 }
             }
         }
@@ -487,11 +503,10 @@ impl<P: Platform> State<P> {
                     return Ok(());
                 }
                 // Retrying by hand starts over, straight away.
-                let session = self.attach(&address, tracked.vendor, Duration::ZERO);
                 let tracked = self.devices.get_mut(&address).expect("checked above");
                 tracked.device.state = DeviceState::Attaching;
-                tracked.session = Some(session);
                 tracked.retries = 0;
+                self.reattach(&address, Duration::ZERO);
                 Ok(())
             }
             Command::SetFrameLog(Some(path)) => self
@@ -527,20 +542,18 @@ impl<P: Platform> State<P> {
             .collect();
         for address in timed_out {
             let tracked = self.devices.get_mut(&address).expect("listed above");
-            tracked.power_off_deadline = None;
-            if tracked.session.is_some() {
+            let link_open = tracked.session.is_some();
+            if link_open {
                 tracked.device.state = DeviceState::Attached;
+                tracked.power_off_deadline = None;
             } else {
-                tracked.device = tracked.device.detached(DeviceState::Attaching);
-                tracked.attach_order = None;
+                tracked.detach(DeviceState::Attaching);
                 tracked.retries = 0;
-                let vendor = tracked.vendor;
-                let session = self.attach(&address, vendor, Duration::ZERO);
-                let tracked = self.devices.get_mut(&address).expect("listed above");
-                tracked.session = Some(session);
             }
-            let tracked = self.devices.get_mut(&address).expect("listed above");
             tracked.device.power_off_failed = true;
+            if !link_open {
+                self.reattach(&address, Duration::ZERO);
+            }
         }
     }
 
