@@ -5,6 +5,12 @@ Ambient Level of a Galaxy Buds4 Pro or WH-1000XM5, and shows their Status.
 Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
 [docs/adr](docs/adr).
 
+<p align="center">
+  <img src="docs/screenshots/buds4Pro-light.png" width="280" alt="A Galaxy Buds4 Pro in Noise Cancelling, at the highest Noise Cancelling Level">
+  <img src="docs/screenshots/xm5-dark.png" width="280" alt="A WH-1000XM5 in Ambient, in the dark theme">
+  <img src="docs/screenshots/twoDevices-light.png" width="280" alt="Two Connected Devices, with the Primary Device picked">
+</p>
+
 ## Layout
 
 - `crates/core`: the platform-independent core. Its public API (`Core`) takes
@@ -68,6 +74,14 @@ launches, so Devices already Connected at startup have their Attach logged.
 Setting `HEADPHONE_BRIDGE_FRAME_LOG` (to anything) also starts the app with it
 on, e.g. `HEADPHONE_BRIDGE_FRAME_LOG=1 "target/debug/bundle/macos/Headphone
 Bridge.app/Contents/MacOS/headphone-bridge"`.
+
+### Screenshots
+
+The screenshots at the top are the window against the fake core the UI tests use,
+not a real Device. `cd app && npm run screenshots` captures them again into
+`docs/screenshots/` (it needs Google Chrome; set `CHROME` to its binary if
+it isn't in `/Applications`). The scenes are in
+`app/src/testing/screenshots.tsx`.
 
 ## Licence
 
