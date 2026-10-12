@@ -982,10 +982,8 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
-                    // No Sony Model has an Equalizer yet, so the command is
-                    // rejected before it gets here.
-                    SessionCommand::SetEqualizer(_) => {
-                        debug_assert!(false, "no Sony Model has an Equalizer");
+                    SessionCommand::SetEqualizer(equalizer) => {
+                        session.set_equalizer_preset(equalizer.preset)
                     }
                     SessionCommand::PowerOff => session.power_off(),
                 }

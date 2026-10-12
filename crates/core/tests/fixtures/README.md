@@ -60,7 +60,13 @@ file.
 - `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
   mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
   exist from the frame log. No WH-1000XM5 capture exists yet.
-  - `attach`: identification by model name, support functions and battery.
+  - `attach`: identification by model name, support functions, battery,
+    noise control and the Equalizer.
   - `real-attach`: a real Attach from the frame log, WH-1000XM5 firmware 2.5.1.
   - `real-noise-control`: real mode and Ambient Level sets, each confirmed by
     a notification, firmware 2.5.1.
+  - `real-noise-control` and `real-power-off` were recorded before the app
+    read the Equalizer on Attach. Their replays re-base them with
+    `support::with_equalizer_read`, which inserts a synthetic Equalizer read
+    and flips the sequence numbers of the app's later requests and their
+    ACKs.

@@ -5,8 +5,7 @@ use headphone_bridge_core::{
     Battery, Command, CommandError, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, xm5, DeviceLink,
-    FakeOs,
+    buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds4 Pro Attached through capture-3's first extended
@@ -206,25 +205,6 @@ async fn a_preset_is_not_sent_before_the_device_is_attached() {
         .await;
 
     assert_eq!(result, Err(CommandError::NotAttached));
-    drop(core);
-    assert_eq!(link.written.recv().await, None, "nothing else written");
-}
-
-/// The WH-1000XM5 stands in for a Model without an Equalizer Capability.
-#[tokio::test]
-async fn a_model_without_an_equalizer_rejects_a_preset_before_anything_is_sent() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(xm5()));
-    let mut link = os.next_link().await;
-    replay(&mut link, &fixture("wh-1000xm5/attach")).await;
-    wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
-
-    let result = core
-        .command(Command::SetEqualizer(xm5().address, preset(0)))
-        .await;
-
-    assert_eq!(result, Err(CommandError::MissingCapability));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }

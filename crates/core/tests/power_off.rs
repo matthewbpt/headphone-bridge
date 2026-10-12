@@ -7,8 +7,8 @@ use headphone_bridge_core::{
     Command, CommandError, Core, DeviceState, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, DeviceLink,
-    FakeOs, SAMSUNG_SERVICE,
+    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, with_equalizer_read,
+    xm5, DeviceLink, FakeOs, SAMSUNG_SERVICE,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
@@ -31,7 +31,7 @@ async fn power_off_sends_power_set_status_and_the_device_is_powering_off() {
         .unwrap();
 
     // POWER_SET_STATUS: power off, on, as libmdr and Gadgetbridge send it.
-    assert_eq!(written(&mut link).await, sony_frame(1, &[0x24, 0x03, 0x01]));
+    assert_eq!(written(&mut link).await, sony_frame(0, &[0x24, 0x03, 0x01]));
     wait_for(&core, |list| {
         list.devices[0].state == DeviceState::PoweringOff
     })
@@ -131,7 +131,7 @@ async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() 
         .await
         .unwrap();
     written(&mut link).await;
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
 
     tokio::time::sleep(Duration::from_secs(9)).await;
     let device = &core.device_list().devices[0];
@@ -152,7 +152,7 @@ async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() 
         .unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
     );
 }
 
@@ -163,7 +163,7 @@ async fn a_device_that_didnt_power_off_and_closed_its_link_is_attached_again() {
         .await
         .unwrap();
     written(&mut link).await;
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     assert_eq!(os.next_attempt().await, xm5().address, "the first Attach");
     tokio::time::sleep(Duration::from_secs(1)).await;
     drop(link);
@@ -194,7 +194,7 @@ async fn a_device_that_disconnects_before_the_timeout_reports_no_failure() {
         .await
         .unwrap();
     written(&mut link).await;
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     tokio::time::sleep(Duration::from_secs(5)).await;
 
     os.observe(Observation::DeviceDisconnected(xm5().address));
@@ -215,7 +215,7 @@ async fn a_power_off_that_is_never_acknowledged_follows_the_no_ack_path() {
     core.command(Command::PowerOff(xm5().address))
         .await
         .unwrap();
-    let power_off = sony_frame(1, &[0x24, 0x03, 0x01]);
+    let power_off = sony_frame(0, &[0x24, 0x03, 0x01]);
     for _ in 0..10 {
         assert_eq!(written(&mut link).await, power_off);
     }
@@ -339,8 +339,11 @@ async fn an_unsupported_model_refuses_power_off() {
     );
 }
 
-/// An ACK for a request the app sent with sequence number 1.
-const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
+/// An ACK with sequence number 1: for a frame sent with 0.
+const ACK_SEQ_1: [u8; 9] = [0x3e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x3c];
+
+/// `EQEBB_RET_PARAM`: Off, Clear Bass and every Band at 0.
+const FLAT_OFF: [u8; 10] = [0x57, 0x00, 0x00, 0x06, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a];
 
 /// The next frame the core writes.
 async fn written(link: &mut DeviceLink) -> Vec<u8> {
@@ -367,7 +370,9 @@ async fn real_xm5_power_offs_replay_from_their_frame_log() {
 
     for (i, &start) in session_at.iter().enumerate() {
         let end = session_at.get(i + 1).copied().unwrap_or(records.len());
-        let session = &records[start..end];
+        // Recorded before the Equalizer was read on Attach, so re-based onto
+        // an Attach that reads it: Off, flat.
+        let session = &with_equalizer_read(&records[start..end], &FLAT_OFF);
         // The Power Off is the session's last sent data frame, then its ACK.
         let power_off_at = session.len() - 2;
 

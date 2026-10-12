@@ -5,7 +5,10 @@ use std::time::Duration;
 use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{Battery, Command, CommandError, Core, NoiseControlMode};
-use support::{fake_platform, fixture, replay, sony_frame, wait_for, xm5, DeviceLink, FakeOs};
+use support::{
+    fake_platform, fixture, replay, sony_frame, wait_for, with_equalizer_read, xm5, DeviceLink,
+    FakeOs,
+};
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
 /// fixture, which reports Ambient, Focus on Voice on and Ambient Level 10.
@@ -43,11 +46,11 @@ async fn setting_a_mode_resends_focus_on_voice_and_level_and_waits_for_the_devic
     // reported, level 10 as reported.
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x00, 0x01, 0x0a])
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x00, 0x01, 0x0a])
     );
     // The ACK is only a receipt. A battery notification after it shows it
     // has been handled.
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     link.send
         .send(sony_frame(0, &[0x25, 0x00, 68, 0x00]))
         .unwrap();
@@ -76,9 +79,9 @@ async fn setting_a_level_resends_the_mode_and_focus_on_voice_and_waits_for_the_d
 
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
     );
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     link.send
         .send(sony_frame(0, &[0x25, 0x00, 68, 0x00]))
         .unwrap();
@@ -111,13 +114,13 @@ async fn a_set_made_before_the_last_is_confirmed_keeps_the_last() {
     // Off keeps the mode byte, ambient, as it was.
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a])
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a])
     );
     // The level set waits for the ACK, and doesn't switch Off back on.
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
     );
 }
 
@@ -139,7 +142,7 @@ async fn adaptive_is_rejected_and_nothing_is_sent() {
         .unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x14])
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x14])
     );
 }
 
@@ -209,7 +212,9 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     let core = Core::start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
-    let records = fixture("wh-1000xm5/real-noise-control");
+    // Recorded before the Equalizer was read on Attach, so re-based onto an
+    // Attach that reads it: Off, flat.
+    let records = with_equalizer_read(&fixture("wh-1000xm5/real-noise-control"), &FLAT_OFF);
     let address = xm5().address;
     // Each set as the capture made it, and what the Device then reported.
     let sets = [
@@ -263,6 +268,9 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     .await;
 }
 
+/// `EQEBB_RET_PARAM`: Off, Clear Bass and every Band at 0.
+const FLAT_OFF: [u8; 10] = [0x57, 0x00, 0x00, 0x06, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a];
+
 /// The next frame the core writes.
 async fn written(link: &mut DeviceLink) -> Vec<u8> {
     tokio::time::timeout(Duration::from_secs(5), link.written.recv())
@@ -271,8 +279,8 @@ async fn written(link: &mut DeviceLink) -> Vec<u8> {
         .expect("link closed")
 }
 
-/// An ACK with sequence number 0: for a frame sent with 1.
-const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
+/// An ACK with sequence number 1: for a frame sent with 0.
+const ACK_SEQ_1: [u8; 9] = [0x3e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x3c];
 
 #[tokio::test]
 async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
@@ -308,6 +316,6 @@ async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
         .unwrap();
     assert_eq!(
         written(&mut link).await,
-        sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
+        sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])
     );
 }

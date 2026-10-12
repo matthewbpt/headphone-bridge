@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 
 use uuid::{uuid, Uuid};
 
-use crate::command::NoiseControlMode;
+use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
 use crate::model::Model;
 pub use crate::update::Update;
@@ -39,6 +39,10 @@ mod command {
     pub const NCASM_RET_PARAM: u8 = 0x67;
     pub const NCASM_SET_PARAM: u8 = 0x68;
     pub const NCASM_NTFY_PARAM: u8 = 0x69;
+    pub const EQEBB_GET_PARAM: u8 = 0x56;
+    pub const EQEBB_RET_PARAM: u8 = 0x57;
+    pub const EQEBB_SET_PARAM: u8 = 0x58;
+    pub const EQEBB_NTFY_PARAM: u8 = 0x59;
 }
 
 /// `ConnectInquiredType::FIXED_VALUE`.
@@ -67,6 +71,11 @@ pub const MAX_SENDS: u32 = 10;
 const NCASM_TYPE: u8 = 0x17;
 /// `ValueChangeStatus::CHANGED`: a set that is final, not a slider mid-drag.
 const CHANGED: u8 = 0x01;
+
+/// `EqEbbInquiredType::PRESET_EQ`.
+const PRESET_EQ: u8 = 0x00;
+/// How far a step is offset on the wire: a step of −10 is sent as 0.
+const EQ_STEP_OFFSET: i8 = 10;
 
 /// NCASM params as the Device reports and takes them, bytes 3–6 of a 0x17
 /// RET, NTFY or SET.
@@ -192,6 +201,13 @@ impl Session {
         self.set_noise_control(params);
     }
 
+    /// Asks the Device to switch its Equalizer to `preset`, leaving its curve
+    /// to the Device. The Device confirms with a notification of the new
+    /// params.
+    pub fn set_equalizer_preset(&mut self, preset: u8) {
+        self.request(vec![command::EQEBB_SET_PARAM, PRESET_EQ, preset, 0]);
+    }
+
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
     pub fn power_off(&mut self) {
         /// `PowerOffSettingValue::ON`.
@@ -314,12 +330,20 @@ impl Session {
                     (_, 0x00) => NoiseControlMode::NoiseCancelling,
                     _ => NoiseControlMode::Ambient,
                 };
+                if data[0] == command::NCASM_RET_PARAM {
+                    self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                }
                 let mut updates = vec![Update::ChosenMode(mode)];
                 let range = Model::Wh1000Xm5.capabilities().ambient_level;
                 if range.is_some_and(|range| range.contains(level)) {
                     updates.push(Update::AmbientLevel(level));
                 }
                 updates
+            }
+            [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
+                if self.identified && steps.len() == n as usize =>
+            {
+                vec![Update::Equalizer(equalizer(preset, steps))]
             }
             _ => Vec::new(),
         }
@@ -348,6 +372,31 @@ impl Session {
                 kind,
             });
         }
+    }
+}
+
+/// The Equalizer the Device reports as `preset` and the `steps` that follow
+/// it. Six steps are Clear Bass then the five Bands. Any other count is kept
+/// as the Preset alone.
+fn equalizer(preset: u8, steps: &[u8]) -> Equalizer {
+    let steps: Option<Vec<i8>> = match steps.len() {
+        6 => steps
+            .iter()
+            .map(|&step| i8::try_from(step).ok().map(|step| step - EQ_STEP_OFFSET))
+            .collect(),
+        _ => None,
+    };
+    match steps {
+        Some(steps) => Equalizer {
+            preset,
+            clear_bass: Some(steps[0]),
+            bands: Some(steps[1..].to_vec()),
+        },
+        None => Equalizer {
+            preset,
+            bands: None,
+            clear_bass: None,
+        },
     }
 }
 

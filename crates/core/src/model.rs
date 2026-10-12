@@ -70,7 +70,26 @@ impl Model {
                 ambient_level: Some(LevelRange { min: 1, max: 20 }),
                 noise_cancelling_level: None,
                 power_off: true,
-                equalizer: None,
+                // From Gadgetbridge and Sony's app, until checked against the
+                // XM5's own EQEBB_RET_CAPABILITY.
+                equalizer: Some(EqualizerCapability {
+                    presets: vec![
+                        Preset::fixed(0x00, "Off"),
+                        Preset::fixed(0x10, "Bright"),
+                        Preset::fixed(0x11, "Excited"),
+                        Preset::fixed(0x12, "Mellow"),
+                        Preset::fixed(0x13, "Relaxed"),
+                        Preset::fixed(0x14, "Vocal"),
+                        Preset::fixed(0x15, "Treble Boost"),
+                        Preset::fixed(0x16, "Bass Boost"),
+                        Preset::fixed(0x17, "Speech"),
+                        Preset::editable(0xa0, "Manual"),
+                        Preset::editable(0xa1, "Custom 1"),
+                        Preset::editable(0xa2, "Custom 2"),
+                    ],
+                    bands: None,
+                    clear_bass: None,
+                }),
             },
         }
     }
@@ -133,6 +152,14 @@ impl Preset {
             name,
             editable: false,
             selectable: true,
+        }
+    }
+
+    /// A Preset the app can pick, whose Bands can be changed.
+    fn editable(id: u8, name: &'static str) -> Preset {
+        Preset {
+            editable: true,
+            ..Preset::fixed(id, name)
         }
     }
 }

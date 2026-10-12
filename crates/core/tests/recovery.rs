@@ -234,8 +234,8 @@ async fn an_xm5_that_never_answers_is_given_up_on_and_retried() {
     );
 }
 
-/// An ACK with sequence number 0: for a frame sent with 1.
-const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
+/// An ACK with sequence number 1: for a frame sent with 0.
+const ACK_SEQ_1: [u8; 9] = [0x3e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x3c];
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
 async fn attached_xm5() -> (Core, support::FakeOs, support::DeviceLink) {
@@ -251,7 +251,7 @@ async fn attached_xm5() -> (Core, support::FakeOs, support::DeviceLink) {
 #[tokio::test(start_paused = true)]
 async fn an_xm5_request_whose_ack_is_lost_is_resent_after_a_second() {
     let (core, _os, mut link) = attached_xm5().await;
-    let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
+    let off = sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
 
     core.command(Command::SetNoiseControlMode(
         xm5().address,
@@ -272,17 +272,17 @@ async fn an_xm5_request_whose_ack_is_lost_is_resent_after_a_second() {
     );
     assert_eq!(sent_at.elapsed(), Duration::from_secs(1));
     // Once it's ACKed, the queued level set goes out.
-    link.send.send(ACK_SEQ_0.to_vec()).unwrap();
+    link.send.send(ACK_SEQ_1.to_vec()).unwrap();
     assert_eq!(
         written(&mut link).await.unwrap(),
-        sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
+        sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x03])
     );
 }
 
 #[tokio::test(start_paused = true)]
 async fn an_xm5_that_stops_acking_is_detached_after_10_tries_and_re_attached() {
     let (core, mut os, mut link) = attached_xm5().await;
-    let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
+    let off = sony_frame(0, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
 
     core.command(Command::SetNoiseControlMode(
         xm5().address,
