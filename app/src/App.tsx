@@ -269,8 +269,8 @@ function LevelSlider({
   /** The reported level; null until the Device first reports it. */
   level: number | null;
   range: LevelRange;
-  /** Asks the Device for a level; without it the slider only shows the level. */
-  set?: (level: number) => Promise<void>;
+  /** Asks the Device for a level. */
+  set: (level: number) => Promise<void>;
 }) {
   // The levels asked for, until snapshots report them. Dragging across
   // notches asks for each in turn. Only a change of level confirms one: a
@@ -283,11 +283,11 @@ function LevelSlider({
   const shown = pending ?? level;
   const choose = (asked: number) => {
     asked = Math.min(range.max, Math.max(range.min, asked));
-    if (asked === shown || !set) return;
+    if (asked === shown) return;
     send(asked, () => set(asked));
   };
-  // Nothing to act on until the Device reports a level, or with no way to set one.
-  const disabled = shown === null || !set;
+  // Nothing to act on until the Device reports a level.
+  const disabled = shown === null;
 
   const steps = range.max - range.min + 1;
   const notched = steps <= MAX_NOTCHES;
