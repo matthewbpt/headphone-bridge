@@ -53,6 +53,7 @@ async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
                 NoiseControlMode::Adaptive,
             ],
             ambient_level: Some(LevelRange { min: 0, max: 4 }),
+            noise_cancelling_level: Some(LevelRange { min: 0, max: 4 }),
         }
     );
     assert_eq!(

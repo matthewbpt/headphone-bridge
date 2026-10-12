@@ -378,6 +378,9 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::AmbientLevel(level)) => {
                 device.ambient_level = Some(level);
             }
+            LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
+                device.noise_cancelling_level = Some(level);
+            }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
                 *device = Device::unidentified(

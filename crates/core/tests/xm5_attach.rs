@@ -58,6 +58,7 @@ async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
                 NoiseControlMode::Ambient,
             ],
             ambient_level: Some(LevelRange { min: 1, max: 20 }),
+            noise_cancelling_level: None,
         }
     );
     assert_eq!(device.battery, Some(Battery::Headphones { level: 70 }));

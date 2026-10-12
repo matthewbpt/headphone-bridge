@@ -42,6 +42,10 @@ pub struct Device {
     /// The Ambient Level in the Model's own steps, within
     /// `capabilities.ambient_level`. `None` until the Device first reports it.
     pub ambient_level: Option<u8>,
+    /// The Noise Cancelling Level in the Model's own steps, within
+    /// `capabilities.noise_cancelling_level`. `None` until the Device first
+    /// reports it.
+    pub noise_cancelling_level: Option<u8>,
     /// `None` until the Device first reports it.
     pub battery: Option<Battery>,
 }
@@ -60,6 +64,7 @@ impl Device {
             effective_mode: None,
             effective_mode_reason: None,
             ambient_level: None,
+            noise_cancelling_level: None,
             battery: None,
         }
     }

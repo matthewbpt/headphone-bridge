@@ -105,6 +105,16 @@ impl Session {
             .then_some(Update::AmbientLevel(level))
     }
 
+    /// The Noise Cancelling Level a Device reports as `value`, if it is in
+    /// the identified Model's range.
+    fn noise_cancelling_level(&self, value: Option<&u8>) -> Option<Update> {
+        let range = self.model?.capabilities().noise_cancelling_level?;
+        let level = *value?;
+        (range.min..=range.max)
+            .contains(&level)
+            .then_some(Update::NoiseCancellingLevel(level))
+    }
+
     /// Feeds bytes received from the Device, in chunks of any size, and
     /// returns the whole frames they complete.
     pub fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
@@ -143,6 +153,8 @@ impl Session {
                     updates.push(self.mode_update(mode, p[6], chosen));
                 }
                 updates.extend(self.ambient_level(p.get(23)));
+                // Byte 24, whatever the mode (real-nc-level-0 to 4).
+                updates.extend(self.noise_cancelling_level(p.get(24)));
             }
             id::AMBIENT_VOLUME => return self.ambient_level(p.first()).into_iter().collect(),
             // An ACK is `<id of the message> <value>`. It confirms a set only

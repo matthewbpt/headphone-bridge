@@ -302,6 +302,7 @@ mod tests {
             effective_mode: Some(NoiseControlMode::Ambient),
             effective_mode_reason: None,
             ambient_level: None,
+            noise_cancelling_level: None,
             battery: Some(Battery::Buds {
                 left: Some(80),
                 right: Some(75),
@@ -407,6 +408,7 @@ mod tests {
                 effective_mode: Some(NoiseControlMode::NoiseCancelling),
                 effective_mode_reason: None,
                 ambient_level: None,
+                noise_cancelling_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
             }],
             primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
@@ -460,6 +462,7 @@ mod tests {
             effective_mode: Some(NoiseControlMode::NoiseCancelling),
             effective_mode_reason: None,
             ambient_level: None,
+            noise_cancelling_level: None,
             battery: Some(Battery::Headphones { level: 70 }),
         }
     }
