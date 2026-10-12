@@ -471,7 +471,8 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// The Device at `address`, unless it's unknown or an unsupported Model.
+    /// The Device at `address`, unless it's unknown, an unsupported Model, or
+    /// Powering Off.
     fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
         let tracked = self
             .devices
@@ -481,6 +482,7 @@ impl<P: Platform> State<P> {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             } => Err(CommandError::UnsupportedModel),
+            DeviceState::PoweringOff => Err(CommandError::PoweringOff),
             _ => Ok(tracked),
         }
     }

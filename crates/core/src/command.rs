@@ -31,6 +31,8 @@ pub enum CommandError {
     NotAttached,
     /// The Device's Model isn't on the allowlist, so the app won't control it.
     UnsupportedModel,
+    /// The Device is Powering Off, so it takes no more commands.
+    PoweringOff,
     /// The Device's Model doesn't have the Capability the command needs.
     MissingCapability,
     /// The value is outside the range the Model's Capabilities declare.

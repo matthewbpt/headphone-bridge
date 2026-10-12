@@ -3,7 +3,9 @@ mod support;
 use std::time::Duration;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
-use headphone_bridge_core::{Command, CommandError, Core, DeviceState, NotAttachedReason};
+use headphone_bridge_core::{
+    Command, CommandError, Core, DeviceState, NoiseControlMode, NotAttachedReason,
+};
 use support::{
     buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, DeviceLink,
     FakeOs, SAMSUNG_SERVICE,
@@ -31,6 +33,31 @@ async fn power_off_sends_power_set_status_and_the_device_is_powering_off() {
     // POWER_SET_STATUS: power off, on, as libmdr and Gadgetbridge send it.
     assert_eq!(written(&mut link).await, sony_frame(1, &[0x24, 0x03, 0x01]));
     wait_for(&core, |list| list.devices[0].state == DeviceState::PoweringOff).await;
+}
+
+#[tokio::test]
+async fn a_device_that_is_powering_off_refuses_every_command() {
+    let (core, _os, mut link) = attached_xm5().await;
+    core.command(Command::PowerOff(xm5().address))
+        .await
+        .unwrap();
+    written(&mut link).await;
+
+    let address = xm5().address;
+    for command in [
+        Command::PowerOff(address.clone()),
+        Command::SetNoiseControlMode(address.clone(), NoiseControlMode::NoiseCancelling),
+        Command::SetAmbientLevel(address.clone(), 15),
+        Command::SetNoiseCancellingLevel(address.clone(), 2),
+        Command::RetryAttach(address.clone()),
+    ] {
+        assert_eq!(
+            core.command(command.clone()).await,
+            Err(CommandError::PoweringOff),
+            "{command:?}"
+        );
+    }
+    assert!(link.written.try_recv().is_err(), "nothing more was written");
 }
 
 #[tokio::test]
