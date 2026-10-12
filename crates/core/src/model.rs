@@ -39,7 +39,7 @@ impl Model {
                     NoiseControlMode::Ambient,
                     NoiseControlMode::Adaptive,
                 ],
-                ambient_level: Some(AmbientLevelRange { min: 0, max: 4 }),
+                ambient_level: Some(LevelRange { min: 0, max: 4 }),
             },
             Model::Wh1000Xm5 => Capabilities {
                 noise_control_modes: vec![
@@ -47,7 +47,7 @@ impl Model {
                     NoiseControlMode::NoiseCancelling,
                     NoiseControlMode::Ambient,
                 ],
-                ambient_level: Some(AmbientLevelRange { min: 1, max: 20 }),
+                ambient_level: Some(LevelRange { min: 1, max: 20 }),
             },
         }
     }
@@ -59,11 +59,12 @@ impl Model {
 pub struct Capabilities {
     pub noise_control_modes: Vec<NoiseControlMode>,
     /// The Ambient Level's range in the Model's own steps, if it has one.
-    pub ambient_level: Option<AmbientLevelRange>,
+    pub ambient_level: Option<LevelRange>,
 }
 
+/// A level Capability's steps in the Model's own units, both ends included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct AmbientLevelRange {
+pub struct LevelRange {
     pub min: u8,
     pub max: u8,
 }

@@ -2,7 +2,7 @@ mod support;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
 use headphone_bridge_core::{
-    AmbientLevelRange, Battery, Capabilities, Core, DeviceState, Model, NoiseControlMode,
+    Battery, Capabilities, Core, DeviceState, LevelRange, Model, NoiseControlMode,
     NotAttachedReason,
 };
 use support::{
@@ -52,7 +52,7 @@ async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
                 NoiseControlMode::Ambient,
                 NoiseControlMode::Adaptive,
             ],
-            ambient_level: Some(AmbientLevelRange { min: 0, max: 4 }),
+            ambient_level: Some(LevelRange { min: 0, max: 4 }),
         }
     );
     assert_eq!(

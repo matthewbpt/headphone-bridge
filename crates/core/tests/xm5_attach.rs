@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use headphone_bridge_core::frame_log::FrameRecord;
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    AmbientLevelRange, Battery, Capabilities, Command, Core, DeviceState, Model, NoiseControlMode,
+    Battery, Capabilities, Command, Core, DeviceState, LevelRange, Model, NoiseControlMode,
     NotAttachedReason,
 };
 use support::{
@@ -57,7 +57,7 @@ async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
                 NoiseControlMode::NoiseCancelling,
                 NoiseControlMode::Ambient,
             ],
-            ambient_level: Some(AmbientLevelRange { min: 1, max: 20 }),
+            ambient_level: Some(LevelRange { min: 1, max: 20 }),
         }
     );
     assert_eq!(device.battery, Some(Battery::Headphones { level: 70 }));

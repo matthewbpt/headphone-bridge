@@ -1,7 +1,7 @@
 mod support;
 
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{AmbientLevelRange, Battery, Command, CommandError, Core, DeviceState};
+use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState, LevelRange};
 use support::{
     buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
@@ -28,7 +28,7 @@ async fn the_snapshot_carries_the_models_ambient_level_range_and_the_reported_le
     let list = wait_for(&core, |list| list.devices[0].ambient_level == Some(2)).await;
     assert_eq!(
         list.devices[0].capabilities.ambient_level,
-        Some(AmbientLevelRange { min: 0, max: 4 })
+        Some(LevelRange { min: 0, max: 4 })
     );
 }
 
