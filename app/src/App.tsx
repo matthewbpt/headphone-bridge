@@ -286,8 +286,6 @@ function LevelSlider({
     if (asked === shown) return;
     send(asked, () => set(asked));
   };
-  // Nothing to act on until the Device reports a level.
-  const disabled = shown === null;
 
   const steps = range.max - range.min + 1;
   const notched = steps <= MAX_NOTCHES;
@@ -298,7 +296,7 @@ function LevelSlider({
         <button
           className="level__step"
           aria-label="Less"
-          disabled={disabled || shown <= range.min}
+          disabled={shown === null || shown <= range.min}
           onClick={() => shown !== null && choose(shown - 1)}
         >
           <svg viewBox="0 0 16 16" aria-hidden>
@@ -319,7 +317,7 @@ function LevelSlider({
             max={range.max}
             step={1}
             value={shown ?? range.min}
-            disabled={disabled}
+            disabled={shown === null}
             aria-label={title}
             aria-busy={pending !== null}
             onChange={(e) => choose(Number(e.target.value))}
@@ -328,7 +326,7 @@ function LevelSlider({
         <button
           className="level__step"
           aria-label="More"
-          disabled={disabled || shown >= range.max}
+          disabled={shown === null || shown >= range.max}
           onClick={() => shown !== null && choose(shown + 1)}
         >
           <svg viewBox="0 0 16 16" aria-hidden>
