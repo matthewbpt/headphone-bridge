@@ -648,13 +648,24 @@ button {
   color: var(--muted);
 }
 
-.equalizer__band input {
-  writing-mode: vertical-lr;
-  direction: rtl;
+/* Holds a Band's upright slider: as wide as a knob, as tall as the travel. */
+.equalizer__slider {
+  position: relative;
   width: var(--thumb);
   height: var(--height);
+}
+
+/* A horizontal slider turned a quarter anticlockwise, so its minimum is at
+   the bottom and its knob travels the same span as the line. */
+.equalizer__band input {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--height);
+  height: var(--thumb);
+  transform: translate(-50%, -50%) rotate(-90deg);
   margin: 0;
-  background: linear-gradient(var(--track), var(--track)) center / 4px 100% no-repeat;
+  background: linear-gradient(var(--track), var(--track)) center / 100% 4px no-repeat;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;

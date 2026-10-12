@@ -144,18 +144,23 @@ function Curve({
       </svg>
       {bands.frequencies.map((frequency, i) => (
         <label key={frequency} className="equalizer__band">
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={1}
-            value={curve[i]}
-            aria-label={`${frequency} Band`}
-            aria-busy={pending}
-            onChange={(e) => drag(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))}
-            onPointerUp={release}
-            onKeyUp={release}
-          />
+          {/* A horizontal slider turned upright: WebKitGTK lays out a range
+              input in a vertical writing-mode with its knob stuck mid-track. */}
+          <span className="equalizer__slider">
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={1}
+              value={curve[i]}
+              aria-label={`${frequency} Band`}
+              aria-orientation="vertical"
+              aria-busy={pending}
+              onChange={(e) => drag(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))}
+              onPointerUp={release}
+              onKeyUp={release}
+            />
+          </span>
           <span aria-hidden>{frequency}</span>
         </label>
       ))}
