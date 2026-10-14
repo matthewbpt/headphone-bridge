@@ -7,7 +7,7 @@
 //! Device has acknowledged it. A request that isn't acknowledged is resent,
 //! up to [`MAX_SENDS`] times in all, as libmdr does.
 
-mod frame;
+pub(crate) mod frame;
 
 use std::collections::VecDeque;
 

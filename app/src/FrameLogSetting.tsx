@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { type Platform, shareFrameLog, useFrameLog, whyRejected } from "./core";
+import { SimulatedDeviceSetting } from "./SimulatedDeviceSetting";
 
 /**
  * The frame log developer setting: while it's on, every frame sent to or
@@ -28,6 +29,7 @@ export function FrameLogSetting({ platform }: { platform: Platform | null }) {
       {file && <div>Logging frames to {file}. Stays on across launches.</div>}
       {error && <div>Couldn't open the frame log: {error}</div>}
       {platform === "android" && <ShareFrameLog on={file !== null} />}
+      <SimulatedDeviceSetting />
     </details>
   );
 }

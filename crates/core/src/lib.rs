@@ -11,6 +11,8 @@ pub mod platform;
 mod samsung;
 mod sony;
 mod update;
+#[doc(hidden)]
+pub mod wire;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

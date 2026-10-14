@@ -227,6 +227,21 @@ async fn set_frame_log(
     Ok(path)
 }
 
+/// The Simulated Device's Model while it's switched on. Debug Android builds
+/// alone have it, for the emulator.
+#[cfg(all(target_os = "android", debug_assertions))]
+#[tauri::command]
+fn simulated_device() -> Option<headphone_bridge_core::Model> {
+    headphone_bridge_platform_android::android::simulated()
+}
+
+/// Switches the Simulated Device on as `model`, or off with `None`.
+#[cfg(all(target_os = "android", debug_assertions))]
+#[tauri::command]
+fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
+    headphone_bridge_platform_android::android::simulate(model);
+}
+
 /// Whether Android lets the app use Bluetooth: the Nearby devices permission,
 /// as the UI names it.
 #[derive(Clone, Copy, serde::Serialize)]
@@ -402,7 +417,11 @@ pub fn run() {
             set_frame_log,
             nearby_devices_permission,
             open_app_settings,
-            share_frame_log
+            share_frame_log,
+            #[cfg(all(target_os = "android", debug_assertions))]
+            simulated_device,
+            #[cfg(all(target_os = "android", debug_assertions))]
+            set_simulated_device
         ])
         .build(tauri::generate_context!())
         .expect("error while building Headphone Bridge")

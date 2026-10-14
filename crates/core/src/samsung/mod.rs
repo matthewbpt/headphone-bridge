@@ -2,7 +2,7 @@
 //! Galaxy Buds4 Pro. Ported from omarchy-buds (MIT) and checked against its
 //! Buds4 Pro captures (firmware revision 4).
 
-mod frame;
+pub(crate) mod frame;
 
 use uuid::{uuid, Uuid};
 
