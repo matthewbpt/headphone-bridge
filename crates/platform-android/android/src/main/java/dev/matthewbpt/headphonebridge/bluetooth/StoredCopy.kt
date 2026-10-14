@@ -8,7 +8,12 @@ import org.json.JSONObject
  * deaths: the Primary Device, what each Device last reported, by address, and
  * what an action is doing.
  */
-class StoredCopy(private val storage: Storage, private val now: () -> Long) {
+class StoredCopy(
+  private val storage: Storage,
+  private val now: () -> Long,
+  /** Called after every change, for the surfaces to show it. */
+  private val onChange: () -> Unit = {},
+) {
   /** Where the copy is kept: SharedPreferences on the phone. */
   interface Storage {
     fun read(): String?
@@ -74,6 +79,7 @@ class StoredCopy(private val storage: Storage, private val now: () -> Long) {
       if (!busy && device.getJSONObject("state").getString("kind") == "attached") status = null
     }
     save()
+    onChange()
   }
 
   /** An action started, or a tap changed its [target]: null to refresh. */
@@ -82,6 +88,7 @@ class StoredCopy(private val storage: Storage, private val now: () -> Long) {
     busy = true
     pending = target
     status = if (target != null) "Setting ${modeLabel(target)}…" else "Refreshing…"
+    onChange()
   }
 
   @Synchronized
@@ -90,6 +97,7 @@ class StoredCopy(private val storage: Storage, private val now: () -> Long) {
     pending = null
     status = failure
     save()
+    onChange()
   }
 
   @Synchronized
