@@ -74,9 +74,9 @@ extension, which Ubuntu enables by default.
 ### Running on Android
 
 The Android app needs Android 12 or later, and asks for the Nearby devices
-permission on first launch. If it's refused, the app screen says why it's
+permission on first launch. If it's refused, the App Screen says why it's
 needed, with a button to the app's Android settings; once it's granted there,
-Devices show without a restart. It Attaches Devices only while the app screen is
+Devices show without a restart. It Attaches Devices only while the App Screen is
 in the foreground, and Detaches them 3 s after it leaves, so the vendor apps
 can have the control link. Building it needs the Android SDK and NDK
 (`ANDROID_HOME`, `NDK_HOME`), a JDK (`JAVA_HOME`), and the Rust target
@@ -119,8 +119,8 @@ Bridge.app/Contents/MacOS/headphone-bridge"`.
 
 On Android the file is in app-private storage, so the Developer section has
 **Share frame log** instead: it hands a copy of the file to the share sheet, to
-save to Files or send from the phone. When the widget or tile starts the app's
-process, nothing is logged until the app screen opens.
+save to Files or send from the phone. It logs the Attaches made for the widget
+and tile too, even when their taps start the app's process.
 
 ### Screenshots
 
