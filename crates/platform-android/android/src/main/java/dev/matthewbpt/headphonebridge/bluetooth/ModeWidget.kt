@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
  */
 class ModeWidget : AppWidgetProvider() {
   override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    Surfaces.watch(context)
     render(context, manager, ids)
   }
 

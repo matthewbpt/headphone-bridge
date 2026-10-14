@@ -54,6 +54,15 @@ class ActionController(
     run { work() }
   }
 
+  /**
+   * Starts Bluetooth, if it isn't already, so the copy follows the Devices
+   * the core reports, e.g. drops one that disconnected while the process was
+   * dead. Holds nothing, so nothing is Attached.
+   */
+  fun watch() {
+    run { start() }
+  }
+
   private fun work() {
     while (true) {
       val failure = round()

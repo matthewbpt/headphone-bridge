@@ -46,6 +46,12 @@ object Surfaces {
     ).also { controller = it }
   }
 
+  /**
+   * Starts watching Bluetooth for the widget and tile, so they don't show a
+   * Device that disconnected while the process was dead. Never Attaches.
+   */
+  fun watch(context: Context) = controller(context).watch()
+
   /** Whether the app has the Nearby devices permission, without starting Bluetooth. */
   fun hasPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==

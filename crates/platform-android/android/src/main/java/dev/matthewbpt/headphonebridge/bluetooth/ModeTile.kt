@@ -22,6 +22,7 @@ import android.util.Log
 class ModeTile : TileService() {
   override fun onStartListening() {
     listening = this
+    Surfaces.watch(this)
     show()
   }
 

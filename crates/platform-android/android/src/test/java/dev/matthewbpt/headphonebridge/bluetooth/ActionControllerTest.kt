@@ -131,6 +131,24 @@ class ActionControllerTest {
     assertEquals("adaptive", shown.mode)
     assertEquals(null, shown.status)
   }
+
+  @Test
+  fun watchingStartsBluetoothSoTheCopyFollowsTheDevicesWithoutHoldingAny() {
+    val started = CountDownLatch(1)
+    val watcher = ActionController(link, copy, start = { started.countDown(); true })
+
+    watcher.watch()
+
+    assertTrue("Bluetooth started", started.await(5, TimeUnit.SECONDS))
+    link.connect()
+    assertEquals("Galaxy Buds4 Pro", copy.shown(permitted).name)
+    // E.g. it disconnected while the process was dead.
+    link.disconnect()
+    val shown = copy.shown(permitted)
+    assertEquals(null, shown.name)
+    assertEquals("No Device Connected", shown.status)
+    assertEquals(emptyList<String>(), link.sent)
+  }
 }
 
 /** Waits up to 5 s for [condition]. */
