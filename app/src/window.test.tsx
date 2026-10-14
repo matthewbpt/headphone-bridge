@@ -1105,3 +1105,73 @@ describe("Settings", () => {
     expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeChecked();
   });
 });
+
+describe("Share frame log", () => {
+  async function openDeveloper() {
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+  }
+
+  it("hands the frame log to the share sheet on Android", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(core.sent()).toEqual([{ command: "share_frame_log", args: {} }]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("is disabled while the frame log is off, saying why", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await openDeveloper();
+
+    expect(screen.getByRole("button", { name: "Share frame log" })).toBeDisabled();
+    expect(screen.getByText("Turn the frame log on to share it.")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    expect(screen.getByRole("button", { name: "Share frame log" })).toBeEnabled();
+    expect(screen.queryByText("Turn the frame log on to share it.")).not.toBeInTheDocument();
+  });
+
+  it("explains that an empty frame log has nothing to share", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    core.answer("share_frame_log", { reject: "frameLogEmpty" });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't share the frame log: it's empty until a Device is Attached",
+    );
+  });
+
+  it("shows why the share sheet couldn't open", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    core.answer("share_frame_log", { reject: { shareFailed: "No app can share files" } });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't share the frame log: No app can share files",
+    );
+  });
+
+  it("isn't offered on desktop, where the file is in reach", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    expect(screen.getByText(/Logging frames to/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Share frame log" })).not.toBeInTheDocument();
+  });
+});

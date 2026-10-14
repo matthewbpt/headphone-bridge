@@ -23,6 +23,7 @@ export type Commands = {
   power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
+  share_frame_log: { args: Record<string, never>; result: void };
   nearby_devices_permission: { args: Record<string, never>; result: Permission };
   open_app_settings: { args: Record<string, never>; result: void };
 };
@@ -56,17 +57,23 @@ export type CommandError =
   | "settingsNotReported"
   | { frameLogUnavailable: string };
 
-/** Each reason the core gives, as the name it's sent under. */
-type CommandErrorKey = CommandError extends infer E ? (E extends string ? E : keyof E) : never;
+/** Why the shell couldn't hand the frame log to Android's share sheet. */
+export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string };
+
+/** Why a command was rejected, by the core or the shell. */
+type Rejection = CommandError | ShareError;
+
+/** Each reason given, as the name it's sent under. */
+type RejectionKey = Rejection extends infer E ? (E extends string ? E : keyof E) : never;
 
 /**
  * Each reason in words, for the listener. A reason that carries a message is
- * worded from it. The type makes every reason in `CommandError` need words.
+ * worded from it. The type makes every reason in `Rejection` need words.
  */
 const WORDS: {
-  [K in CommandErrorKey]: K extends CommandError
+  [K in RejectionKey]: K extends Rejection
     ? string
-    : (message: Extract<CommandError, Record<K, unknown>>[K]) => string;
+    : (message: Extract<Rejection, Record<K, unknown>>[K]) => string;
 } = {
   unknownDevice: "the Device isn't Connected",
   notAttached: "the Device isn't Attached",
@@ -76,6 +83,9 @@ const WORDS: {
   outOfRange: "that value is outside the Model's range",
   settingsNotReported: "the Device hasn't reported its settings yet",
   frameLogUnavailable: (message) => message,
+  frameLogOff: "the frame log is off",
+  frameLogEmpty: "it's empty until a Device is Attached",
+  shareFailed: (message) => message,
 };
 
 /**
@@ -98,7 +108,7 @@ function reasonOf(error: unknown): [key: string, message?: unknown] | null {
 function inWords(error: unknown): string {
   const reason = reasonOf(error);
   if (reason && Object.hasOwn(WORDS, reason[0])) {
-    const words = WORDS[reason[0] as CommandErrorKey];
+    const words = WORDS[reason[0] as RejectionKey];
     if (typeof words === "string" && reason.length === 1) return words;
     if (typeof words === "function" && reason.length === 2) return words(reason[1] as never);
   }
@@ -154,6 +164,14 @@ export function powerOff(address: string): Promise<void> {
  */
 function setFrameLog(enabled: boolean): Promise<string | null> {
   return send("set_frame_log", { enabled });
+}
+
+/**
+ * Hands the frame log file to Android's share sheet. Rejects, with why in
+ * words, while the frame log is off or empty.
+ */
+export function shareFrameLog(): Promise<void> {
+  return send("share_frame_log", {});
 }
 
 /**
