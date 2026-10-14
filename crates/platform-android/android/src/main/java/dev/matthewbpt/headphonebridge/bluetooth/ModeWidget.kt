@@ -85,12 +85,12 @@ class ModeWidget : AppWidgetProvider() {
         views.setOnClickPendingIntent(id, broadcast(context, ACTION_SET_MODE, mode, i))
       }
 
-      views.setTextViewText(R.id.status, shown.status ?: shown.updatedAt?.let {
+      views.setTextViewText(R.id.note, shown.note ?: shown.updatedAt?.let {
         "Updated " + DateUtils.getRelativeTimeSpanString(
           it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
         )
       } ?: "")
-      views.setOnClickPendingIntent(R.id.status, if (shown.opensApp) open else null)
+      views.setOnClickPendingIntent(R.id.note, if (shown.opensApp) open else null)
       views.setOnClickPendingIntent(R.id.open, open)
       manager.updateAppWidget(ids, views)
     }

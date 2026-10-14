@@ -26,7 +26,7 @@ const val TILE_LABEL = "Noise Control"
  * step on from it and become one change.
  */
 fun tileLook(shown: StoredCopy.Shown): TileLook {
-  val subtitle = shown.status ?: shown.name
+  val subtitle = shown.note ?: shown.name
   if (shown.opensApp) return TileLook(TILE_LABEL, subtitle, TileLook.State.INACTIVE, TileLook.Tap.OpenApp)
   if (shown.name == null) return TileLook(TILE_LABEL, subtitle, TileLook.State.UNAVAILABLE, TileLook.Tap.Nothing)
   val mode = shown.mode

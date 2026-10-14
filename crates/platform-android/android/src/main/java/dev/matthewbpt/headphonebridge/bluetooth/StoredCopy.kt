@@ -31,7 +31,7 @@ class StoredCopy(
     /** When the mode and battery were last reported, in ms since the epoch, if ever. */
     val updatedAt: Long?,
     /** What an action is doing, why it failed, or why there's nothing to do; null to show [updatedAt]. */
-    val status: String?,
+    val note: String?,
     /** Whether a tap anywhere opens the app, as there's nothing else it can do. */
     val opensApp: Boolean = false,
   )
@@ -47,9 +47,9 @@ class StoredCopy(
 
   private var primary: String? = null
   private val devices = mutableMapOf<String, Remembered>()
-  private var status: String? = null
+  private var note: String? = null
 
-  /** Whether an action is running, so [status] says what it's doing. */
+  /** Whether an action is running, so [note] says what it's doing. */
   private var busy = false
 
   /** The mode an action is setting, shown as if it already applied. */
@@ -76,7 +76,7 @@ class StoredCopy(
         updatedAt = if (reported) device.optLongOrNull("reportedAt") ?: now() else before?.updatedAt,
       )
       // Attached again, e.g. from the app screen: whatever failed is over.
-      if (!busy && device.getJSONObject("state").getString("kind") == "attached") status = null
+      if (!busy && device.getJSONObject("state").getString("kind") == "attached") note = null
     }
     save()
     onChange()
@@ -87,7 +87,7 @@ class StoredCopy(
   fun actionStarted(target: String?) {
     busy = true
     pending = target
-    status = if (target != null) "Setting ${modeLabel(target)}…" else "Refreshing…"
+    note = if (target != null) "Setting ${modeLabel(target)}…" else "Refreshing…"
     onChange()
   }
 
@@ -95,7 +95,7 @@ class StoredCopy(
   fun actionFinished(failure: String?) {
     busy = false
     pending = null
-    status = failure
+    note = failure
     save()
     onChange()
   }
@@ -112,7 +112,7 @@ class StoredCopy(
       modes = device?.modes.orEmpty(),
       mode = pending ?: device?.chosen,
       updatedAt = device?.updatedAt,
-      status = status ?: when {
+      note = note ?: when {
         device == null -> NO_DEVICE_CONNECTED
         device.modes.isEmpty() -> TAP_TO_REFRESH
         else -> null
@@ -124,7 +124,7 @@ class StoredCopy(
     val saved = JSONObject()
       .put("primary", primary ?: JSONObject.NULL)
       // An action doesn't outlive the process, but why one failed does.
-      .put("status", (if (busy) null else status) ?: JSONObject.NULL)
+      .put("note", (if (busy) null else note) ?: JSONObject.NULL)
     val all = JSONObject()
     for ((address, device) in devices) {
       all.put(
@@ -142,7 +142,7 @@ class StoredCopy(
 
   private fun load(saved: JSONObject) {
     primary = saved.optStringOrNull("primary")
-    status = saved.optStringOrNull("status")
+    note = saved.optStringOrNull("note")
     val all = saved.getJSONObject("devices")
     for (address in all.keys()) {
       val device = all.getJSONObject(address)
