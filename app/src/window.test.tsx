@@ -753,6 +753,15 @@ describe("a Device that isn't Attached", () => {
     expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
   });
 
+  it("shows a Detached Device as left for other apps, with no Retry or controls", async () => {
+    renderWindow(new FakeCore(only(reattaching(xm5(), { kind: "detached" }))));
+
+    expect(await screen.findByText("Detached, so other apps can use it")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
+  });
+
   it("shows the reason and tries to Attach again on Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
