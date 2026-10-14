@@ -74,7 +74,9 @@ extension, which Ubuntu enables by default.
 ### Running on Android
 
 The Android app needs Android 12 or later, and asks for the Nearby devices
-permission on first launch. It Attaches Devices only while the app screen is
+permission on first launch. If it's refused, the app screen says why it's
+needed, with a button to the app's Android settings; once it's granted there,
+Devices show without a restart. It Attaches Devices only while the app screen is
 in the foreground, and Detaches them 3 s after it leaves, so the vendor apps
 can have the control link. Building it needs the Android SDK and NDK
 (`ANDROID_HOME`, `NDK_HOME`), a JDK (`JAVA_HOME`), and the Rust target
