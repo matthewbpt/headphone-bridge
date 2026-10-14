@@ -45,6 +45,9 @@ export type DeviceState =
   | { kind: "attached" }
   /** Asked to Power Off and still Connected: every command is refused. */
   | { kind: "poweringOff" }
+  /** The app chose not to Attach it, so another app or device can. */
+  | { kind: "detached" }
+  /** The app can't Attach it. */
   | { kind: "notAttached"; reason: NotAttachedReason };
 
 export type NotAttachedReason =
