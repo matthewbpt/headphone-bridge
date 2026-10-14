@@ -27,4 +27,7 @@ interface CoreLink {
 
   /** Waits for a Device list [ready] accepts, or returns null after [timeoutMs]. */
   fun awaitDeviceList(timeoutMs: Long, ready: (JSONObject) -> Boolean): JSONObject?
+
+  /** Calls [listener] with every Device list from now on, on the core's thread. */
+  fun onDeviceList(listener: (JSONObject) -> Unit)
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hb_widget_label">Noise Control</string>
+    <string name="hb_widget_description">Switch your headphones\' Noise Control Mode</string>
+    <string name="hb_no_device">No Device</string>
+    <string name="hb_open">Open</string>
+</resources>

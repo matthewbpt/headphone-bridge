@@ -45,6 +45,8 @@ class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
 
   override fun load(webView: WebView) {
     Hub.ensureStarted(activity)
+    // So the widget shows what the app screen sees.
+    Surfaces.controller(activity)
     if (!Hub.hasPermission()) {
       ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
     }
