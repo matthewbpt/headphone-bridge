@@ -29,7 +29,8 @@ export function FrameLogSetting({ platform }: { platform: Platform | null }) {
       {file && <div>Logging frames to {file}. Stays on across launches.</div>}
       {error && <div>Couldn't open the frame log: {error}</div>}
       {platform === "android" && <ShareFrameLog on={file !== null} />}
-      <SimulatedDeviceSetting />
+      {/* Gated here too, so release bundles leave it out. */}
+      {__DEBUG_BUILD__ && <SimulatedDeviceSetting />}
     </details>
   );
 }
