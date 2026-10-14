@@ -1,5 +1,5 @@
 import { act } from "react";
-import type { Commands, Platform } from "../core";
+import type { Commands, Events, Permission, Platform } from "../core";
 import type { DeviceList, Labels, Model } from "../deviceList";
 
 /**
@@ -13,26 +13,34 @@ import type { DeviceList, Labels, Model } from "../deviceList";
  */
 export class FakeCore {
   private deviceList: DeviceList;
-  private readonly listeners = new Set<(event: { payload: DeviceList }) => void>();
+  private readonly listeners = new Map<string, Set<(event: { payload: unknown }) => void>>();
   private readonly answers = new Map<AnsweredCommand, Answer>();
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
   private readonly platform: Platform;
+  private nearbyDevices: Permission;
+  private appSettingsOpens = 0;
   /** The Simulated Device's Model, or null while it's off; undefined where the shell has none. */
   private simulated: Model | null | undefined;
 
   /**
-   * A core in the desktop app, unless `platform` says otherwise, whose shell
-   * has a Simulated Device only if `simulatedDevice` says so, as a debug
-   * Android build's does.
+   * A core in the desktop app, unless `platform` says otherwise, with the
+   * Nearby devices permission granted unless `nearbyDevices` says otherwise,
+   * whose shell has a Simulated Device only if `simulatedDevice` says so, as
+   * a debug Android build's does.
    */
   constructor(
     deviceList: DeviceList,
-    { platform = "desktop", simulatedDevice = false }: { platform?: Platform; simulatedDevice?: boolean } = {},
+    {
+      platform = "desktop",
+      nearbyDevices = "granted",
+      simulatedDevice = false,
+    }: { platform?: Platform; nearbyDevices?: Permission; simulatedDevice?: boolean } = {},
   ) {
     this.deviceList = structuredClone(deviceList);
     this.platform = platform;
+    this.nearbyDevices = nearbyDevices;
     this.simulated = simulatedDevice ? null : undefined;
   }
 
@@ -44,8 +52,28 @@ export class FakeCore {
   /** Emits a new Device list snapshot, as the core does after every change. */
   emit(deviceList: DeviceList) {
     this.deviceList = structuredClone(deviceList);
+    this.send("device-list", deviceList);
+  }
+
+  /**
+   * Changes the Nearby devices permission, as the listener does in the app's
+   * Android settings, and reports it as the app does on coming back.
+   */
+  setNearbyDevices(permission: Permission) {
+    this.nearbyDevices = permission;
+    this.send("nearby-devices-permission", permission);
+  }
+
+  /** How many times the window opened the app's Android settings. */
+  appSettingsOpened(): number {
+    return this.appSettingsOpens;
+  }
+
+  private send<E extends keyof Events>(event: E, payload: Events[E]) {
     act(() => {
-      for (const listener of this.listeners) listener({ payload: structuredClone(deviceList) });
+      for (const listener of this.listeners.get(event) ?? []) {
+        listener({ payload: structuredClone(payload) });
+      }
     });
   }
 
@@ -106,6 +134,11 @@ export class FakeCore {
       return Promise.resolve(this.frameLog);
     },
     share_frame_log: (args) => this.record("share_frame_log", args),
+    nearby_devices_permission: () => Promise.resolve(this.nearbyDevices),
+    open_app_settings: () => {
+      this.appSettingsOpens += 1;
+      return Promise.resolve();
+    },
     simulated_device: () =>
       this.simulated === undefined
         ? Promise.reject("command simulated_device not found")
@@ -118,10 +151,11 @@ export class FakeCore {
   };
 
   /** The window's `listen`, for `@tauri-apps/api/event`. */
-  listen(event: string, handler: (event: { payload: DeviceList }) => void): () => void {
-    if (event !== "device-list") return () => {};
-    this.listeners.add(handler);
-    return () => this.listeners.delete(handler);
+  listen(event: string, handler: (event: { payload: unknown }) => void): () => void {
+    const listeners = this.listeners.get(event) ?? new Set();
+    this.listeners.set(event, listeners);
+    listeners.add(handler);
+    return () => listeners.delete(handler);
   }
 
   /** The OS login item, for `@tauri-apps/plugin-autostart`. */

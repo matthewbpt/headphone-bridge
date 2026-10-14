@@ -27,6 +27,9 @@ class FakeCoreLink(
   /** What the core answers a command with; null accepts it. */
   var commandError: String? = null
 
+  /** Whether the app has the Nearby devices permission. */
+  var permitted = true
+
   /** The state the Device is in until it's held, as the core reports it. */
   var idleState: JSONObject = state("detached")
 
@@ -67,6 +70,8 @@ class FakeCoreLink(
   private fun record(what: String) {
     synchronized(sent) { sent.add(what) }
   }
+
+  override fun hasPermission() = permitted
 
   override fun holdAll() = record("holdAll")
   override fun endHoldAll() = record("endHoldAll")
