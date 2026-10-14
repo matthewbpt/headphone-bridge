@@ -1,7 +1,15 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import { reasonText } from "./deviceList";
-import { powerOff, retryAttach, setNoiseControlMode, useDeviceList, useLabels, whyRejected } from "./core";
+import {
+  powerOff,
+  retryAttach,
+  setNoiseControlMode,
+  useDeviceList,
+  useLabels,
+  usePlatform,
+  whyRejected,
+} from "./core";
 import { BatteryGlyph, DevicePicture, ModeIcon, PowerIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
@@ -9,12 +17,14 @@ import { Levels } from "./Levels";
 import { usePendingSetting } from "./usePendingSetting";
 
 export function App() {
+  // Launch at login is a desktop setting: a phone has no login items.
+  const platform = usePlatform();
   return (
     <main className="window">
       <DeviceListView />
       <details className="card settings">
         <summary>Settings</summary>
-        <LaunchAtLoginSetting />
+        {platform === "desktop" && <LaunchAtLoginSetting />}
         <FrameLogSetting />
       </details>
     </main>

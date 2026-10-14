@@ -1,5 +1,5 @@
 import { act } from "react";
-import type { Commands } from "../core";
+import type { Commands, Platform } from "../core";
 import type { DeviceList, Labels } from "../deviceList";
 
 /**
@@ -18,9 +18,12 @@ export class FakeCore {
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
+  private readonly platform: Platform;
 
-  constructor(deviceList: DeviceList) {
+  /** A core in the desktop app, unless `platform` says otherwise. */
+  constructor(deviceList: DeviceList, { platform = "desktop" }: { platform?: Platform } = {}) {
     this.deviceList = structuredClone(deviceList);
+    this.platform = platform;
   }
 
   /** Emits a new Device list snapshot, as the core does after every change. */
@@ -73,6 +76,7 @@ export class FakeCore {
     [C in keyof Commands]: (args: Commands[C]["args"]) => Promise<Commands[C]["result"]>;
   } = {
     labels: () => Promise.resolve(structuredClone(LABELS)),
+    platform: () => Promise.resolve(this.platform),
     device_list: () => Promise.resolve(structuredClone(this.deviceList)),
     set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
     set_ambient_level: (args) => this.record("set_ambient_level", args),

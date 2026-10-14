@@ -14,6 +14,7 @@ import type { DeviceList, Labels, NoiseControlMode } from "./deviceList";
  */
 export type Commands = {
   labels: { args: Record<string, never>; result: Labels };
+  platform: { args: Record<string, never>; result: Platform };
   device_list: { args: Record<string, never>; result: DeviceList };
   set_noise_control_mode: { args: { address: string; mode: NoiseControlMode }; result: void };
   set_ambient_level: { args: { address: string; level: number }; result: void };
@@ -23,6 +24,9 @@ export type Commands = {
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
 };
+
+/** Which kind of app the window is in: some settings exist only on one. */
+export type Platform = "desktop" | "android";
 
 /** Why the core rejected a command before sending anything. */
 export type CommandError =
@@ -150,6 +154,15 @@ export function useFrameLog(): {
   }, []);
   const setEnabled = useCallback((enabled: boolean) => setFrameLog(enabled).then(setFile), []);
   return { file, setEnabled };
+}
+
+/** Which kind of app the window is in, or null until it's known. */
+export function usePlatform(): Platform | null {
+  const [platform, setPlatform] = useState<Platform | null>(null);
+  useEffect(() => {
+    send("platform", {}).then(setPlatform);
+  }, []);
+  return platform;
 }
 
 /** The labels, or null until they arrive. */
