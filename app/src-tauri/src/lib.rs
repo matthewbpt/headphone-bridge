@@ -226,6 +226,52 @@ async fn set_frame_log(
     Ok(path)
 }
 
+/// Whether Android lets the app use Bluetooth: the Nearby devices permission,
+/// as the UI names it.
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+enum Permission {
+    Granted,
+    #[cfg_attr(desktop, allow(dead_code))]
+    Refused,
+}
+
+/// The Nearby devices permission. Desktop has none, so it's always granted.
+#[tauri::command]
+async fn nearby_devices_permission(app: AppHandle) -> Permission {
+    #[cfg(target_os = "android")]
+    if !headphone_bridge_platform_android::android::nearby_devices_granted(&app).await {
+        return Permission::Refused;
+    }
+    let _ = app;
+    Permission::Granted
+}
+
+/// Re-reads the Nearby devices permission and sends it to the window as a
+/// `nearby-devices-permission` event. On Android, the listener may have just
+/// answered the permission prompt or changed it in the app's settings.
+#[cfg(target_os = "android")]
+fn report_nearby_devices_permission(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let permission = nearby_devices_permission(app.clone()).await;
+        let _ = app.emit("nearby-devices-permission", permission);
+    });
+}
+
+/// Opens the app's page in Android's settings, where the listener can grant
+/// the Nearby devices permission.
+#[tauri::command]
+async fn open_app_settings(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return headphone_bridge_platform_android::android::open_app_settings(&app).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("only Android has app settings".into())
+    }
+}
+
 /// Passed by "Launch at login", so the app starts in the tray.
 #[cfg(desktop)]
 const HIDDEN: &str = "--hidden";
@@ -310,6 +356,14 @@ pub fn run() {
                     .app_handle()
                     .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
+            // Back from the permission prompt or the app's settings.
+            #[cfg(target_os = "android")]
+            if matches!(
+                event,
+                tauri::WindowEvent::Resumed | tauri::WindowEvent::Focused(true)
+            ) {
+                report_nearby_devices_permission(window.app_handle());
+            }
             let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
@@ -322,7 +376,9 @@ pub fn run() {
             retry_attach,
             power_off,
             frame_log,
-            set_frame_log
+            set_frame_log,
+            nearby_devices_permission,
+            open_app_settings
         ])
         .build(tauri::generate_context!())
         .expect("error while building Headphone Bridge")

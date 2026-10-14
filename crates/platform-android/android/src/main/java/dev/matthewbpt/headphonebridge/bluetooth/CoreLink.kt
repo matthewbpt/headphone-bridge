@@ -7,6 +7,12 @@ import org.json.JSONObject
  * use it. [Hub] is the real one; tests stand in a fake.
  */
 interface CoreLink {
+  /**
+   * Whether the app has the Nearby devices permission. Without it no Device
+   * is seen, so the widget and tile should say to open the app and allow it.
+   */
+  fun hasPermission(): Boolean
+
   /** Asks the core to hold every Connected Device until [endHoldAll]. */
   fun holdAll()
   fun endHoldAll()

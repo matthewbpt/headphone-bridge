@@ -7,8 +7,8 @@ use std::sync::{Once, OnceLock};
 use headphone_bridge_core::Core;
 use jni::objects::{GlobalRef, JClass, JValue};
 use jni::{JNIEnv, JavaVM};
-use tauri::plugin::{Builder, TauriPlugin};
-use tauri::Runtime;
+use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::runtime::Runtime as Tokio;
 
 use crate::messages::{BadMessage, Message};
@@ -142,14 +142,54 @@ fn to_kotlin(message: Message) -> bool {
     true
 }
 
+/// The Kotlin `BluetoothPlugin`, for its commands.
+struct BluetoothPlugin<R: Runtime>(PluginHandle<R>);
+
 /// The Tauri plugin that registers `BluetoothPlugin`, which asks for the
 /// Nearby devices permission and holds every Connected Device while the app
 /// screen is in the foreground.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("android-bluetooth")
-        .setup(|_app, api| {
-            api.register_android_plugin(PACKAGE, "BluetoothPlugin")?;
+        .setup(|app, api| {
+            let plugin = api.register_android_plugin(PACKAGE, "BluetoothPlugin")?;
+            app.manage(BluetoothPlugin(plugin));
             Ok(())
         })
         .build()
+}
+
+/// Whether the app has the Nearby devices permission, without which Kotlin
+/// sees no Device. Assumed granted if Kotlin can't say, so a failed check
+/// doesn't hide the Devices behind the banner.
+pub async fn nearby_devices_granted<R: Runtime>(app: &AppHandle<R>) -> bool {
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        granted: bool,
+    }
+    let plugin = app.state::<BluetoothPlugin<R>>();
+    match plugin
+        .0
+        .run_mobile_plugin_async::<Answer>("nearbyDevicesPermission", ())
+        .await
+    {
+        Ok(answer) => answer.granted,
+        Err(error) => {
+            log(&format!(
+                "can't check the Nearby devices permission: {error}"
+            ));
+            true
+        }
+    }
+}
+
+/// Opens the app's page in Android's settings, where the listener can grant
+/// the Nearby devices permission.
+pub async fn open_app_settings<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let plugin = app.state::<BluetoothPlugin<R>>();
+    plugin
+        .0
+        .run_mobile_plugin_async::<serde_json::Value>("openAppSettings", ())
+        .await
+        .map(drop)
+        .map_err(|error| error.to_string())
 }

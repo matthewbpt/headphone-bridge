@@ -64,8 +64,8 @@ object Hub : CoreLink {
     startWatchingIfAllowed()
   }
 
-  /** Whether the app has the Nearby devices permission. */
-  fun hasPermission(): Boolean =
+  /** Whether the app has the Nearby devices permission. Call [ensureStarted] first. */
+  override fun hasPermission(): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
       PackageManager.PERMISSION_GRANTED
 
