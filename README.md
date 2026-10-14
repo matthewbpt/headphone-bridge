@@ -23,6 +23,10 @@ Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
 - `crates/platform-linux`: the Linux platform adapter (BlueZ through `bluer`,
   and the PulseAudio/PipeWire default sink). Its pure mappings build and are
   tested on every OS; the rest compiles only on Linux and is tested by hand.
+- `crates/platform-android`: the Android platform adapter. Its Kotlin side
+  (`android/`) owns Bluetooth and talks JSON to the core over JNI; the
+  message mapping and the core's host build and are tested on every OS, and
+  the rest is tested by hand.
 - `app/src-tauri`: the Tauri v2 shell. `app/src-tauri/gen/android` is the
   generated Android project, committed.
 - `app/src`: the React + TypeScript UI.
@@ -69,14 +73,17 @@ extension, which Ubuntu enables by default.
 
 ### Running on Android
 
-The Android app needs Android 12 or later. It doesn't reach Bluetooth yet, so
-its Device list says No Device. Building it needs the Android SDK and NDK
+The Android app needs Android 12 or later, and asks for the Nearby devices
+permission on first launch. It Attaches Devices only while the app screen is
+in the foreground, and Detaches them 3 s after it leaves, so the vendor apps
+can have the control link. Building it needs the Android SDK and NDK
 (`ANDROID_HOME`, `NDK_HOME`), a JDK (`JAVA_HOME`), and the Rust target
 `aarch64-linux-android`:
 
 ```sh
 cd app && npx tauri android build --debug --apk --target aarch64
 adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+adb logcat -s HeadphoneBridge   # the app's lines; Rust's, panics included, start with [rust]
 ```
 
 ### Frame log
