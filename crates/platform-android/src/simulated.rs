@@ -3,6 +3,8 @@
 //! headphones. It starts from the frames the core's tests replay, and
 //! confirms mode and Level changes the way the real Device does.
 
+use std::sync::{Arc, Mutex};
+
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{ControlLink, DeviceAddress, DeviceIdentity};
 use headphone_bridge_core::wire::{samsung, sony};
@@ -21,51 +23,80 @@ fn address(model: Model) -> DeviceAddress {
     )
 }
 
-/// What the OS would report for the simulated `model` once Connected.
-pub(crate) fn identity(model: Model) -> DeviceIdentity {
-    let service = match model {
-        Model::GalaxyBuds4Pro => samsung::SERVICE,
-        Model::Wh1000Xm5 => sony::SERVICE,
-    };
-    DeviceIdentity {
-        address: address(model),
-        name: format!("{} (Simulated)", model.display_name()),
-        service_uuids: vec![service],
-    }
+/// A Simulated Device, switched on: its settings last for as long as it's
+/// Connected, across control links, as a real Device's do.
+pub(crate) struct SimulatedDevice {
+    model: Model,
+    device: Arc<Mutex<Box<dyn Simulated>>>,
 }
 
-/// Whether `asked` is where the simulated `model` is.
-pub(crate) fn is_at(model: Model, asked: &DeviceAddress) -> bool {
-    address(model) == *asked
-}
-
-/// Opens a control link to the simulated `model`, which answers until the
-/// core drops the link, or until it's asked to Power Off: it then closes the
-/// link and calls `power_off`.
-pub(crate) fn open(model: Model, power_off: impl FnOnce() + Send + 'static) -> ControlLink {
-    let (to_core, incoming) = mpsc::unbounded_channel();
-    let (outgoing, mut from_core) = mpsc::unbounded_channel::<Vec<u8>>();
-    tokio::spawn(async move {
-        let mut device: Box<dyn Simulated> = match model {
+impl SimulatedDevice {
+    pub(crate) fn new(model: Model) -> SimulatedDevice {
+        let device: Box<dyn Simulated> = match model {
             Model::GalaxyBuds4Pro => Box::new(Buds::new()),
             Model::Wh1000Xm5 => Box::new(Headphones::new()),
         };
-        while let Some(bytes) = from_core.recv().await {
-            for reply in device.receive(&bytes) {
-                if to_core.send(reply).is_err() {
-                    return;
+        SimulatedDevice {
+            model,
+            device: Arc::new(Mutex::new(device)),
+        }
+    }
+
+    pub(crate) fn model(&self) -> Model {
+        self.model
+    }
+
+    /// What the OS would report for it once Connected.
+    pub(crate) fn identity(&self) -> DeviceIdentity {
+        let service = match self.model {
+            Model::GalaxyBuds4Pro => samsung::SERVICE,
+            Model::Wh1000Xm5 => sony::SERVICE,
+        };
+        DeviceIdentity {
+            address: address(self.model),
+            name: format!("{} (Simulated)", self.model.display_name()),
+            service_uuids: vec![service],
+        }
+    }
+
+    /// Whether it's at `asked`.
+    pub(crate) fn is_at(&self, asked: &DeviceAddress) -> bool {
+        address(self.model) == *asked
+    }
+
+    /// Opens a control link to it, which it answers until the core drops the
+    /// link, or until it's asked to Power Off: it then closes the link and
+    /// calls `power_off`.
+    pub(crate) fn open(&self, power_off: impl FnOnce() + Send + 'static) -> ControlLink {
+        let (to_core, incoming) = mpsc::unbounded_channel();
+        let (outgoing, mut from_core) = mpsc::unbounded_channel::<Vec<u8>>();
+        let device = self.device.clone();
+        device.lock().unwrap().link_opened();
+        tokio::spawn(async move {
+            while let Some(bytes) = from_core.recv().await {
+                let (replies, powered_off) = {
+                    let mut device = device.lock().unwrap();
+                    (device.receive(&bytes), device.powered_off())
+                };
+                for reply in replies {
+                    if to_core.send(reply).is_err() {
+                        return;
+                    }
+                }
+                if powered_off {
+                    return power_off();
                 }
             }
-            if device.powered_off() {
-                return power_off();
-            }
-        }
-    });
-    ControlLink { incoming, outgoing }
+        });
+        ControlLink { incoming, outgoing }
+    }
 }
 
 /// The Device's end of a control link.
 trait Simulated: Send {
+    /// Starts afresh on a new control link, keeping its settings.
+    fn link_opened(&mut self);
+
     /// Takes bytes from the core; returns the frames to answer with.
     fn receive(&mut self, bytes: &[u8]) -> Vec<Vec<u8>>;
 
@@ -132,6 +163,10 @@ impl Buds {
 }
 
 impl Simulated for Buds {
+    fn link_opened(&mut self) {
+        self.deframer = samsung::Deframer::default();
+    }
+
     fn receive(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
         let mut replies = Vec::new();
         for frame in self.deframer.push(bytes) {
@@ -240,6 +275,11 @@ impl Headphones {
 }
 
 impl Simulated for Headphones {
+    fn link_opened(&mut self) {
+        self.deframer = sony::Deframer::default();
+        self.seq = 0;
+    }
+
     fn receive(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
         let mut replies = Vec::new();
         for frame in self.deframer.push(bytes) {

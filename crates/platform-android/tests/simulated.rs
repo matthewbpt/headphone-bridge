@@ -254,3 +254,30 @@ async fn the_simulated_xm5_powers_off_by_disconnecting_and_switching_off() {
         .expect("the Simulated Device stayed Connected");
     assert_eq!(host.simulated(), None);
 }
+
+#[tokio::test]
+async fn the_simulated_device_keeps_its_settings_across_a_detach_like_a_real_one() {
+    let (host, mut kotlin) = start();
+    let address = attached(&host, &mut kotlin, Model::GalaxyBuds4Pro).await;
+    host.command(
+        1,
+        &format!(r#"{{"kind":"setNoiseControlMode","address":"{address}","mode":"off"}}"#),
+    );
+    kotlin.accepted(1).await;
+    kotlin
+        .simulated(|device| device.chosen_mode == Some(NoiseControlMode::Off))
+        .await;
+
+    host.event(r#"{"type":"endHoldAll"}"#).unwrap();
+    kotlin
+        .simulated(|device| device.state == DeviceState::Detached)
+        .await;
+    host.event(r#"{"type":"holdAll"}"#).unwrap();
+    // Attached again over a new link, before and after it reports again.
+    kotlin
+        .simulated(|device| device.state == DeviceState::Attached && device.reported_at.is_none())
+        .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let device = host.core().device_list().devices[0].clone();
+    assert_eq!(device.chosen_mode, Some(NoiseControlMode::Off));
+}

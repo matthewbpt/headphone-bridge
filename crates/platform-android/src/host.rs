@@ -11,6 +11,9 @@ use headphone_bridge_core::platform::{
 };
 #[cfg(debug_assertions)]
 use headphone_bridge_core::Model;
+
+#[cfg(debug_assertions)]
+use crate::simulated::SimulatedDevice;
 use headphone_bridge_core::{AttachPolicy, Core, Hold};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
@@ -47,7 +50,7 @@ struct Shared {
     links: Mutex<HashMap<i32, mpsc::UnboundedSender<Vec<u8>>>>,
     /// The Simulated Device's Model while it's switched on.
     #[cfg(debug_assertions)]
-    simulated: Mutex<Option<Model>>,
+    simulated: Mutex<Option<SimulatedDevice>>,
 }
 
 impl Shared {
@@ -60,22 +63,23 @@ impl Shared {
     #[cfg(debug_assertions)]
     fn simulate(&self, model: Option<Model>, from: impl FnOnce(Option<Model>) -> bool) {
         let mut simulated = self.simulated.lock().unwrap();
-        if *simulated == model || !from(*simulated) {
+        let now = simulated.as_ref().map(SimulatedDevice::model);
+        if now == model || !from(now) {
             return;
         }
         if let Some(previous) = simulated.take() {
-            let identity = crate::simulated::identity(previous);
+            let address = previous.identity().address;
             let _ = self
                 .observations
-                .send(Observation::DeviceDisconnected(identity.address));
+                .send(Observation::DeviceDisconnected(address));
         }
         if let Some(model) = model {
-            let identity = crate::simulated::identity(model);
+            let device = SimulatedDevice::new(model);
             let _ = self
                 .observations
-                .send(Observation::DeviceConnected(identity));
+                .send(Observation::DeviceConnected(device.identity()));
+            *simulated = Some(device);
         }
-        *simulated = model;
     }
 }
 
@@ -139,7 +143,8 @@ impl Host {
     /// The Simulated Device's Model while it's switched on.
     #[cfg(debug_assertions)]
     pub fn simulated(&self) -> Option<Model> {
-        *self.shared.simulated.lock().unwrap()
+        let simulated = self.shared.simulated.lock().unwrap();
+        simulated.as_ref().map(SimulatedDevice::model)
     }
 
     /// Runs a command Kotlin numbered `request`, and answers with a
@@ -236,12 +241,13 @@ impl Platform for KotlinBluetooth {
     ) -> Result<ControlLink, LinkFailure> {
         let shared = &self.shared;
         #[cfg(debug_assertions)]
-        if let Some(model) = *shared.simulated.lock().unwrap() {
-            if crate::simulated::is_at(model, address) {
+        if let Some(device) = &*shared.simulated.lock().unwrap() {
+            if device.is_at(address) {
                 // Powering Off switches it off, as it stops being Connected.
+                let model = device.model();
                 let shared = shared.clone();
                 let power_off = move || shared.simulate(None, |now| now == Some(model));
-                return Ok(crate::simulated::open(model, power_off));
+                return Ok(device.open(power_off));
             }
         }
         let request = shared.next_request.fetch_add(1, Ordering::Relaxed);
