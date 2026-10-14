@@ -1,6 +1,6 @@
 # Spike: Headphone Bridge on Android
 
-**Date**: 2026-10-14 · **Branch**: `spike/android-rfcomm` · **Phone**: Galaxy S25 Ultra (SM-S938B), Android 16 (API 36)
+**Date**: 2026-10-14 · **Branches**: `spike/android-rfcomm` (spike 1), `spike/android-widget` (spike 2, below) · **Phone**: Galaxy S25 Ultra (SM-S938B), Android 16 (API 36)
 
 ## Question
 
@@ -74,6 +74,58 @@ The recommendation is option 1, plus a short wait after the Device connects befo
 - Power Off on Android. A 12-byte write was followed 150 ms later by the XM5 disconnecting, but that wasn't confirmed as Power Off.
 - Battery and memory use. Each link leaks one `Channel` entry, because Tauri never releases them.
 
+## Spike 2: a home screen widget and a Quick Settings tile
+
+**Question**: following the recommendation above, can a home screen widget and a Quick Settings tile change the Noise Control Mode with the app closed, Attaching only for each tap?
+
+**Answer**: **yes, both work, on both Devices.** That includes the tile from the lock screen, and a widget tap with the app's process stopped. The user liked both, and especially the tile working while locked. Holding the control link only while the app is in the foreground also works.
+
+### What was built
+
+- **One core per process, owned outside Tauri.**
+  - A widget or tile tap may start the process with no Activity. Tauri only starts its Rust app from the Activity, so the core can't live inside the Tauri app.
+  - A Kotlin `Hub` owns Bluetooth and talks to the core over plain JNI, exchanging JSON messages (`NativeCore.event`, `.command` and `.fromCore`).
+  - The app's window, the widget and the tile all share that core. The shell takes it as `&'static Core`.
+- **A gate.**
+  - Devices reach the core only while something holds `Hub`'s gate. Releasing the gate reports them disconnected, which closes their links.
+  - The app holds the gate while it's in the foreground, and keeps it for 3 s after it leaves. Each widget or tile action holds it until the Device confirms the new mode.
+- **The widget** shows the Primary Device's name and battery, and a button per Noise Control Mode in its Capabilities. Tapping the name refreshes; "Open" opens the app. It keeps the last known state across process deaths.
+- **The tile** steps to the next mode on each tap; quick repeated taps make one change.
+- **Timing gotcha**: the Tauri plugin's Kotlin `load()` runs *after* the Rust setup, not before. So the core starts on first use from either side, and Kotlin attaches to it whenever it arrives.
+
+### Measurements
+
+Time from the tap to the Device confirming the mode, with the link closed beforehand:
+
+| Device | Widget or tile tap |
+|---|---|
+| Buds4 Pro | 0.28–0.92 s (65 ms when the app already held the link) |
+| WH-1000XM5 | 0.74–1.3 s; 6.9 s on the first tap after it reconnected |
+
+The XM5's slow first tap is its secure connect failing after 6.3 s; the insecure retry then connects in 0.4 s. On the XM5 the first secure connect failed every time it had just connected (three times across the spikes), so connecting insecure first for it would save that time.
+
+### Multipoint: the other hosts contend too
+
+For several minutes the XM5 dropped every link within about 1 s of opening, sometimes before it answered anything. On the phone, nothing else touched its control channel. The stack logged a disconnect from the remote (`RFC_PORT_EVENT_DISC`), and that was all.
+
+The cause was the XM5 also being connected to the user's laptop. It allows one control session across all its hosts, so a host connecting knocks off the one holding the link, as on a single phone. Disconnecting the laptop and power-cycling the XM5 fixed it: the next link stayed up until the app released it.
+
+This matters beyond Android. The desktop app holds the link forever, so with multipoint it would always beat the phone (and the phone's vendor app). Every platform should yield the link, perhaps holding it only while that host is the Device's active audio source. Also, the UI's "control link dropped" gave no hint; something like "another device or app may be using it" would have.
+
+### What it means
+
+- **Keep both the widget and the tile.** They share all their logic: one `Controller` and the cached display state.
+- **On Android, the core belongs in the app's process, outside the Tauri webview's lifetime.** The JNI host from spike 2 is the shape to keep, not spike 1's Tauri-plugin bridge.
+- **Hold the link only while it's needed**, on every platform: the foreground app, or a single action. That's now proven on Android.
+- **The widget can show a stale mode.** It shows the last mode seen, so a change made on the Device itself appears only after the next tap or refresh. That was acceptable in use, but worth saying in the UI ("Updated 5 min ago" does this).
+- **Lock screen**: the tile acts without unlocking. Noise Control Mode seems harmless to change from there, but a shipped app should decide that deliberately, and Power Off probably shouldn't work while locked.
+
+### Not tested in spike 2
+
+- Using the widget or tile while a vendor app is open: it should hit the same contention as spike 1.
+- Long-term behaviour under Doze and background restrictions, and whether Samsung's battery management kills the process during a tap.
+- Battery use.
+
 ## Reproducing
 
 ```sh
@@ -82,4 +134,12 @@ cd app && npx tauri android build --debug --target aarch64 --apk
 adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
 adb logcat -s HeadphoneBridge     # the app's own lines; Rust lines are prefixed [rust]
 adb logcat | grep -E 'connectSocket|cleanup_rfc_slot'   # every app's RFCOMM opens and closes
+```
+
+On `spike/android-widget`, add the widget from the launcher's widget list ("Noise Control"), and the tile from the Quick panel's edit screen. A cold widget tap can be simulated with:
+
+```sh
+adb shell am force-stop io.github.matthewbpt.headphone_bridge
+adb shell am broadcast -n io.github.matthewbpt.headphone_bridge/io.github.matthewbpt.headphone_bridge.bluetooth.ModeWidget \
+  -a io.github.matthewbpt.headphone_bridge.REFRESH
 ```
