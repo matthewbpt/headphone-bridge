@@ -40,6 +40,9 @@
       "deb": {
         "depends": ["bluez", "libpulse0"]
       }
+    },
+    "android": {
+      "minSdkVersion": 31
     }
   }
 }
