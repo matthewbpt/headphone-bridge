@@ -28,7 +28,7 @@ pub enum Event {
 }
 
 /// What a hold asks the core to Attach. Each kind has one maker on Android,
-/// so a hold needs no id: the app screen holds every Connected Device, and the
+/// so a hold needs no id: the App Screen holds every Connected Device, and the
 /// widget and tile's action holds the Primary Device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HoldKind {
@@ -120,7 +120,7 @@ pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
 }
 
 /// [`Command`] as Kotlin writes it, sent to `NativeCore.command`. The frame
-/// log is the app screen's, so it isn't here.
+/// log is the App Screen's, so it isn't here.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum WireCommand {

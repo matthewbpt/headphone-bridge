@@ -146,6 +146,18 @@ pub enum DeviceState {
     },
 }
 
+impl DeviceState {
+    /// Whether the Device is a Model the app won't control.
+    pub(crate) fn is_unsupported_model(&self) -> bool {
+        matches!(
+            self,
+            DeviceState::NotAttached {
+                reason: NotAttachedReason::UnsupportedModel
+            }
+        )
+    }
+}
+
 /// Why a Connected Device isn't Attached.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]

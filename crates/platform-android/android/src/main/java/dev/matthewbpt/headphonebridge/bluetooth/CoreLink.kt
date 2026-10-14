@@ -3,7 +3,7 @@ package dev.matthewbpt.headphonebridge.bluetooth
 import org.json.JSONObject
 
 /**
- * The core's side of the JSON boundary, as the app screen, widget and tile
+ * The core's side of the JSON boundary, as the App Screen, widget and tile
  * use it. [Hub] is the real one; tests stand in a fake.
  */
 interface CoreLink {

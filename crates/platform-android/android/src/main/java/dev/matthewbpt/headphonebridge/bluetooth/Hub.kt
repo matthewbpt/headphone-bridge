@@ -22,6 +22,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -36,11 +37,16 @@ import java.util.concurrent.atomic.AtomicLong
 
 internal const val TAG = "HeadphoneBridge"
 
+/** Whether the app has the Nearby devices permission, without starting Bluetooth. */
+fun hasNearbyDevicesPermission(context: Context): Boolean =
+  ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+    PackageManager.PERMISSION_GRANTED
+
 /** How long to wait for an SDP answer before reporting a Device without UUIDs. */
 private const val SDP_TIMEOUT_MS = 8000L
 
 /**
- * Bluetooth for the whole process, shared by the app screen, the widget and
+ * Bluetooth for the whole process, shared by the App Screen, the widget and
  * the tile. It reports every Connected Device with a vendor service and the
  * media output to the core, opens the control links the core asks for, and
  * keeps the latest Device list. The core decides when to Attach and Detach.
@@ -58,7 +64,9 @@ object Hub : CoreLink {
       if (!started) {
         context = from.applicationContext
         Log.i(TAG, "hub: starting the core")
-        NativeCore.start()
+        // The frame log is on before any Attach, even when the widget or
+        // tile starts the core.
+        NativeCore.start(frameLogIfOn(context.dataDir))
         started = true
       }
     }
@@ -66,9 +74,7 @@ object Hub : CoreLink {
   }
 
   /** Whether the app has the Nearby devices permission. Call [ensureStarted] first. */
-  override fun hasPermission(): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-      PackageManager.PERMISSION_GRANTED
+  override fun hasPermission(): Boolean = hasNearbyDevicesPermission(context)
 
   private fun send(event: JSONObject) = NativeCore.event(event.toString())
 
@@ -143,8 +149,9 @@ object Hub : CoreLink {
 
   private val receiver = object : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
+      // The typed overload is API 33; IntentCompat falls back below it.
       val device =
-        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
           ?: return
       when (intent.action) {
         BluetoothDevice.ACTION_ACL_CONNECTED -> report(device)

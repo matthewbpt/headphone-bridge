@@ -31,7 +31,7 @@ class ActionControllerTest {
     assertEquals(listOf("holdPrimary", "set ambient", "endHoldPrimary"), link.sent)
     val shown = copy.shown(permitted)
     assertEquals("ambient", shown.mode)
-    assertEquals(null, shown.status)
+    assertEquals(null, shown.note)
   }
 
   @Test
@@ -43,7 +43,7 @@ class ActionControllerTest {
 
     val shown = copy.shown(permitted)
     assertEquals("noiseCancelling", shown.mode)
-    assertEquals("Setting Noise Cancelling…", shown.status)
+    assertEquals("Setting Noise Cancelling…", shown.note)
 
     waitFor { "holdPrimary" in link.sent }
     link.attach()
@@ -60,7 +60,7 @@ class ActionControllerTest {
 
     assertEquals(listOf("holdPrimary", "endHoldPrimary"), link.sent)
     val shown = copy.shown(permitted)
-    assertEquals("Another app or device may be using it", shown.status)
+    assertEquals("Another app or device may be using it", shown.note)
     assertEquals("off", shown.mode)
   }
 
@@ -72,7 +72,7 @@ class ActionControllerTest {
 
     assertEquals(listOf("holdPrimary", "set ambient", "endHoldPrimary"), link.sent)
     val shown = copy.shown(permitted)
-    assertEquals("Couldn't set Ambient", shown.status)
+    assertEquals("Couldn't set Ambient", shown.note)
     assertEquals("off", shown.mode)
   }
 
@@ -83,7 +83,7 @@ class ActionControllerTest {
     tapAndWait("ambient")
 
     assertEquals(listOf("holdPrimary", "set ambient", "endHoldPrimary"), link.sent)
-    assertEquals("The Device didn't confirm Ambient", copy.shown(permitted).status)
+    assertEquals("The Device didn't confirm Ambient", copy.shown(permitted).note)
   }
 
   @Test
@@ -93,7 +93,7 @@ class ActionControllerTest {
     tapAndWait("ambient")
 
     assertEquals(emptyList<String>(), link.sent)
-    assertEquals("Open the app to allow Nearby devices", copy.shown(permitted).status)
+    assertEquals("Open the app to allow Nearby devices", copy.shown(permitted).note)
   }
 
   @Test
@@ -107,7 +107,7 @@ class ActionControllerTest {
 
     assertTrue("the action finished", done.await(5, TimeUnit.SECONDS))
     assertEquals(listOf("set ambient", "endHoldPrimary"), link.sent.takeLast(2))
-    assertEquals(null, copy.shown(permitted).status)
+    assertEquals(null, copy.shown(permitted).note)
   }
 
   @Test
@@ -117,7 +117,7 @@ class ActionControllerTest {
     tapAndWait("ambient")
 
     assertEquals(emptyList<String>(), link.sent)
-    assertEquals("No Device Connected", copy.shown(permitted).status)
+    assertEquals("No Device Connected", copy.shown(permitted).note)
   }
 
   @Test
@@ -129,7 +129,25 @@ class ActionControllerTest {
     assertEquals(listOf("holdPrimary", "endHoldPrimary"), link.sent)
     val shown = copy.shown(permitted)
     assertEquals("adaptive", shown.mode)
-    assertEquals(null, shown.status)
+    assertEquals(null, shown.note)
+  }
+
+  @Test
+  fun watchingStartsBluetoothSoTheCopyFollowsTheDevicesWithoutHoldingAny() {
+    val started = CountDownLatch(1)
+    val watcher = ActionController(link, copy, start = { started.countDown(); true })
+
+    watcher.watch()
+
+    assertTrue("Bluetooth started", started.await(5, TimeUnit.SECONDS))
+    link.connect()
+    assertEquals("Galaxy Buds4 Pro", copy.shown(permitted).name)
+    // E.g. it disconnected while the process was dead.
+    link.disconnect()
+    val shown = copy.shown(permitted)
+    assertEquals(null, shown.name)
+    assertEquals("No Device Connected", shown.note)
+    assertEquals(emptyList<String>(), link.sent)
   }
 }
 

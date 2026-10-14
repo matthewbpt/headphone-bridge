@@ -65,12 +65,27 @@ pub fn core() -> &'static Core {
 }
 
 fn host() -> &'static Host {
+    host_with(None)
+}
+
+/// The process's one host, started with the frame log on, appending to
+/// `frame_log`, if this call starts it.
+fn host_with(frame_log: Option<&Path>) -> &'static Host {
     HOST.get_or_init(|| {
         log_panics();
         static RUNTIME: OnceLock<Tokio> = OnceLock::new();
         let runtime = RUNTIME.get_or_init(|| Tokio::new().expect("no Tokio runtime"));
         let _entered = runtime.enter();
-        let host = Host::start(to_kotlin);
+        let host = match frame_log {
+            None => Host::start(to_kotlin),
+            Some(path) => {
+                let (host, started) = Host::start_with_frame_log(to_kotlin, path);
+                if let Err(error) = started {
+                    log(&format!("couldn't open the frame log: {error:?}"));
+                }
+                host
+            }
+        };
         log("core started");
         host
     })
@@ -90,8 +105,9 @@ pub fn simulated() -> Option<headphone_bridge_core::Model> {
 }
 
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
-/// hasn't. From `NativeCore.start`.
-pub fn start(env: &mut JNIEnv, class: &JClass) {
+/// hasn't, with the frame log on at `frame_log` if the setting is on, so a
+/// widget or tile tap's Attach is logged too. From `NativeCore.start`.
+pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) {
     log_panics();
     if BRIDGE.get().is_none() {
         match (env.get_java_vm(), env.new_global_ref(class)) {
@@ -104,7 +120,7 @@ pub fn start(env: &mut JNIEnv, class: &JClass) {
             }
         }
     }
-    host().resend_device_list();
+    host_with(frame_log).resend_device_list();
 }
 
 /// An event from Kotlin. From `NativeCore.event`.
@@ -156,12 +172,12 @@ fn to_kotlin(message: Message) -> bool {
     true
 }
 
-/// The app screen's `BluetoothPlugin`, for calling its commands from Rust.
+/// The App Screen's `BluetoothPlugin`, for calling its commands from Rust.
 struct BluetoothPlugin<R: Runtime>(PluginHandle<R>);
 
 /// The Tauri plugin that registers `BluetoothPlugin`, which asks for the
-/// Nearby devices permission, holds every Connected Device while the app
-/// screen is in the foreground, and shares files.
+/// Nearby devices permission, holds every Connected Device while the App
+/// Screen is in the foreground, and shares files.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("android-bluetooth")
         .setup(|app, api| {

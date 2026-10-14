@@ -13,9 +13,9 @@ class TileLookTest {
     mode: String? = "off",
     modes: List<String> = buds,
     name: String? = "Galaxy Buds4 Pro",
-    status: String? = null,
+    note: String? = null,
     opensApp: Boolean = false,
-  ) = StoredCopy.Shown(name, null, modes, mode, 1_000L, status, opensApp)
+  ) = StoredCopy.Shown(name, null, modes, mode, 1_000L, note, opensApp)
 
   @Test
   fun aTapStepsToTheNextModeInCapabilityOrder() {
@@ -38,7 +38,7 @@ class TileLookTest {
 
   @Test
   fun aDeviceWithNoKnownModesRefreshesInstead() {
-    val look = tileLook(shown(mode = null, modes = emptyList(), status = TAP_TO_REFRESH))
+    val look = tileLook(shown(mode = null, modes = emptyList(), note = TAP_TO_REFRESH))
     assertEquals(TileLook.Tap.Refresh, look.tap)
     assertEquals("Tap to refresh", look.subtitle)
   }
@@ -52,8 +52,8 @@ class TileLookTest {
 
   @Test
   fun theSubtitleSaysWhatAnActionIsDoingOrWhyItFailed() {
-    assertEquals("Setting Ambient…", tileLook(shown("ambient", status = "Setting Ambient…")).subtitle)
-    assertEquals(LINK_DROPPED, tileLook(shown("off", status = LINK_DROPPED)).subtitle)
+    assertEquals("Setting Ambient…", tileLook(shown("ambient", note = "Setting Ambient…")).subtitle)
+    assertEquals(LINK_DROPPED, tileLook(shown("off", note = LINK_DROPPED)).subtitle)
   }
 
   @Test
@@ -64,7 +64,7 @@ class TileLookTest {
 
   @Test
   fun withNoDeviceConnectedItsUnavailable() {
-    val look = tileLook(shown(mode = null, modes = emptyList(), name = null, status = NO_DEVICE_CONNECTED))
+    val look = tileLook(shown(mode = null, modes = emptyList(), name = null, note = NO_DEVICE_CONNECTED))
     assertEquals(TileLook.State.UNAVAILABLE, look.state)
     assertEquals("Noise Control", look.label)
     assertEquals("No Device Connected", look.subtitle)
@@ -73,7 +73,7 @@ class TileLookTest {
 
   @Test
   fun withThePermissionRefusedATapOpensTheApp() {
-    val look = tileLook(shown(mode = null, modes = emptyList(), status = ALLOW_NEARBY_DEVICES, opensApp = true))
+    val look = tileLook(shown(mode = null, modes = emptyList(), note = ALLOW_NEARBY_DEVICES, opensApp = true))
     assertEquals(TileLook.Tap.OpenApp, look.tap)
     assertEquals(TileLook.State.INACTIVE, look.state)
     assertEquals("Open the app to allow Nearby devices", look.subtitle)

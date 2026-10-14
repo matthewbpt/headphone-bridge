@@ -63,8 +63,8 @@ jobs:
 
   android-app:
     # The Android app as a debug APK, so Android build breaks show up before
-    # merging. It needs no Linux system libraries: the shell's desktop parts
-    # aren't built for Android.
+    # merging, then the Kotlin tests and lint. It needs no Linux system
+    # libraries: the shell's desktop parts aren't built for Android.
     name: Android debug APK
     runs-on: ubuntu-24.04
     steps:
@@ -90,6 +90,10 @@ jobs:
         working-directory: app
       - run: npx tauri android build --debug --apk --target aarch64
         working-directory: app
+      # The Kotlin JVM tests and Android lint, after the build, which
+      # generates the :tauri-android project they depend on.
+      - run: ./gradlew :headphone-bridge-platform-android:testDebugUnitTest :headphone-bridge-platform-android:lintDebug
+        working-directory: app/src-tauri/gen/android
       - uses: actions/upload-artifact@v4
         with:
           name: headphone-bridge-android-debug

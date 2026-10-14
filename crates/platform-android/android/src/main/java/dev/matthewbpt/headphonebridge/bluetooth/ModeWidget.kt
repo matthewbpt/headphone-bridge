@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
  */
 class ModeWidget : AppWidgetProvider() {
   override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    Surfaces.watch(context)
     render(context, manager, ids)
   }
 
@@ -52,7 +53,7 @@ class ModeWidget : AppWidgetProvider() {
     }
 
     private fun render(context: Context, manager: AppWidgetManager, ids: IntArray) {
-      val shown = Surfaces.copy(context).shown(Surfaces.hasPermission(context))
+      val shown = Surfaces.copy(context).shown(hasNearbyDevicesPermission(context))
       val views = RemoteViews(context.packageName, R.layout.mode_widget)
       val open = openApp(context)
 
@@ -84,12 +85,12 @@ class ModeWidget : AppWidgetProvider() {
         views.setOnClickPendingIntent(id, broadcast(context, ACTION_SET_MODE, mode, i))
       }
 
-      views.setTextViewText(R.id.status, shown.status ?: shown.updatedAt?.let {
+      views.setTextViewText(R.id.note, shown.note ?: shown.updatedAt?.let {
         "Updated " + DateUtils.getRelativeTimeSpanString(
           it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
         )
       } ?: "")
-      views.setOnClickPendingIntent(R.id.status, if (shown.opensApp) open else null)
+      views.setOnClickPendingIntent(R.id.note, if (shown.opensApp) open else null)
       views.setOnClickPendingIntent(R.id.open, open)
       manager.updateAppWidget(ids, views)
     }

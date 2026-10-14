@@ -1,7 +1,7 @@
 //! The Tauri shell: exposes the core's commands as Tauri commands, forwards
 //! its Device list snapshots to the UI as `device-list` events and to the tray
 //! menu, and keeps the app running in the tray while the window is closed.
-//! On Android it's the app screen alone: no tray, and the window is the app.
+//! On Android it's the App Screen alone: no tray, and the window is the app.
 
 #[cfg(target_os = "android")]
 mod android;
@@ -34,6 +34,7 @@ struct FrameLog(Mutex<Option<PathBuf>>);
 const FRAME_LOG_ENV: &str = "HEADPHONE_BRIDGE_FRAME_LOG";
 
 /// The frame log file, in the app's log directory, which is created if needed.
+/// Kotlin's `frameLogIfOn` finds it on Android too.
 fn frame_log_path(app: &AppHandle) -> Result<PathBuf, CommandError> {
     let unavailable =
         |error: &dyn std::fmt::Display| CommandError::FrameLogUnavailable(error.to_string());
@@ -43,7 +44,8 @@ fn frame_log_path(app: &AppHandle) -> Result<PathBuf, CommandError> {
 }
 
 /// Exists while the frame log setting is on, so it stays on across launches
-/// and logs the Attaches made at startup.
+/// and logs the Attaches made at startup. Kotlin's `frameLogIfOn` reads it
+/// on Android too, when the widget or tile starts the core.
 fn frame_log_setting(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_config_dir().ok()?.join("frame-log-on"))
 }
@@ -100,10 +102,10 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
     }
 }
 
-/// The process's one core, started here unless Kotlin got there first, with
-/// the frame log switched on if wanted. Devices stay Detached until the app
-/// screen holds them, so no Attach goes unlogged. Returns the log file while
-/// it's on.
+/// The process's one core, started here unless Kotlin got there first (with
+/// the frame log on if the setting is), with the frame log switched on if
+/// wanted. Devices stay Detached until the App Screen holds them, so no
+/// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
 fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
     let core = headphone_bridge_platform_android::android::core();

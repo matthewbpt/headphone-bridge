@@ -1,6 +1,8 @@
 //! The JNI symbols for `NativeCore` in the platform-android crate's Kotlin
 //! library. They live in this crate, the cdylib, so the linker keeps them.
 
+use std::path::PathBuf;
+
 use headphone_bridge_platform_android::android;
 use jni::objects::{JClass, JString};
 use jni::sys::jlong;
@@ -10,8 +12,13 @@ use jni::JNIEnv;
 pub extern "system" fn Java_dev_matthewbpt_headphonebridge_bluetooth_NativeCore_start(
     mut env: JNIEnv,
     class: JClass,
+    frame_log: JString,
 ) {
-    android::start(&mut env, &class);
+    let frame_log = (!frame_log.is_null())
+        .then(|| env.get_string(&frame_log).ok().map(String::from))
+        .flatten()
+        .map(PathBuf::from);
+    android::start(&mut env, &class, frame_log.as_deref());
 }
 
 #[no_mangle]

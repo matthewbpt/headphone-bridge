@@ -25,7 +25,7 @@ class StoredCopyTest {
     assertEquals(buds, shown.modes)
     assertEquals("ambient", shown.mode)
     assertEquals(10_000L, shown.updatedAt)
-    assertEquals(null, shown.status)
+    assertEquals(null, shown.note)
   }
 
   @Test
@@ -42,7 +42,7 @@ class StoredCopyTest {
     val shown = again.shown(hasPermission = true)
     assertEquals("Galaxy Buds4 Pro", shown.name)
     assertEquals(buds, shown.modes)
-    assertEquals(null, shown.status)
+    assertEquals(null, shown.note)
   }
 
   @Test
@@ -52,7 +52,7 @@ class StoredCopyTest {
     val shown = copy.shown(hasPermission = true)
     assertEquals("Galaxy Buds4 Pro", shown.name)
     assertEquals(emptyList<String>(), shown.modes)
-    assertEquals("Tap to refresh", shown.status)
+    assertEquals("Tap to refresh", shown.note)
   }
 
   @Test
@@ -63,7 +63,7 @@ class StoredCopyTest {
     val shown = copy.shown(hasPermission = true)
     assertEquals(null, shown.name)
     assertEquals(emptyList<String>(), shown.modes)
-    assertEquals("No Device Connected", shown.status)
+    assertEquals("No Device Connected", shown.note)
     assertEquals(false, shown.opensApp)
   }
 
@@ -73,7 +73,7 @@ class StoredCopyTest {
 
     val shown = copy.shown(hasPermission = false)
     assertEquals(emptyList<String>(), shown.modes)
-    assertEquals("Open the app to allow Nearby devices", shown.status)
+    assertEquals("Open the app to allow Nearby devices", shown.note)
     assertEquals(true, shown.opensApp)
   }
 
@@ -94,7 +94,7 @@ class StoredCopyTest {
 
     val shown = StoredCopy(storage, now = { now }).shown(hasPermission = true)
     assertEquals("off", shown.mode)
-    assertEquals(null, shown.status)
+    assertEquals(null, shown.note)
   }
 
   @Test
@@ -104,9 +104,9 @@ class StoredCopyTest {
     copy.actionFinished("Another app or device may be using it")
 
     val again = StoredCopy(storage, now = { now })
-    assertEquals("Another app or device may be using it", again.shown(hasPermission = true).status)
+    assertEquals("Another app or device may be using it", again.shown(hasPermission = true).note)
 
     again.onDeviceList(deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "off")))
-    assertEquals(null, again.shown(hasPermission = true).status)
+    assertEquals(null, again.shown(hasPermission = true).note)
   }
 }

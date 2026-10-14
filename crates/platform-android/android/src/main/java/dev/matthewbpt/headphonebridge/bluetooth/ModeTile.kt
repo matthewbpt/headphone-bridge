@@ -22,6 +22,7 @@ import android.util.Log
 class ModeTile : TileService() {
   override fun onStartListening() {
     listening = this
+    Surfaces.watch(this)
     show()
   }
 
@@ -45,7 +46,7 @@ class ModeTile : TileService() {
     show()
   }
 
-  private fun look() = tileLook(Surfaces.copy(this).shown(Surfaces.hasPermission(this)))
+  private fun look() = tileLook(Surfaces.copy(this).shown(hasNearbyDevicesPermission(this)))
 
   private fun show() {
     val tile = qsTile ?: return
