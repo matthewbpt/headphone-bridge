@@ -90,3 +90,6 @@ export function only(device: Device): DeviceList {
     primary: device.state.kind === "attached" ? device.address : null,
   };
 }
+
+/** No Device Connected, as Android reports when the app can't see them. */
+export const NO_DEVICES: DeviceList = { devices: [], primary: null };

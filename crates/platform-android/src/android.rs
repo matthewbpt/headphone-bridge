@@ -159,6 +159,46 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
+/// Whether the app has the Nearby devices permission, without which Kotlin
+/// sees no Device. Assumed granted if Kotlin can't say, so a failed check
+/// doesn't hide the Devices behind the banner.
+pub async fn nearby_devices_granted<R: Runtime>(app: &AppHandle<R>) -> bool {
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        granted: bool,
+    }
+    let Some(plugin) = app.try_state::<BluetoothPlugin<R>>() else {
+        return true;
+    };
+    match plugin
+        .0
+        .run_mobile_plugin_async::<Answer>("nearbyDevicesPermission", ())
+        .await
+    {
+        Ok(answer) => answer.granted,
+        Err(error) => {
+            log(&format!(
+                "can't check the Nearby devices permission: {error}"
+            ));
+            true
+        }
+    }
+}
+
+/// Opens the app's page in Android's settings, where the listener can grant
+/// the Nearby devices permission.
+pub async fn open_app_settings<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let plugin = app
+        .try_state::<BluetoothPlugin<R>>()
+        .ok_or("the Android plugin isn't registered")?;
+    plugin
+        .0
+        .run_mobile_plugin_async::<serde_json::Value>("openAppSettings", ())
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 /// Hands `file` to Android's share sheet, titled `title`. Resolves once the
 /// sheet is open, or with why it couldn't be.
 pub async fn share_file<R: Runtime>(
