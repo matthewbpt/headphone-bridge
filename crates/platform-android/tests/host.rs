@@ -1,10 +1,11 @@
 //! The host as Kotlin sees it: JSON events and commands in, JSON messages out,
 //! with a real core behind it.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
-use headphone_bridge_core::{CommandError, DeviceList, DeviceState, NotAttachedReason};
+use headphone_bridge_core::{Command, CommandError, DeviceList, DeviceState, NotAttachedReason};
 use headphone_bridge_platform_android::messages::{CommandFailure, Message};
 use headphone_bridge_platform_android::Host;
 use tokio::sync::mpsc;
@@ -316,4 +317,41 @@ async fn kotlin_connecting_late_is_sent_the_device_list_it_missed() {
     let (host, mut kotlin) = start();
     host.resend_device_list();
     kotlin.device_list(|list| list.devices.is_empty()).await;
+}
+
+#[tokio::test]
+async fn a_host_started_with_the_frame_log_on_logs_the_first_attach() {
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("host_first_attach.frames");
+    let _ = std::fs::remove_file(&path);
+    let (sink, messages) = mpsc::unbounded_channel();
+    let (host, started) =
+        Host::start_with_frame_log(move |message| sink.send(message).is_ok(), &path);
+    started.unwrap();
+    let mut kotlin = Kotlin { messages };
+
+    connect_xm5(&host);
+    host.event(r#"{"type":"holdAll"}"#).unwrap();
+    let request = kotlin.open_asked(XM5).await;
+    host.event(&format!(
+        r#"{{"type":"opened","request":{request},"link":1}}"#
+    ))
+    .unwrap();
+    let records = xm5_attach();
+    kotlin.replay(&host, 1, &records).await;
+    kotlin
+        .device_list(|list| state_of(list, XM5) == Some(DeviceState::Attached))
+        .await;
+    host.core()
+        .command(Command::SetFrameLog(None))
+        .await
+        .unwrap();
+
+    let log = FrameRecord::parse_all(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let bytes = |records: &[FrameRecord]| -> Vec<_> {
+        records
+            .iter()
+            .map(|r| (r.direction, r.bytes.clone()))
+            .collect()
+    };
+    assert_eq!(bytes(&log), bytes(&records));
 }

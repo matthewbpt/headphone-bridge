@@ -92,14 +92,21 @@ impl Core {
         platform: impl Platform,
         path: &Path,
     ) -> (Core, Result<(), CommandError>) {
+        Core::start_with_policy_and_frame_log(platform, AttachPolicy::Always, path)
+    }
+
+    /// Starts the core like [`Core::start_with`], with the frame log already
+    /// on, like [`Core::start_with_frame_log`].
+    pub fn start_with_policy_and_frame_log(
+        platform: impl Platform,
+        policy: AttachPolicy,
+        path: &Path,
+    ) -> (Core, Result<(), CommandError>) {
         let frame_log = FrameLog::default();
         let started = frame_log
             .start(path)
             .map_err(CommandError::frame_log_unavailable);
-        (
-            Core::start_logging(platform, AttachPolicy::Always, frame_log),
-            started,
-        )
+        (Core::start_logging(platform, policy, frame_log), started)
     }
 
     fn start_logging(platform: impl Platform, policy: AttachPolicy, frame_log: FrameLog) -> Core {

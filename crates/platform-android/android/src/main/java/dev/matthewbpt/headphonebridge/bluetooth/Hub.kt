@@ -59,7 +59,9 @@ object Hub : CoreLink {
       if (!started) {
         context = from.applicationContext
         Log.i(TAG, "hub: starting the core")
-        NativeCore.start()
+        // The frame log is on before any Attach, even when the widget or
+        // tile starts the core.
+        NativeCore.start(frameLogIfOn(context.dataDir))
         started = true
       }
     }

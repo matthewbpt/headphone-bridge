@@ -12,8 +12,11 @@ object NativeCore {
     System.loadLibrary("headphone_bridge_lib")
   }
 
-  /** Connects Kotlin to the core, starting it if need be. */
-  @JvmStatic external fun start()
+  /**
+   * Connects Kotlin to the core, starting it if need be, with the frame log
+   * on, appending to [frameLog], unless that's null.
+   */
+  @JvmStatic external fun start(frameLog: String?)
 
   /** Something [Hub] observed or finished, or a hold or its end. */
   @JvmStatic external fun event(json: String)

@@ -3,6 +3,7 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -14,7 +15,7 @@ use headphone_bridge_core::Model;
 
 #[cfg(debug_assertions)]
 use crate::simulated::SimulatedDevice;
-use headphone_bridge_core::{AttachPolicy, Core, Hold};
+use headphone_bridge_core::{AttachPolicy, CommandError, Core, Hold};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -87,6 +88,32 @@ impl Host {
     /// Starts the core on the current Tokio runtime, Detached until a hold,
     /// sending every message for Kotlin to `kotlin`.
     pub fn start(kotlin: impl Fn(Message) -> bool + Send + Sync + 'static) -> Host {
+        Host::start_core(kotlin, |platform| {
+            Core::start_with(platform, AttachPolicy::OnRequest)
+        })
+    }
+
+    /// Starts the host like [`Host::start`], with the frame log already on,
+    /// appending to `path`, so no Attach goes unlogged. It starts even if the
+    /// file can't be opened, with the frame log off.
+    pub fn start_with_frame_log(
+        kotlin: impl Fn(Message) -> bool + Send + Sync + 'static,
+        path: &Path,
+    ) -> (Host, Result<(), CommandError>) {
+        let mut started = Ok(());
+        let host = Host::start_core(kotlin, |platform| {
+            let (core, result) =
+                Core::start_with_policy_and_frame_log(platform, AttachPolicy::OnRequest, path);
+            started = result;
+            core
+        });
+        (host, started)
+    }
+
+    fn start_core(
+        kotlin: impl Fn(Message) -> bool + Send + Sync + 'static,
+        start: impl FnOnce(KotlinBluetooth) -> Core,
+    ) -> Host {
         let (observations, observations_rx) = mpsc::unbounded_channel();
         let shared = Arc::new(Shared {
             kotlin: Box::new(kotlin),
@@ -97,13 +124,10 @@ impl Host {
             #[cfg(debug_assertions)]
             simulated: Mutex::default(),
         });
-        let core = Core::start_with(
-            KotlinBluetooth {
-                shared: shared.clone(),
-                observations: Mutex::new(Some(observations_rx)),
-            },
-            AttachPolicy::OnRequest,
-        );
+        let core = start(KotlinBluetooth {
+            shared: shared.clone(),
+            observations: Mutex::new(Some(observations_rx)),
+        });
         let mut snapshots = core.subscribe();
         let forwarding = shared.clone();
         tokio::spawn(async move {
