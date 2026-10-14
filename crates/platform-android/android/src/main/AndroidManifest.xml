@@ -16,5 +16,12 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/mode_widget_info" />
         </receiver>
+
+        <!-- Lends the frame log to the app picked in the share sheet. -->
+        <provider
+            android:name="dev.matthewbpt.headphonebridge.bluetooth.SharedFileProvider"
+            android:authorities="${applicationId}.shared"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

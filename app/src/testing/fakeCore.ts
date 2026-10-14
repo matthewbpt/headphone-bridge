@@ -90,6 +90,7 @@ export class FakeCore {
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
+    share_frame_log: (args) => this.record("share_frame_log", args),
   };
 
   /** The window's `listen`, for `@tauri-apps/api/event`. */
@@ -129,7 +130,8 @@ export type RecordedCommand =
   | "set_ambient_level"
   | "set_noise_cancelling_level"
   | "retry_attach"
-  | "power_off";
+  | "power_off"
+  | "share_frame_log";
 
 /** The commands a test can tell the fake core how to answer. */
 type AnsweredCommand = RecordedCommand | "set_frame_log";

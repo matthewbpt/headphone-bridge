@@ -115,6 +115,11 @@ Setting `HEADPHONE_BRIDGE_FRAME_LOG` (to anything) also starts the app with it
 on, e.g. `HEADPHONE_BRIDGE_FRAME_LOG=1 "target/debug/bundle/macos/Headphone
 Bridge.app/Contents/MacOS/headphone-bridge"`.
 
+On Android the file is in app-private storage, so the Developer section has
+**Share frame log** instead: it hands a copy of the file to the share sheet, to
+save to Files or send from the phone. When the widget or tile starts the app's
+process, nothing is logged until the app screen opens.
+
 ### Screenshots
 
 The screenshots at the top are the window against the fake core the UI tests use,

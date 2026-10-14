@@ -1571,6 +1571,7 @@ dependencies = [
  "headphone-bridge-platform-macos",
  "jni",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",

@@ -25,7 +25,7 @@ export function App() {
       <details className="card settings">
         <summary>Settings</summary>
         {platform === "desktop" && <LaunchAtLoginSetting />}
-        <FrameLogSetting />
+        <FrameLogSetting platform={platform} />
       </details>
     </main>
   );
