@@ -9,3 +9,6 @@ mod host;
 pub mod messages;
 
 pub use host::Host;
+
+#[cfg(target_os = "android")]
+pub mod android;

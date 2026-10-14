@@ -3,20 +3,26 @@
 //! menu, and keeps the app running in the tray while the window is closed.
 //! On Android it's the app screen alone: no tray, and the window is the app.
 
+#[cfg(target_os = "android")]
+mod android;
 mod labels;
+#[cfg(not(target_os = "android"))]
 mod platform;
 #[cfg(desktop)]
 mod tray;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+#[cfg(not(target_os = "android"))]
+use std::sync::OnceLock;
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{Command, CommandError, Core, DeviceList, NoiseControlMode};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-/// The process's one core. On Android the window shares it with the widget
-/// and the tile, and whichever comes first starts it (ADR-0005).
+/// The process's one core. On Android it's the platform adapter's instead,
+/// shared with the widget and the tile (ADR-0005).
+#[cfg(not(target_os = "android"))]
 static CORE: OnceLock<Core> = OnceLock::new();
 
 /// The frame log file while the frame log is on.
@@ -62,13 +68,21 @@ fn save_frame_log_setting(app: &AppHandle, enabled: bool) {
     }
 }
 
-/// Starts the core, with the frame log on if the setting or
-/// [`FRAME_LOG_ENV`] says so. Returns the log file while it's on.
+/// Whether the frame log should be on at startup: the setting or
+/// [`FRAME_LOG_ENV`] says so.
+fn frame_log_wanted(app: &AppHandle) -> bool {
+    std::env::var_os(FRAME_LOG_ENV).is_some()
+        || frame_log_setting(app).is_some_and(|setting| setting.exists())
+}
+
+/// Starts the core, with the frame log on if wanted. Returns the log file
+/// while it's on.
+#[cfg(not(target_os = "android"))]
 fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
     let platform = platform::start();
-    let enabled = std::env::var_os(FRAME_LOG_ENV).is_some()
-        || frame_log_setting(app).is_some_and(|setting| setting.exists());
-    let path = enabled.then(|| frame_log_path(app)).transpose();
+    let path = frame_log_wanted(app)
+        .then(|| frame_log_path(app))
+        .transpose();
     match path {
         Ok(Some(path)) => match Core::start_with_frame_log(platform, &path) {
             (core, Ok(())) => (core, Some(path)),
@@ -81,6 +95,31 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
         Err(error) => {
             eprintln!("couldn't open the frame log: {error:?}");
             (Core::start(platform), None)
+        }
+    }
+}
+
+/// The process's one core, started here unless Kotlin got there first, with
+/// the frame log switched on if wanted. Devices stay Detached until the app
+/// screen holds them, so no Attach goes unlogged. Returns the log file while
+/// it's on.
+#[cfg(target_os = "android")]
+fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
+    let core = headphone_bridge_platform_android::android::core();
+    if !frame_log_wanted(app) {
+        return (core, None);
+    }
+    let started = frame_log_path(app).and_then(|path| {
+        tauri::async_runtime::block_on(core.command(Command::SetFrameLog(Some(path.clone()))))?;
+        Ok(path)
+    });
+    match started {
+        Ok(path) => (core, Some(path)),
+        Err(error) => {
+            headphone_bridge_platform_android::android::log(&format!(
+                "couldn't open the frame log: {error:?}"
+            ));
+            (core, None)
         }
     }
 }
@@ -205,7 +244,11 @@ fn show_window(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "android")]
+    headphone_bridge_platform_android::android::log_panics();
     let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(headphone_bridge_platform_android::android::init());
     #[cfg(desktop)]
     let builder = builder
         // First, so a second launch shows this one's window instead of
@@ -220,13 +263,19 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             #[cfg(desktop)]
             tray::install(app.handle())?;
-            let mut frame_log = None;
-            let core = CORE.get_or_init(|| {
-                let (core, log) =
-                    tauri::async_runtime::block_on(async { start_core(app.handle()) });
-                frame_log = log;
-                core
-            });
+            #[cfg(not(target_os = "android"))]
+            let (core, frame_log) = {
+                let mut frame_log = None;
+                let core = CORE.get_or_init(|| {
+                    let (core, log) =
+                        tauri::async_runtime::block_on(async { start_core(app.handle()) });
+                    frame_log = log;
+                    core
+                });
+                (core, frame_log)
+            };
+            #[cfg(target_os = "android")]
+            let (core, frame_log) = android_core(app.handle());
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
