@@ -59,5 +59,6 @@ object Surfaces {
       shown = now
     }
     ModeWidget.updateAll(context)
+    ModeTile.update(context)
   }
 }
