@@ -775,6 +775,14 @@ describe("a Device that isn't Attached", () => {
     expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
   });
 
+  it("says who may be using a Device whose control link dropped", async () => {
+    renderWindow(
+      new FakeCore(only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } }))),
+    );
+
+    expect(await screen.findByText("Another app or device may be using it")).toBeVisible();
+  });
+
   it("shows why the core rejected Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),

@@ -476,6 +476,10 @@ mod tests {
                 "In use by another app",
             ),
             (
+                NotAttachedReason::LinkDropped,
+                "Another app or device may be using it",
+            ),
+            (
                 NotAttachedReason::BluetoothPermissionDenied,
                 "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth",
             ),
