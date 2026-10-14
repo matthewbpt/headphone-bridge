@@ -2,11 +2,13 @@ import { type CSSProperties, useEffect, useState } from "react";
 import type { Battery, Device, Labels, NoiseControlMode } from "./deviceList";
 import { reasonText } from "./deviceList";
 import {
+  openAppSettings,
   powerOff,
   retryAttach,
   setNoiseControlMode,
   useDeviceList,
   useLabels,
+  useNearbyDevicesPermission,
   usePlatform,
   whyRejected,
 } from "./core";
@@ -19,8 +21,10 @@ import { usePendingSetting } from "./usePendingSetting";
 export function App() {
   // Launch at login is a desktop setting: a phone has no login items.
   const platform = usePlatform();
+  const nearbyDevices = useNearbyDevicesPermission(platform);
   return (
     <main className="window">
+      {nearbyDevices === "refused" && <NearbyDevicesBanner />}
       <DeviceListView />
       <details className="card settings">
         <summary>Settings</summary>
@@ -28,6 +32,24 @@ export function App() {
         <FrameLogSetting />
       </details>
     </main>
+  );
+}
+
+/**
+ * Why Android's Nearby devices permission is needed, with the way to grant it:
+ * Android won't ask again once it's refused, so the button opens the app's
+ * page in its settings.
+ */
+function NearbyDevicesBanner() {
+  return (
+    <section className="card banner" aria-label="Nearby devices permission">
+      <p className="banner__text">
+        Headphone Bridge needs the Nearby devices permission to see and control your Devices.
+      </p>
+      <button className="button" onClick={() => void openAppSettings()}>
+        Open app settings
+      </button>
+    </section>
   );
 }
 

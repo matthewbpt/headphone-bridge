@@ -1,5 +1,4 @@
 // Stands in for @tauri-apps/api/event under Vitest (see vitest.config.ts).
-import type { DeviceList } from "../deviceList";
 import { currentCore } from "./fakeCore";
 
 export function listen<T>(
@@ -8,7 +7,7 @@ export function listen<T>(
 ): Promise<() => void> {
   const unlisten = currentCore().listen(
     event,
-    handler as unknown as (event: { payload: DeviceList }) => void,
+    handler as (event: { payload: unknown }) => void,
   );
   return Promise.resolve(unlisten);
 }

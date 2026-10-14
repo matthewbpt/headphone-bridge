@@ -23,10 +23,27 @@ export type Commands = {
   power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
+  nearby_devices_permission: { args: Record<string, never>; result: Permission };
+  open_app_settings: { args: Record<string, never>; result: void };
+};
+
+/**
+ * Every event the core sends the window, by name, with its payload. Exported
+ * for the fake core alone.
+ */
+export type Events = {
+  "device-list": DeviceList;
+  "nearby-devices-permission": Permission;
 };
 
 /** Which kind of app the window is in: some settings exist only on one. */
 export type Platform = "desktop" | "android";
+
+/**
+ * Whether Android lets the app use Bluetooth: the Nearby devices permission.
+ * Without it the app can't see any Device.
+ */
+export type Permission = "granted" | "refused";
 
 /** Why the core rejected a command before sending anything. */
 export type CommandError =
@@ -163,6 +180,35 @@ export function usePlatform(): Platform | null {
     send("platform", {}).then(setPlatform);
   }, []);
   return platform;
+}
+
+/**
+ * The Nearby devices permission, or null until it's known or when the app
+ * isn't on Android. It follows the listener granting or refusing it in the
+ * app's Android settings.
+ */
+export function useNearbyDevicesPermission(platform: Platform | null): Permission | null {
+  const [permission, setPermission] = useState<Permission | null>(null);
+  useEffect(() => {
+    if (platform !== "android") return;
+    let receivedEvent = false;
+    const unlisten = listen<Permission>("nearby-devices-permission", (event) => {
+      receivedEvent = true;
+      setPermission(event.payload);
+    });
+    send("nearby_devices_permission", {}).then((current) => {
+      if (!receivedEvent) setPermission(current);
+    });
+    return () => {
+      unlisten.then((stop) => stop());
+    };
+  }, [platform]);
+  return permission;
+}
+
+/** Opens the app's page in Android's settings, where the listener can grant permissions. */
+export function openAppSettings(): Promise<void> {
+  return send("open_app_settings", {});
 }
 
 /** The labels, or null until they arrive. */

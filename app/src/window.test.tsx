@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
-import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
+import { BUDS_ADDRESS, NO_DEVICES, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
 
@@ -1011,6 +1011,54 @@ describe("the Device switcher", () => {
     core.emit({ devices: [buds4Pro(), xm5()], primary: BUDS_ADDRESS });
     expect(title()).toHaveTextContent(/^Matthew's Buds4 Pro$/);
     expect(screen.getByRole("tab", { name: /Buds4 Pro/ })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("the Nearby devices permission", () => {
+  const banner = () => screen.queryByRole("region", { name: "Nearby devices permission" });
+
+  it("explains, when it's refused on Android, why it's needed and links to the app's settings", async () => {
+    const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
+    renderWindow(core);
+
+    const region = await screen.findByRole("region", { name: "Nearby devices permission" });
+    expect(region).toHaveTextContent(
+      "Headphone Bridge needs the Nearby devices permission to see and control your Devices.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open app settings" }));
+
+    expect(core.appSettingsOpened()).toBe(1);
+  });
+
+  it("goes once it's granted in the app's settings, and the Devices show without a restart", async () => {
+    const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
+    renderWindow(core);
+    expect(await screen.findByRole("region", { name: "Nearby devices permission" })).toBeVisible();
+
+    core.setNearbyDevices("granted");
+    core.emit(only(buds4Pro()));
+
+    expect(banner()).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Matthew's Buds4 Pro" })).toBeVisible();
+  });
+
+  it("comes back if the permission is refused again", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await screen.findByRole("heading", { name: "Matthew's Buds4 Pro" });
+    expect(banner()).not.toBeInTheDocument();
+
+    core.setNearbyDevices("refused");
+
+    expect(await screen.findByRole("region", { name: "Nearby devices permission" })).toBeVisible();
+  });
+
+  it("never shows on desktop", async () => {
+    const core = new FakeCore(NO_DEVICES, { nearbyDevices: "refused" });
+    renderWindow(core);
+
+    await screen.findByText("No Device");
+    expect(banner()).not.toBeInTheDocument();
   });
 });
 
