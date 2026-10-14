@@ -22,6 +22,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -143,8 +144,9 @@ object Hub : CoreLink {
 
   private val receiver = object : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
+      // The typed overload is API 33; IntentCompat falls back below it.
       val device =
-        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
           ?: return
       when (intent.action) {
         BluetoothDevice.ACTION_ACL_CONNECTED -> report(device)
