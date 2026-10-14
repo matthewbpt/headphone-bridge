@@ -50,7 +50,7 @@ jobs:
       # Builds the UI, which the shell embeds.
       - run: npm run build
         working-directory: app
-      - run: cargo clippy -p headphone-bridge -p headphone-bridge-platform-linux --all-targets --locked -- -D warnings
+      - run: cargo clippy -p headphone-bridge -p headphone-bridge-platform-linux -p headphone-bridge-platform-android --all-targets --locked -- -D warnings
       - run: cargo test -p headphone-bridge --locked
       - run: npm run tauri build -- --bundles deb,appimage
         working-directory: app
