@@ -1,7 +1,8 @@
 # Headphone Bridge
 
-A desktop app for macOS and Linux that changes the Noise Control Mode and
-Ambient Level of a Galaxy Buds4 Pro or WH-1000XM5, and shows their Status.
+An app for desktop (macOS and Linux) and Android that changes the Noise
+Control Mode and Ambient Level of a Galaxy Buds4 Pro or WH-1000XM5, and shows
+their Status.
 Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
 [docs/adr](docs/adr).
 
@@ -22,7 +23,8 @@ Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
 - `crates/platform-linux`: the Linux platform adapter (BlueZ through `bluer`,
   and the PulseAudio/PipeWire default sink). Its pure mappings build and are
   tested on every OS; the rest compiles only on Linux and is tested by hand.
-- `app/src-tauri`: the Tauri v2 shell.
+- `app/src-tauri`: the Tauri v2 shell. `app/src-tauri/gen/android` is the
+  generated Android project, committed.
 - `app/src`: the React + TypeScript UI.
 
 ## Development
@@ -64,6 +66,18 @@ Then `cd app && npm run tauri dev` runs the app, and
 `npm run tauri build -- --bundles deb,appimage` builds the deb and AppImage
 under `target/release/bundle/`. On GNOME the tray needs the AppIndicator
 extension, which Ubuntu enables by default.
+
+### Running on Android
+
+The Android app needs Android 12 or later. It doesn't reach Bluetooth yet, so
+its Device list says No Device. Building it needs the Android SDK and NDK
+(`ANDROID_HOME`, `NDK_HOME`), a JDK (`JAVA_HOME`), and the Rust target
+`aarch64-linux-android`:
+
+```sh
+cd app && npx tauri android build --debug --apk --target aarch64
+adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+```
 
 ### Frame log
 
