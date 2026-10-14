@@ -421,6 +421,7 @@ mod tests {
                 case: None,
             }),
             power_off_failed: false,
+            reported_at: None,
         }
     }
 
@@ -531,6 +532,7 @@ mod tests {
                 noise_cancelling_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
                 power_off_failed: false,
+                reported_at: None,
             }],
             primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
         };
@@ -590,6 +592,7 @@ mod tests {
             noise_cancelling_level: None,
             battery: Some(Battery::Headphones { level: 70 }),
             power_off_failed: false,
+            reported_at: None,
         }
     }
 

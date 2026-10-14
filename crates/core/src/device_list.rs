@@ -12,9 +12,10 @@ use crate::platform::{DeviceAddress, LinkFailure};
 #[serde(rename_all = "camelCase")]
 pub struct DeviceList {
     pub devices: Vec<Device>,
-    /// The Primary Device: the Attached Device the OS is playing audio
+    /// The Primary Device: the Connected Device the OS is playing audio
     /// through or, if it isn't playing through one, the most recently Attached
-    /// Device. `None` while no Device is Attached.
+    /// or shown Device, whether or not it's Attached. Never an unsupported
+    /// Model. `None` while no such Device is Connected.
     pub primary: Option<DeviceAddress>,
 }
 
@@ -52,6 +53,10 @@ pub struct Device {
     /// The Device acknowledged the last Power Off but was still Connected
     /// well after. Cleared when the Device is asked to Power Off again.
     pub power_off_failed: bool,
+    /// When a Detached Device last reported the values it keeps, in
+    /// milliseconds since the Unix epoch: they may be out of date. `None`
+    /// while the values are current, or there are none.
+    pub reported_at: Option<u64>,
 }
 
 impl Device {
@@ -71,10 +76,12 @@ impl Device {
             noise_cancelling_level: None,
             battery: None,
             power_off_failed: false,
+            reported_at: None,
         }
     }
 
-    /// This Device once Detached, in `state`. What it reported is dropped,
+    /// This Device once it lost its control link, in `state`. What it
+    /// reported is dropped,
     /// but it keeps its Model and Capabilities: it's the same Device while it
     /// stays Connected. Commands are refused by its state, not its
     /// Capabilities, until it is Attached again.
@@ -84,6 +91,18 @@ impl Device {
             capabilities: self.capabilities.clone(),
             ..Device::unidentified(self.address.clone(), self.name.clone(), state)
         }
+    }
+
+    /// Forgets what the Device reported, e.g. values kept from before it was
+    /// Detached, once it's Attached again and reports them afresh.
+    pub(crate) fn forget_reported(&mut self) {
+        self.chosen_mode = None;
+        self.effective_mode = None;
+        self.effective_mode_reason = None;
+        self.ambient_level = None;
+        self.noise_cancelling_level = None;
+        self.battery = None;
+        self.reported_at = None;
     }
 
     /// Records the mode the Device is applying, and why, if it says. The
