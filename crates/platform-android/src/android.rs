@@ -2,13 +2,14 @@
 //! (the Tauri setup or Kotlin's `NativeCore.start`), and the way back to
 //! Kotlin. The app crate exports the JNI symbols that call in here.
 
+use std::path::Path;
 use std::sync::{Once, OnceLock};
 
 use headphone_bridge_core::Core;
 use jni::objects::{GlobalRef, JClass, JValue};
 use jni::{JNIEnv, JavaVM};
-use tauri::plugin::{Builder, TauriPlugin};
-use tauri::Runtime;
+use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::runtime::Runtime as Tokio;
 
 use crate::messages::{BadMessage, Message};
@@ -142,14 +143,39 @@ fn to_kotlin(message: Message) -> bool {
     true
 }
 
+/// The app screen's `BluetoothPlugin`, for calling its commands from Rust.
+struct BluetoothPlugin<R: Runtime>(PluginHandle<R>);
+
 /// The Tauri plugin that registers `BluetoothPlugin`, which asks for the
-/// Nearby devices permission and holds every Connected Device while the app
-/// screen is in the foreground.
+/// Nearby devices permission, holds every Connected Device while the app
+/// screen is in the foreground, and shares files.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("android-bluetooth")
-        .setup(|_app, api| {
-            api.register_android_plugin(PACKAGE, "BluetoothPlugin")?;
+        .setup(|app, api| {
+            let plugin = api.register_android_plugin(PACKAGE, "BluetoothPlugin")?;
+            app.manage(BluetoothPlugin(plugin));
             Ok(())
         })
         .build()
+}
+
+/// Hands `file` to Android's share sheet, titled `title`. Resolves once the
+/// sheet is open, or with why it couldn't be.
+pub async fn share_file<R: Runtime>(
+    app: &AppHandle<R>,
+    file: &Path,
+    title: &str,
+) -> Result<(), String> {
+    let plugin = app
+        .try_state::<BluetoothPlugin<R>>()
+        .ok_or("the Android plugin isn't registered")?;
+    plugin
+        .0
+        .run_mobile_plugin_async::<serde_json::Value>(
+            "shareFile",
+            serde_json::json!({ "path": file, "title": title }),
+        )
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
