@@ -2,4 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Nearby devices: to see Connected Devices and open their control links. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <application>
+        <!-- Lends the frame log to the app picked in the share sheet. -->
+        <provider
+            android:name="dev.matthewbpt.headphonebridge.bluetooth.SharedFileProvider"
+            android:authorities="${applicationId}.shared"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
 </manifest>
