@@ -1,6 +1,6 @@
 import { act } from "react";
 import type { Commands, Platform } from "../core";
-import type { DeviceList, Labels } from "../deviceList";
+import type { DeviceList, Labels, Model } from "../deviceList";
 
 /**
  * A scripted stand-in for the core, behind the Tauri commands and events the
@@ -19,11 +19,26 @@ export class FakeCore {
   private launchAtLogin = false;
   private frameLog: string | null = null;
   private readonly platform: Platform;
+  /** The Simulated Device's Model, or null while it's off; undefined where the shell has none. */
+  private simulated: Model | null | undefined;
 
-  /** A core in the desktop app, unless `platform` says otherwise. */
-  constructor(deviceList: DeviceList, { platform = "desktop" }: { platform?: Platform } = {}) {
+  /**
+   * A core in the desktop app, unless `platform` says otherwise, whose shell
+   * has a Simulated Device only if `simulatedDevice` says so, as a debug
+   * Android build's does.
+   */
+  constructor(
+    deviceList: DeviceList,
+    { platform = "desktop", simulatedDevice = false }: { platform?: Platform; simulatedDevice?: boolean } = {},
+  ) {
     this.deviceList = structuredClone(deviceList);
     this.platform = platform;
+    this.simulated = simulatedDevice ? null : undefined;
+  }
+
+  /** The Simulated Device's Model, or null while it's off. */
+  simulatedDevice(): Model | null | undefined {
+    return this.simulated;
   }
 
   /** Emits a new Device list snapshot, as the core does after every change. */
@@ -89,6 +104,15 @@ export class FakeCore {
       if (typeof answer === "object") return Promise.reject(answer.reject);
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
+    },
+    simulated_device: () =>
+      this.simulated === undefined
+        ? Promise.reject("command simulated_device not found")
+        : Promise.resolve(this.simulated),
+    set_simulated_device: ({ model }) => {
+      if (this.simulated === undefined) return Promise.reject("command set_simulated_device not found");
+      this.simulated = model;
+      return Promise.resolve();
     },
   };
 

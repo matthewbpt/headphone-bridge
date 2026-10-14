@@ -1056,4 +1056,32 @@ describe("Settings", () => {
     ).toBeVisible();
     expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeChecked();
   });
+
+  it("switches on a Simulated Device from the Developer section of a debug Android build", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android", simulatedDevice: true });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+    const simulated = await screen.findByRole("combobox", { name: "Simulated Device" });
+    expect(simulated).toHaveValue("");
+
+    await userEvent.selectOptions(simulated, "WH-1000XM5");
+    expect(core.simulatedDevice()).toBe("wh1000xm5");
+    expect(simulated).toHaveValue("wh1000xm5");
+
+    await userEvent.selectOptions(simulated, "None");
+    expect(core.simulatedDevice()).toBeNull();
+  });
+
+  it("has no Simulated Device where the shell has none, as in release builds", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Simulated Device" })).not.toBeInTheDocument();
+  });
 });

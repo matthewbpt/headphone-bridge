@@ -226,6 +226,21 @@ async fn set_frame_log(
     Ok(path)
 }
 
+/// The Simulated Device's Model while it's switched on. Debug Android builds
+/// alone have it, for the emulator.
+#[cfg(all(target_os = "android", debug_assertions))]
+#[tauri::command]
+fn simulated_device() -> Option<headphone_bridge_core::Model> {
+    headphone_bridge_platform_android::android::simulated()
+}
+
+/// Switches the Simulated Device on as `model`, or off with `None`.
+#[cfg(all(target_os = "android", debug_assertions))]
+#[tauri::command]
+fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
+    headphone_bridge_platform_android::android::simulate(model);
+}
+
 /// Passed by "Launch at login", so the app starts in the tray.
 #[cfg(desktop)]
 const HIDDEN: &str = "--hidden";
@@ -322,7 +337,11 @@ pub fn run() {
             retry_attach,
             power_off,
             frame_log,
-            set_frame_log
+            set_frame_log,
+            #[cfg(all(target_os = "android", debug_assertions))]
+            simulated_device,
+            #[cfg(all(target_os = "android", debug_assertions))]
+            set_simulated_device
         ])
         .build(tauri::generate_context!())
         .expect("error while building Headphone Bridge")

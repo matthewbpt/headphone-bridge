@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import type { DeviceList, Labels, NoiseControlMode } from "./deviceList";
+import type { DeviceList, Labels, Model, NoiseControlMode } from "./deviceList";
 
 // The window's only way in to the core: its commands, as named and typed
 // functions, and the hooks that follow its snapshots, labels and frame log.
@@ -23,6 +23,9 @@ export type Commands = {
   power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
+  /** Debug Android builds alone: release builds and desktop don't have them. */
+  simulated_device: { args: Record<string, never>; result: Model | null };
+  set_simulated_device: { args: { model: Model | null }; result: void };
 };
 
 /** Which kind of app the window is in: some settings exist only on one. */
@@ -154,6 +157,26 @@ export function useFrameLog(): {
   }, []);
   const setEnabled = useCallback((enabled: boolean) => setFrameLog(enabled).then(setFile), []);
   return { file, setEnabled };
+}
+
+/**
+ * The Simulated Device, a stand-in for headphones on the emulator: the Model
+ * it answers as, or null while it's off. Undefined until known, and for good
+ * where the shell has none, as in release builds.
+ */
+export function useSimulatedDevice(): {
+  model: Model | null | undefined;
+  simulate: (model: Model | null) => Promise<void>;
+} {
+  const [model, setModel] = useState<Model | null | undefined>(undefined);
+  useEffect(() => {
+    send("simulated_device", {}).then(setModel, () => {});
+  }, []);
+  const simulate = useCallback(
+    (model: Model | null) => send("set_simulated_device", { model }).then(() => setModel(model)),
+    [],
+  );
+  return { model, simulate };
 }
 
 /** Which kind of app the window is in, or null until it's known. */

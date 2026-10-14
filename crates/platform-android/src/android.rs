@@ -75,6 +75,19 @@ fn host() -> &'static Host {
     })
 }
 
+/// Switches the Simulated Device on as `model`, or off with `None`. Debug
+/// builds alone have it.
+#[cfg(debug_assertions)]
+pub fn simulate(model: Option<headphone_bridge_core::Model>) {
+    host().simulate(model);
+}
+
+/// The Simulated Device's Model while it's switched on.
+#[cfg(debug_assertions)]
+pub fn simulated() -> Option<headphone_bridge_core::Model> {
+    host().simulated()
+}
+
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
 /// hasn't. From `NativeCore.start`.
 pub fn start(env: &mut JNIEnv, class: &JClass) {
