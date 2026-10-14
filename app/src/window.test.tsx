@@ -762,6 +762,23 @@ describe("a Device that isn't Attached", () => {
     expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
   });
 
+  it("shows a Detached Device's last reported values as possibly out of date, with every control disabled", async () => {
+    const reportedAt = new Date(2026, 9, 14, 9, 5).getTime();
+    renderWindow(
+      new FakeCore(only(xm5({ chosenMode: "ambient", state: { kind: "detached" }, reportedAt }))),
+    );
+
+    expect(await screen.findByText(/^Last reported at 9:05.*, may be out of date$/)).toBeVisible();
+    expect(screen.getByText("Detached, so other apps can use it")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Battery" })).toHaveTextContent(/^70%$/);
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    for (const radio of radios) expect(radio).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /^Ambient/ })).toBeChecked();
+    expect(screen.getByRole("slider")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
   it("shows the reason and tries to Attach again on Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),

@@ -151,16 +151,18 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
   );
 
   const attached = device.state.kind === "attached";
-  // A Device that is Powering Off keeps its controls in view, all disabled.
+  // A Device that is Powering Off keeps its controls in view, all disabled,
+  // as does a Detached one with the values it last reported.
   const poweringOff = device.state.kind === "poweringOff";
+  const outOfDate = device.state.kind === "detached" && device.reportedAt !== null;
   return (
     <>
       <section className="hero">
         <DevicePicture model={device.model} labels={labels} />
         <Status device={device} labels={labels} />
       </section>
-      {(attached || poweringOff) && (
-        <fieldset className="card controls" disabled={poweringOff}>
+      {(attached || poweringOff || outOfDate) && (
+        <fieldset className="card controls" disabled={poweringOff || outOfDate}>
           {device.capabilities.noiseControlModes.length > 0 && (
             <>
               <NoiseControlModeSelector
@@ -196,7 +198,8 @@ const MODE_ORDER: NoiseControlMode[] = ["off", "ambient", "adaptive", "noiseCanc
 
 /**
  * Under the picture: the battery once Attached, else what the Device is
- * doing or why the controls aren't there.
+ * doing or why the controls aren't there. A Detached Device shows the battery
+ * it last reported too, and when.
  */
 function Status({ device, labels }: { device: Device; labels: Labels }) {
   switch (device.state.kind) {
@@ -219,7 +222,19 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
         </div>
       );
     case "detached":
-      return <div className="status muted">Detached, so other apps can use it</div>;
+      return (
+        <div className="status status--column">
+          {device.reportedAt !== null && device.battery && <BatteryView battery={device.battery} />}
+          <span className="muted">Detached, so other apps can use it</span>
+          {device.reportedAt !== null && (
+            <span className="muted">
+              Last reported at{" "}
+              {new Date(device.reportedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, may
+              be out of date
+            </span>
+          )}
+        </div>
+      );
     case "notAttached":
       return (
         <div className="status status--column">
