@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- The page's background, bg in window.css: light here, dark in values-night. -->
+    <color name="app_background">#FFF2F2F6</color>
 </resources>
