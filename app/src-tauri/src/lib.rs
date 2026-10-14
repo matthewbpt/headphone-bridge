@@ -1,7 +1,7 @@
 //! The Tauri shell: exposes the core's commands as Tauri commands, forwards
 //! its Device list snapshots to the UI as `device-list` events and to the tray
 //! menu, and keeps the app running in the tray while the window is closed.
-//! On Android it's the app screen alone: no tray, and the window is the app.
+//! On Android it's the App Screen alone: no tray, and the window is the app.
 
 #[cfg(target_os = "android")]
 mod android;
@@ -104,9 +104,8 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
 
 /// The process's one core, started here unless Kotlin got there first (with
 /// the frame log on if the setting is), with the frame log switched on if
-/// wanted. Devices stay Detached until the app
-/// screen holds them, so no Attach goes unlogged. Returns the log file while
-/// it's on.
+/// wanted. Devices stay Detached until the App Screen holds them, so no
+/// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
 fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
     let core = headphone_bridge_platform_android::android::core();

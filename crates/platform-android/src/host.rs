@@ -1,4 +1,4 @@
-//! The core's host: the core with the On request policy, and the platform
+//! The core's host: the core with the On request Attach Policy, and the platform
 //! port it talks to, which is Kotlin at the other end of the JSON messages.
 
 use std::collections::hash_map::Entry;
@@ -144,7 +144,7 @@ impl Host {
         }
     }
 
-    /// The core, for the app screen.
+    /// The core, for the App Screen.
     pub fn core(&self) -> &Core {
         &self.core
     }

@@ -27,16 +27,16 @@ class ShareFileArgs {
   lateinit var title: String
 }
 
-/** How long the app screen keeps holding Devices after it leaves the foreground. */
+/** How long the App Screen keeps holding Devices after it leaves the foreground. */
 private const val GRACE_MS = 3000L
 
 /**
- * The app screen's side of Bluetooth. It asks for the Nearby devices
+ * The App Screen's side of Bluetooth. It asks for the Nearby devices
  * permission on first launch, and holds every Connected Device while the
  * screen is in the foreground and for [GRACE_MS] after, so the vendor apps can
  * have the control links otherwise.
  *
- * Its commands tell the app screen whether the permission is granted, open
+ * Its commands tell the App Screen whether the permission is granted, open
  * the app's page in Android's settings (the only way to grant it once
  * refused), and hand files to the share sheet for the shell: see [shareFile].
  *
@@ -50,7 +50,7 @@ class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
 
   override fun load(webView: WebView) {
     Hub.ensureStarted(activity)
-    // So the widget shows what the app screen sees.
+    // So the widget shows what the App Screen sees.
     Surfaces.controller(activity)
     if (!Hub.hasPermission()) {
       ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)

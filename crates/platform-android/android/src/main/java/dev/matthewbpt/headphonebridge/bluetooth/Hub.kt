@@ -41,7 +41,7 @@ internal const val TAG = "HeadphoneBridge"
 private const val SDP_TIMEOUT_MS = 8000L
 
 /**
- * Bluetooth for the whole process, shared by the app screen, the widget and
+ * Bluetooth for the whole process, shared by the App Screen, the widget and
  * the tile. It reports every Connected Device with a vendor service and the
  * media output to the core, opens the control links the core asks for, and
  * keeps the latest Device list. The core decides when to Attach and Detach.

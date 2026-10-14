@@ -172,12 +172,12 @@ fn to_kotlin(message: Message) -> bool {
     true
 }
 
-/// The app screen's `BluetoothPlugin`, for calling its commands from Rust.
+/// The App Screen's `BluetoothPlugin`, for calling its commands from Rust.
 struct BluetoothPlugin<R: Runtime>(PluginHandle<R>);
 
 /// The Tauri plugin that registers `BluetoothPlugin`, which asks for the
-/// Nearby devices permission, holds every Connected Device while the app
-/// screen is in the foreground, and shares files.
+/// Nearby devices permission, holds every Connected Device while the App
+/// Screen is in the foreground, and shares files.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("android-bluetooth")
         .setup(|app, api| {

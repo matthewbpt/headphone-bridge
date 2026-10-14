@@ -75,7 +75,7 @@ class StoredCopy(
         battery = batteryText(device) ?: before?.battery,
         updatedAt = if (reported) device.optLongOrNull("reportedAt") ?: now() else before?.updatedAt,
       )
-      // Attached again, e.g. from the app screen: whatever failed is over.
+      // Attached again, e.g. from the App Screen: whatever failed is over.
       if (!busy && device.getJSONObject("state").getString("kind") == "attached") note = null
     }
     save()
