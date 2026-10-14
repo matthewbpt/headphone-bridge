@@ -1031,6 +1031,17 @@ describe("Settings", () => {
     expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
   });
 
+  it("hides Launch at login on Android, keeping the Developer section", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(await screen.findByText("Developer"));
+
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: "Launch at login" })).not.toBeInTheDocument();
+  });
+
   it("shows why the frame log couldn't be opened", async () => {
     const core = new FakeCore(only(buds4Pro()));
     core.answer("set_frame_log", { reject: { frameLogUnavailable: "Permission denied (os error 13)" } });
