@@ -231,17 +231,24 @@ struct Tracked {
 }
 
 impl Tracked {
-    /// Detaches the Device, closing its control link, and puts it in `state`.
-    /// A Device Detached on purpose keeps what it last reported, for the rest
-    /// of its Connected spell, marked with when it reported it.
-    fn detach(&mut self, state: DeviceState) {
-        if state == DeviceState::Detached {
-            self.device.state = state;
-            self.device.reported_at = self.last_report;
-        } else {
-            self.device = self.device.detached(state);
-            self.last_report = None;
-        }
+    /// Detaches the Device on purpose, closing its control link. It keeps
+    /// what it last reported, for the rest of its Connected spell, marked
+    /// with when it reported it.
+    fn detach(&mut self) {
+        self.device.state = DeviceState::Detached;
+        self.device.reported_at = self.last_report;
+        self.end_session();
+    }
+
+    /// Closes the Device's control link, or forgets it after it dropped, and
+    /// puts the Device in `state`, dropping what it reported.
+    fn lose_link(&mut self, state: DeviceState) {
+        self.device = self.device.detached(state);
+        self.last_report = None;
+        self.end_session();
+    }
+
+    fn end_session(&mut self) {
         self.session = None;
         self.power_off_deadline = None;
     }
@@ -584,7 +591,7 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                tracked.detach(DeviceState::NotAttached { reason });
+                tracked.lose_link(DeviceState::NotAttached { reason });
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -680,12 +687,9 @@ impl<P: Platform> State<P> {
                 }
                 // A Device Powering Off is left to finish, or to fail and
                 // be Detached then.
-                DeviceState::Detached
-                | DeviceState::PoweringOff
-                | DeviceState::NotAttached {
-                    reason: NotAttachedReason::UnsupportedModel,
-                } => {}
-                _ if !wanted => tracked.detach(DeviceState::Detached),
+                DeviceState::Detached | DeviceState::PoweringOff => {}
+                ref state if state.is_unsupported_model() => {}
+                _ if !wanted => tracked.detach(),
                 _ => {}
             }
         }
@@ -721,12 +725,12 @@ impl<P: Platform> State<P> {
             let link_open = tracked.session.is_some();
             let reattach = wanted && !link_open;
             if !wanted {
-                tracked.detach(DeviceState::Detached);
+                tracked.detach();
             } else if link_open {
                 tracked.device.state = DeviceState::Attached;
                 tracked.power_off_deadline = None;
             } else {
-                tracked.detach(DeviceState::Attaching);
+                tracked.lose_link(DeviceState::Attaching);
                 tracked.retries = 0;
             }
             tracked.device.power_off_failed = true;
@@ -766,12 +770,9 @@ impl<P: Platform> State<P> {
     /// unsupported Model.
     fn primary(&self) -> Option<DeviceAddress> {
         let candidates = || {
-            self.devices.values().filter(|tracked| {
-                tracked.device.state
-                    != DeviceState::NotAttached {
-                        reason: NotAttachedReason::UnsupportedModel,
-                    }
-            })
+            self.devices
+                .values()
+                .filter(|tracked| !tracked.device.state.is_unsupported_model())
         };
         let playing = candidates()
             .find(|tracked| Some(&tracked.device.address) == self.audio_output.as_ref());
