@@ -8,6 +8,7 @@ mod android;
 mod labels;
 #[cfg(not(target_os = "android"))]
 mod platform;
+mod share;
 #[cfg(desktop)]
 mod tray;
 
@@ -241,6 +242,28 @@ fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
     headphone_bridge_platform_android::android::simulate(model);
 }
 
+/// Hands the frame log file to Android's share sheet, so it can be saved or
+/// sent from the phone. Desktop shows where the file is instead.
+#[tauri::command]
+async fn share_frame_log(
+    app: AppHandle,
+    frame_log: State<'_, FrameLog>,
+) -> Result<(), share::ShareError> {
+    let file = frame_log.0.lock().unwrap().clone();
+    let file = share::frame_log_to_share(file.as_deref())?;
+    #[cfg(target_os = "android")]
+    return headphone_bridge_platform_android::android::share_file(&app, file, "Share frame log")
+        .await
+        .map_err(share::ShareError::ShareFailed);
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, file);
+        Err(share::ShareError::ShareFailed(
+            "sharing is only on Android".into(),
+        ))
+    }
+}
+
 /// Passed by "Launch at login", so the app starts in the tray.
 #[cfg(desktop)]
 const HIDDEN: &str = "--hidden";
@@ -338,6 +361,7 @@ pub fn run() {
             power_off,
             frame_log,
             set_frame_log,
+            share_frame_log,
             #[cfg(all(target_os = "android", debug_assertions))]
             simulated_device,
             #[cfg(all(target_os = "android", debug_assertions))]

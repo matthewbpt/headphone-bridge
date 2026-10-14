@@ -26,6 +26,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -350,11 +351,18 @@ object Hub : CoreLink {
   @Volatile override var deviceList: JSONObject? = null
     private set
 
+  private val listListeners = CopyOnWriteArrayList<(JSONObject) -> Unit>()
+
   private fun onDeviceList(list: JSONObject) {
     synchronized(listLock) {
       deviceList = list
       listLock.notifyAll()
     }
+    listListeners.forEach { it(list) }
+  }
+
+  override fun onDeviceList(listener: (JSONObject) -> Unit) {
+    listListeners.add(listener)
   }
 
   override fun awaitDeviceList(timeoutMs: Long, ready: (JSONObject) -> Boolean): JSONObject? {

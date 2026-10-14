@@ -31,4 +31,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation(project(":tauri-android"))
     testImplementation("junit:junit:4.13.2")
+    // Android's org.json is a stub in JVM tests.
+    testImplementation("org.json:json:20240303")
 }
