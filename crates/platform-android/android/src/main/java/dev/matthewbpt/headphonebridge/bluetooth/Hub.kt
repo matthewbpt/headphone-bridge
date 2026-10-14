@@ -37,6 +37,11 @@ import java.util.concurrent.atomic.AtomicLong
 
 internal const val TAG = "HeadphoneBridge"
 
+/** Whether the app has the Nearby devices permission, without starting Bluetooth. */
+fun hasNearbyDevicesPermission(context: Context): Boolean =
+  ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+    PackageManager.PERMISSION_GRANTED
+
 /** How long to wait for an SDP answer before reporting a Device without UUIDs. */
 private const val SDP_TIMEOUT_MS = 8000L
 
@@ -69,9 +74,7 @@ object Hub : CoreLink {
   }
 
   /** Whether the app has the Nearby devices permission. Call [ensureStarted] first. */
-  override fun hasPermission(): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-      PackageManager.PERMISSION_GRANTED
+  override fun hasPermission(): Boolean = hasNearbyDevicesPermission(context)
 
   private fun send(event: JSONObject) = NativeCore.event(event.toString())
 

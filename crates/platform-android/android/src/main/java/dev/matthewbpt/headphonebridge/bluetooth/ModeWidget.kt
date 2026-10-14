@@ -53,7 +53,7 @@ class ModeWidget : AppWidgetProvider() {
     }
 
     private fun render(context: Context, manager: AppWidgetManager, ids: IntArray) {
-      val shown = Surfaces.copy(context).shown(Surfaces.hasPermission(context))
+      val shown = Surfaces.copy(context).shown(hasNearbyDevicesPermission(context))
       val views = RemoteViews(context.packageName, R.layout.mode_widget)
       val open = openApp(context)
 

@@ -1,10 +1,7 @@
 package dev.matthewbpt.headphonebridge.bluetooth
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 
 /**
@@ -52,14 +49,9 @@ object Surfaces {
    */
   fun watch(context: Context) = controller(context).watch()
 
-  /** Whether the app has the Nearby devices permission, without starting Bluetooth. */
-  fun hasPermission(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-      PackageManager.PERMISSION_GRANTED
-
   /** Shows the copy on every surface, if what they show changed. */
   private fun render(context: Context) {
-    val now = copy(context).shown(hasPermission(context))
+    val now = copy(context).shown(hasNearbyDevicesPermission(context))
     synchronized(this) {
       if (now == shown) return
       shown = now
