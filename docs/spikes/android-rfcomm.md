@@ -136,10 +136,10 @@ adb logcat -s HeadphoneBridge     # the app's own lines; Rust lines are prefixed
 adb logcat | grep -E 'connectSocket|cleanup_rfc_slot'   # every app's RFCOMM opens and closes
 ```
 
-On `spike/android-widget`, add the widget from the launcher's widget list ("Noise Control"), and the tile from the Quick panel's edit screen. A cold widget tap can be simulated with:
+On `spike/android-widget`, add the widget from the launcher's widget list ("Noise Control"), and the tile from the Quick panel's edit screen. A cold widget tap can be simulated with the command below. It uses the app's current identifier; the spike branches predate it, so substitute the package name they were built with.
 
 ```sh
-adb shell am force-stop io.github.matthewbpt.headphone_bridge
-adb shell am broadcast -n io.github.matthewbpt.headphone_bridge/io.github.matthewbpt.headphone_bridge.bluetooth.ModeWidget \
-  -a io.github.matthewbpt.headphone_bridge.REFRESH
+adb shell am force-stop dev.matthewbpt.headphonebridge
+adb shell am broadcast -n dev.matthewbpt.headphonebridge/dev.matthewbpt.headphonebridge.bluetooth.ModeWidget \
+  -a dev.matthewbpt.headphonebridge.REFRESH
 ```
