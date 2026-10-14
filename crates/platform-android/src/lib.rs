@@ -5,4 +5,7 @@
 //! JNI. Everything but the JNI glue is plain Rust, built and tested on every
 //! OS.
 
+mod host;
 pub mod messages;
+
+pub use host::Host;
