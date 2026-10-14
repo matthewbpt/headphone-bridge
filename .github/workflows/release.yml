@@ -1,0 +1,174 @@
+name: Release
+
+# Pushing a tag vX.Y.Z builds the macOS, Linux and Android apps and attaches
+# them all to one GitHub Release for that tag. Desktop and Android share the
+# version in app/src-tauri/tauri.conf.json, which the tag must match. The
+# Android version code is derived from it (major * 1000000 + minor * 1000 +
+# patch), so it increases with each release.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Check the tag matches the app version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          version=$(jq -r .version app/src-tauri/tauri.conf.json)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match tauri.conf.json version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos-app:
+    name: macOS app
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+  linux-app:
+    name: Linux app
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install Tauri's and the Linux adapter's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev libpulse-dev pkg-config file
+      - run: npm ci
+        working-directory: app
+      - run: npm run tauri build -- --bundles deb,appimage
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+
+  android-app:
+    # The keystore exists only in Actions secrets (see "Releasing" in the
+    # README). It's decoded to the runner's temp directory and named in a
+    # gitignored keystore.properties, which the Gradle build reads.
+    name: Android APK
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install the NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+      - name: Write the release keystore from secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::The Actions secret $name is not set"
+              exit 1
+            fi
+          done
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          cat > app/src-tauri/gen/android/app/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+      - run: npm ci
+        working-directory: app
+      - run: npx tauri android build --apk --target aarch64
+        working-directory: app
+      - name: Check the APK is release-signed with the release's version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          apk=app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          app/scripts/check-apk.sh "$apk" "$VERSION"
+          mkdir -p dist
+          mv "$apk" "dist/headphone-bridge_${VERSION}_android-arm64.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*.apk
+
+  publish:
+    # One job attaches every platform's files, so they all land on the same
+    # Release. If the Release already exists (e.g. drafted by hand), its
+    # notes are kept and the files are added to it.
+    name: Publish the GitHub Release
+    needs: [version, macos-app, linux-app, android-app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: files
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" files/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" files/* --verify-tag \
+              --title "Headphone Bridge ${{ needs.version.outputs.version }}" \
+              --notes-file .github/release-notes.md --generate-notes
+          fi
