@@ -127,7 +127,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             }
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let core = app.state::<Core>();
+                let core = app.state::<&'static Core>();
                 if let Err(error) = core.command(command.clone()).await {
                     eprintln!("couldn't send {command:?} from the tray: {error:?}");
                 }

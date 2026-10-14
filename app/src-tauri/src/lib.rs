@@ -1,17 +1,23 @@
 //! The Tauri shell: exposes the core's commands as Tauri commands, forwards
 //! its Device list snapshots to the UI as `device-list` events and to the tray
 //! menu, and keeps the app running in the tray while the window is closed.
+//! On Android it's the app screen alone: no tray, and the window is the app.
 
 mod labels;
 mod platform;
+#[cfg(desktop)]
 mod tray;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{Command, CommandError, Core, DeviceList, NoiseControlMode};
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+/// The process's one core. On Android the window shares it with the widget
+/// and the tile, and whichever comes first starts it (ADR-0005).
+static CORE: OnceLock<Core> = OnceLock::new();
 
 /// The frame log file while the frame log is on.
 #[derive(Default)]
@@ -79,6 +85,26 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
     }
 }
 
+/// Which kind of app the window is in, as the UI names it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+enum Platform {
+    #[cfg_attr(mobile, allow(dead_code))]
+    Desktop,
+    #[cfg_attr(desktop, allow(dead_code))]
+    Android,
+}
+
+/// Which kind of app the window is in, so it shows only that one's settings.
+#[tauri::command]
+fn platform() -> Platform {
+    if cfg!(target_os = "android") {
+        Platform::Android
+    } else {
+        Platform::Desktop
+    }
+}
+
 /// Every label the window shows, the same as the tray's.
 #[tauri::command]
 fn labels() -> labels::Labels {
@@ -86,13 +112,13 @@ fn labels() -> labels::Labels {
 }
 
 #[tauri::command]
-fn device_list(core: State<Core>) -> DeviceList {
+fn device_list(core: State<&'static Core>) -> DeviceList {
     core.device_list()
 }
 
 #[tauri::command]
 async fn set_noise_control_mode(
-    core: State<'_, Core>,
+    core: State<'_, &'static Core>,
     address: String,
     mode: NoiseControlMode,
 ) -> Result<(), CommandError> {
@@ -102,7 +128,7 @@ async fn set_noise_control_mode(
 
 #[tauri::command]
 async fn set_ambient_level(
-    core: State<'_, Core>,
+    core: State<'_, &'static Core>,
     address: String,
     level: u8,
 ) -> Result<(), CommandError> {
@@ -112,7 +138,7 @@ async fn set_ambient_level(
 
 #[tauri::command]
 async fn set_noise_cancelling_level(
-    core: State<'_, Core>,
+    core: State<'_, &'static Core>,
     address: String,
     level: u8,
 ) -> Result<(), CommandError> {
@@ -124,13 +150,13 @@ async fn set_noise_cancelling_level(
 }
 
 #[tauri::command]
-async fn retry_attach(core: State<'_, Core>, address: String) -> Result<(), CommandError> {
+async fn retry_attach(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
     core.command(Command::RetryAttach(DeviceAddress(address)))
         .await
 }
 
 #[tauri::command]
-async fn power_off(core: State<'_, Core>, address: String) -> Result<(), CommandError> {
+async fn power_off(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
     core.command(Command::PowerOff(DeviceAddress(address)))
         .await
 }
@@ -146,7 +172,7 @@ fn frame_log(frame_log: State<FrameLog>) -> Option<PathBuf> {
 #[tauri::command]
 async fn set_frame_log(
     app: AppHandle,
-    core: State<'_, Core>,
+    core: State<'_, &'static Core>,
     frame_log: State<'_, FrameLog>,
     enabled: bool,
 ) -> Result<Option<PathBuf>, CommandError> {
@@ -162,9 +188,11 @@ async fn set_frame_log(
 }
 
 /// Passed by "Launch at login", so the app starts in the tray.
+#[cfg(desktop)]
 const HIDDEN: &str = "--hidden";
 
 /// Shows the window. On macOS the Dock icon appears only while it's visible.
+#[cfg(desktop)]
 fn show_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -175,39 +203,57 @@ fn show_window(app: &AppHandle) {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         // First, so a second launch shows this one's window instead of
         // fighting it for the Devices' control links.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_window(app)
         }))
-        .plugin(tauri_plugin_autostart::Builder::new().arg(HIDDEN).build())
+        .plugin(tauri_plugin_autostart::Builder::new().arg(HIDDEN).build());
+    builder
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            #[cfg(desktop)]
             tray::install(app.handle())?;
-            let (core, frame_log) =
-                tauri::async_runtime::block_on(async { start_core(app.handle()) });
+            let mut frame_log = None;
+            let core = CORE.get_or_init(|| {
+                let (core, log) =
+                    tauri::async_runtime::block_on(async { start_core(app.handle()) });
+                frame_log = log;
+                core
+            });
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while snapshots.changed().await.is_ok() {
                     let snapshot = snapshots.borrow_and_update().clone();
+                    #[cfg(desktop)]
                     tray::update(&handle, &snapshot);
                     let _ = handle.emit("device-list", snapshot);
                 }
             });
             app.manage(core);
             app.manage(FrameLog(Mutex::new(frame_log)));
+            #[cfg(desktop)]
             if !std::env::args().any(|arg| arg == HIDDEN) {
                 show_window(app.handle());
+            }
+            // The config's window starts hidden for the tray; a phone has none.
+            #[cfg(mobile)]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
             }
             Ok(())
         })
         .on_window_event(|window, event| {
             // Closing the window hides it to the tray; "Quit" is in the tray.
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
                 #[cfg(target_os = "macos")]
@@ -215,8 +261,10 @@ pub fn run() {
                     .app_handle()
                     .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
+            let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
+            platform,
             labels,
             device_list,
             set_noise_control_mode,

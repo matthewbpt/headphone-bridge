@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop",
+  "description": "Lets the main window switch Launch at login, which only desktop has",
+  "platforms": ["macOS", "linux", "windows"],
+  "windows": ["main"],
+  "permissions": ["autostart:default"]
+}

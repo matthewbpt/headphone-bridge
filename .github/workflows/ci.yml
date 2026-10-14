@@ -61,6 +61,40 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
 
+  android-app:
+    # The Android app as a debug APK, so Android build breaks show up before
+    # merging. It needs no Linux system libraries: the shell's desktop parts
+    # aren't built for Android.
+    name: Android debug APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install the NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+      - run: npm ci
+        working-directory: app
+      - run: npx tauri android build --debug --apk --target aarch64
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: headphone-bridge-android-debug
+          path: app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+
   ui:
     name: UI typecheck and tests
     runs-on: ubuntu-latest
