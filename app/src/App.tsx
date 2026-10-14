@@ -208,6 +208,8 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
           <span className="spinner" aria-hidden /> Powering Off…
         </div>
       );
+    case "detached":
+      return <div className="status muted">Detached, so other apps can use it</div>;
     case "notAttached":
       return (
         <div className="status status--column">
