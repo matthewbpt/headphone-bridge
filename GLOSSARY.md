@@ -1,6 +1,6 @@
 # Headphone Bridge
 
-A desktop app that reads and changes the sound settings of Bluetooth headphones and earbuds from different vendors, replacing each vendor's mobile app for everyday adjustments.
+An app for desktop and Android that reads and changes the sound settings of Bluetooth headphones and earbuds from different vendors, replacing each vendor's mobile app for everyday adjustments.
 
 ## Devices and connections
 
@@ -24,6 +24,14 @@ _Avoid_: Paired, online
 The state of a Connected Device for which the app has an open control link and can read and change settings. A Device can be Connected without being Attached, e.g. when another app holds the control link.
 _Avoid_: Connected (when the control link is meant), linked, bound
 
+**Detach**:
+To close a Device's control link on purpose so another app or device can use it. The Device stays Connected.
+_Avoid_: Release, yield, disconnect, let go
+
+**Detached**:
+The state of a Connected Device that the app has chosen not to Attach, as opposed to one it can't Attach.
+_Avoid_: Idle, released, Not Attached (which is for when the app can't Attach)
+
 **Power Off**:
 The action of switching a Device off from the app. The Device then stops being Connected of its own accord; the app can't switch it back on.
 _Avoid_: Turn off, shut down, disconnect
@@ -33,7 +41,7 @@ The state of a Device the app has asked to Power Off that is still Connected. It
 _Avoid_: Shutting down, Pending (which is for setting values)
 
 **Primary Device**:
-The Attached Device shown by default: the one the operating system is currently using as its audio output.
+The Connected Device the app shows and acts on by default: the one the operating system is currently using as its audio output.
 _Avoid_: Active device, current device, selected device
 
 ## Settings
