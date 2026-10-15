@@ -16,7 +16,7 @@ use frame::{encode, Deframer};
 /// The vendor's RFCOMM service.
 pub const SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
 
-mod id {
+pub mod id {
     pub const ACK: u8 = 66;
     pub const STATUS_UPDATED: u8 = 96;
     pub const EXTENDED_STATUS_UPDATED: u8 = 97;

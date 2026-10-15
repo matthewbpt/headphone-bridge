@@ -24,7 +24,7 @@ use frame::{encode, DataType, Deframer};
 pub const SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
 
 /// Table 1 command ids: payload byte 0.
-mod command {
+pub mod command {
     pub const CONNECT_GET_PROTOCOL_INFO: u8 = 0x00;
     pub const CONNECT_RET_PROTOCOL_INFO: u8 = 0x01;
     pub const CONNECT_GET_DEVICE_INFO: u8 = 0x04;
@@ -76,7 +76,7 @@ const NCASM_TYPE: u8 = 0x17;
 const CHANGED: u8 = 0x01;
 
 /// `EqEbbInquiredType::PRESET_EQ`.
-const PRESET_EQ: u8 = 0x00;
+pub const PRESET_EQ: u8 = 0x00;
 /// `EqEbbStatus::DISABLE`: the Device refuses Equalizer changes for now.
 const EQUALIZER_DISABLE: u8 = 0x01;
 /// How far an Equalizer step is offset on the wire: a step of −10 is sent

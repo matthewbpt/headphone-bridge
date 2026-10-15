@@ -124,16 +124,6 @@ struct Buds {
     status: Vec<u8>,
 }
 
-mod samsung_id {
-    pub const ACK: u8 = 66;
-    pub const EXTENDED_STATUS_UPDATED: u8 = 97;
-    pub const NOISE_CONTROLS: u8 = 120;
-    pub const NOISE_REDUCTION_LEVEL: u8 = 131;
-    pub const AMBIENT_VOLUME: u8 = 132;
-    pub const EQUALIZER: u8 = 134;
-    pub const MANAGER_INFO: u8 = 136;
-}
-
 /// Where the extended status reports each setting.
 mod samsung_status {
     pub const PLACEMENT: usize = 6;
@@ -152,7 +142,7 @@ impl Buds {
             |bytes| deframer.push(bytes),
         )
         .into_iter()
-        .find(|frame| frame.id == samsung_id::EXTENDED_STATUS_UPDATED)
+        .find(|frame| frame.id == samsung::id::EXTENDED_STATUS_UPDATED)
         .expect("capture-3 has an extended status")
         .payload;
         // Both buds in the ear, so the Effective Mode is the Chosen Mode.
@@ -174,49 +164,28 @@ impl Simulated for Buds {
         for frame in self.deframer.push(bytes) {
             let value = frame.payload.first().copied();
             let setting = match frame.id {
-                samsung_id::MANAGER_INFO => {
+                samsung::id::MANAGER_INFO => {
                     replies.push(samsung::encode(
-                        samsung_id::EXTENDED_STATUS_UPDATED,
+                        samsung::id::EXTENDED_STATUS_UPDATED,
                         &self.status,
                     ));
                     continue;
                 }
-                samsung_id::NOISE_CONTROLS => samsung_status::MODE,
-                samsung_id::AMBIENT_VOLUME => samsung_status::AMBIENT_LEVEL,
-                samsung_id::NOISE_REDUCTION_LEVEL => samsung_status::NOISE_CANCELLING_LEVEL,
-                samsung_id::EQUALIZER => samsung_status::EQUALIZER,
+                samsung::id::NOISE_CONTROLS => samsung_status::MODE,
+                samsung::id::AMBIENT_VOLUME => samsung_status::AMBIENT_LEVEL,
+                samsung::id::NOISE_REDUCTION_LEVEL => samsung_status::NOISE_CANCELLING_LEVEL,
+                samsung::id::EQUALIZER => samsung_status::EQUALIZER,
                 _ => continue,
             };
             let Some(value) = value else { continue };
             self.status[setting] = value;
             // A Buds4 Pro confirms a set with an ACK carrying the applied
             // value (real-noise-control, real-nc-level-set).
-            replies.push(samsung::encode(samsung_id::ACK, &[frame.id, value]));
+            replies.push(samsung::encode(samsung::id::ACK, &[frame.id, value]));
         }
         replies
     }
 }
-
-/// Table 1 command ids: payload byte 0.
-mod sony_command {
-    pub const CONNECT_GET_PROTOCOL_INFO: u8 = 0x00;
-    pub const CONNECT_GET_DEVICE_INFO: u8 = 0x04;
-    pub const CONNECT_GET_SUPPORT_FUNCTION: u8 = 0x06;
-    pub const POWER_GET_STATUS: u8 = 0x22;
-    pub const POWER_SET_STATUS: u8 = 0x24;
-    pub const NCASM_GET_PARAM: u8 = 0x66;
-    pub const NCASM_RET_PARAM: u8 = 0x67;
-    pub const NCASM_SET_PARAM: u8 = 0x68;
-    pub const NCASM_NTFY_PARAM: u8 = 0x69;
-    pub const EQEBB_GET_STATUS: u8 = 0x52;
-    pub const EQEBB_GET_PARAM: u8 = 0x56;
-    pub const EQEBB_RET_PARAM: u8 = 0x57;
-    pub const EQEBB_SET_PARAM: u8 = 0x58;
-    pub const EQEBB_NTFY_PARAM: u8 = 0x59;
-}
-
-/// `EqEbbInquiredType::PRESET_EQ`.
-const PRESET_EQ: u8 = 0x00;
 
 /// A WH-1000XM5. It acknowledges every request, answers the Attach's
 /// requests as in attach.frames, and confirms a noise control set with a
@@ -269,12 +238,12 @@ impl Headphones {
         }
         let noise_control = answers
             .iter()
-            .find(|(command, _)| *command == sony_command::NCASM_GET_PARAM)
+            .find(|(command, _)| *command == sony::command::NCASM_GET_PARAM)
             .map(|(_, answer)| answer[1..].to_vec())
             .expect("attach.frames reports noise control");
         let reported = answers
             .iter()
-            .find(|(command, _)| *command == sony_command::EQEBB_GET_PARAM)
+            .find(|(command, _)| *command == sony::command::EQEBB_GET_PARAM)
             .map(|(_, answer)| answer.clone())
             .expect("attach.frames reports the Equalizer");
         let mut deframer = sony::Deframer::default();
@@ -283,7 +252,7 @@ impl Headphones {
             |bytes| deframer.push(bytes),
         )
         .into_iter()
-        .filter(|frame| frame.data.first() == Some(&sony_command::EQEBB_NTFY_PARAM))
+        .filter(|frame| frame.data.first() == Some(&sony::command::EQEBB_NTFY_PARAM))
         .map(|frame| (frame.data[2], frame.data[3..].to_vec()))
         .collect();
         curves.insert(0, (reported[2], reported[3..].to_vec()));
@@ -318,7 +287,7 @@ impl Headphones {
             .iter()
             .find(|(preset, _)| *preset == self.preset)
             .map_or(&flat[..], |(_, curve)| curve);
-        [&[id, PRESET_EQ, self.preset][..], curve].concat()
+        [&[id, sony::PRESET_EQ, self.preset][..], curve].concat()
     }
 }
 
@@ -336,19 +305,19 @@ impl Simulated for Headphones {
             }
             replies.push(sony::encode(sony::DataType::Ack, 1 - (frame.seq & 1), &[]));
             let answer = match frame.data.first().copied() {
-                Some(sony_command::NCASM_GET_PARAM) => {
-                    self.noise_control(sony_command::NCASM_RET_PARAM)
+                Some(sony::command::NCASM_GET_PARAM) => {
+                    self.noise_control(sony::command::NCASM_RET_PARAM)
                 }
                 // Type, status, effect, mode, Focus on Voice and level.
-                Some(sony_command::NCASM_SET_PARAM) if frame.data.len() == 7 => {
+                Some(sony::command::NCASM_SET_PARAM) if frame.data.len() == 7 => {
                     self.noise_control = frame.data[1..].to_vec();
-                    self.noise_control(sony_command::NCASM_NTFY_PARAM)
+                    self.noise_control(sony::command::NCASM_NTFY_PARAM)
                 }
-                Some(sony_command::EQEBB_GET_PARAM) => {
-                    self.equalizer(sony_command::EQEBB_RET_PARAM)
+                Some(sony::command::EQEBB_GET_PARAM) => {
+                    self.equalizer(sony::command::EQEBB_RET_PARAM)
                 }
                 // The Preset, then its curve, or none to keep its own.
-                Some(sony_command::EQEBB_SET_PARAM) if frame.data.len() >= 4 => {
+                Some(sony::command::EQEBB_SET_PARAM) if frame.data.len() >= 4 => {
                     let preset = frame.data[2];
                     let moved = preset != self.preset;
                     self.preset = preset;
@@ -360,19 +329,19 @@ impl Simulated for Headphones {
                             continue;
                         }
                     }
-                    self.equalizer(sony_command::EQEBB_NTFY_PARAM)
+                    self.equalizer(sony::command::EQEBB_NTFY_PARAM)
                 }
                 // `POWER_OFF`, `ON`: only acknowledged, then it switches off.
-                Some(sony_command::POWER_SET_STATUS) if frame.data[1..] == [0x03, 0x01] => {
+                Some(sony::command::POWER_SET_STATUS) if frame.data[1..] == [0x03, 0x01] => {
                     self.powered_off = true;
                     continue;
                 }
                 Some(
-                    command @ (sony_command::CONNECT_GET_PROTOCOL_INFO
-                    | sony_command::CONNECT_GET_DEVICE_INFO
-                    | sony_command::CONNECT_GET_SUPPORT_FUNCTION
-                    | sony_command::POWER_GET_STATUS
-                    | sony_command::EQEBB_GET_STATUS),
+                    command @ (sony::command::CONNECT_GET_PROTOCOL_INFO
+                    | sony::command::CONNECT_GET_DEVICE_INFO
+                    | sony::command::CONNECT_GET_SUPPORT_FUNCTION
+                    | sony::command::POWER_GET_STATUS
+                    | sony::command::EQEBB_GET_STATUS),
                 ) => match self.answers.iter().find(|(asked, _)| *asked == command) {
                     Some((_, answer)) => answer.clone(),
                     None => continue,
