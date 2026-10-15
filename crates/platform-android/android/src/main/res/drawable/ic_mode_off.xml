@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Off: a person, after the App Screen's ModeIcon in app/src/deviceArt.tsx. Keep the two in step. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:translateX="12"
+        android:translateY="0.5">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M-3.4,9a3.4,3.4 0,1 0,6.8,0a3.4,3.4 0,1 0,-6.8,0zM-6,19.5C-6,15.6 -3.4,13.6 0,13.6C3.4,13.6 6,15.6 6,19.5Z" />
+    </group>
+</vector>

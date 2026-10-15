@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Noise Cancelling: a person in a ring, after the App Screen's ModeIcon in app/src/deviceArt.tsx. Keep the two in step. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:pathData="M2.4,12a9.6,9.6 0,1 0,19.2,0a9.6,9.6 0,1 0,-19.2,0z" />
+    <group
+        android:translateX="12"
+        android:translateY="1.7"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M-3.4,9a3.4,3.4 0,1 0,6.8,0a3.4,3.4 0,1 0,-6.8,0zM-6,19.5C-6,15.6 -3.4,13.6 0,13.6C3.4,13.6 6,15.6 6,19.5Z" />
+    </group>
+</vector>

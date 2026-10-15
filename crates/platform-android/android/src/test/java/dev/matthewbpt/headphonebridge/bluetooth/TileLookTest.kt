@@ -51,6 +51,18 @@ class TileLookTest {
   }
 
   @Test
+  fun theIconIsTheChosenModes() {
+    assertEquals(R.drawable.ic_mode_ambient, tileLook(shown("ambient")).icon)
+    assertEquals(R.drawable.ic_mode_noise_cancelling, tileLook(shown("noiseCancelling")).icon)
+  }
+
+  @Test
+  fun withNoKnownModeTheIconIsTheHeadphones() {
+    assertEquals(R.drawable.ic_noise_control, tileLook(shown(mode = null)).icon)
+    assertEquals(R.drawable.ic_noise_control, tileLook(shown(mode = "somethingNew")).icon)
+  }
+
+  @Test
   fun theSubtitleSaysWhatAnActionIsDoingOrWhyItFailed() {
     assertEquals("Setting Ambient…", tileLook(shown("ambient", note = "Setting Ambient…")).subtitle)
     assertEquals(LINK_DROPPED, tileLook(shown("off", note = LINK_DROPPED)).subtitle)
@@ -68,6 +80,7 @@ class TileLookTest {
     assertEquals(TileLook.State.UNAVAILABLE, look.state)
     assertEquals("Noise Control", look.label)
     assertEquals("No Device Connected", look.subtitle)
+    assertEquals(R.drawable.ic_noise_control, look.icon)
     assertEquals(TileLook.Tap.Nothing, look.tap)
   }
 
@@ -77,6 +90,7 @@ class TileLookTest {
     assertEquals(TileLook.Tap.OpenApp, look.tap)
     assertEquals(TileLook.State.INACTIVE, look.state)
     assertEquals("Open the app to allow Nearby devices", look.subtitle)
+    assertEquals(R.drawable.ic_noise_control, look.icon)
   }
 
   @Test
@@ -92,18 +106,23 @@ class TileLookTest {
     copy.onDeviceList(link.deviceList!!)
     link.attaches = false
     val done = CountDownLatch(3)
-    val labels = (1..3).map {
+    val looks = (1..3).map {
       val tap = tileLook(copy.shown(hasPermission = true)).tap as TileLook.Tap.SetMode
       controller.tap(tap.mode) { done.countDown() }
-      tileLook(copy.shown(hasPermission = true)).label
+      tileLook(copy.shown(hasPermission = true))
     }
-    // The label steps with every tap, before the Device is even Attached.
-    assertEquals(listOf("Noise Cancelling", "Ambient", "Adaptive"), labels)
+    // The label and icon step with every tap, before the Device is even Attached.
+    assertEquals(listOf("Noise Cancelling", "Ambient", "Adaptive"), looks.map { it.label })
+    assertEquals(
+      listOf(R.drawable.ic_mode_noise_cancelling, R.drawable.ic_mode_ambient, R.drawable.ic_mode_adaptive),
+      looks.map { it.icon },
+    )
 
     waitFor { "holdPrimary" in link.sent }
     link.attach()
     assertTrue("the taps finished", done.await(5, TimeUnit.SECONDS))
     assertEquals(listOf("holdPrimary", "set adaptive", "endHoldPrimary"), link.sent)
     assertEquals("Adaptive", tileLook(copy.shown(hasPermission = true)).label)
+    assertEquals(R.drawable.ic_mode_adaptive, tileLook(copy.shown(hasPermission = true)).icon)
   }
 }

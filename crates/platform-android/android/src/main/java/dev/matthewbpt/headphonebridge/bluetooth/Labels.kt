@@ -13,6 +13,15 @@ fun modeLabel(mode: String): String = when (mode) {
   else -> mode
 }
 
+/** A mode's icon, after the App Screen's in app/src/deviceArt.tsx; null for a mode the app doesn't know. */
+fun modeIcon(mode: String): Int? = when (mode) {
+  "off" -> R.drawable.ic_mode_off
+  "noiseCancelling" -> R.drawable.ic_mode_noise_cancelling
+  "ambient" -> R.drawable.ic_mode_ambient
+  "adaptive" -> R.drawable.ic_mode_adaptive
+  else -> null
+}
+
 /** Why an action couldn't Attach the Primary Device in time, from the latest Device list. */
 fun notAttachedText(list: JSONObject?): String {
   val state = list?.let { primaryDevice(it) }?.getJSONObject("state")
