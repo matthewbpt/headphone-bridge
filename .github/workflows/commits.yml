@@ -2,6 +2,8 @@ name: Commits
 
 on:
   pull_request:
+    # edited: re-check the title when it's renamed.
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -31,3 +33,21 @@ jobs:
             fi
           done
           exit "$status"
+
+  pr-title:
+    # PRs are squash-merged, so the title becomes the header of the one commit
+    # that lands on main, which release-please reads to pick the next version.
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          msg_file=$(mktemp)
+          printf '%s\n' "$TITLE" > "$msg_file"
+          if ! sh .githooks/commit-msg "$msg_file"; then
+            echo "::error::The PR title does not follow Conventional Commits"
+            exit 1
+          fi
