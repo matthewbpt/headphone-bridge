@@ -1,6 +1,6 @@
 [package]
 name = "headphone-bridge-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Platform-independent core of Headphone Bridge: device model, vendor protocols and the platform port"
 edition.workspace = true
 license.workspace = true
