@@ -153,7 +153,7 @@ backup of the keystore and its passwords somewhere private: losing it means
 listeners have to uninstall to upgrade. Create it once, outside the repo:
 
 ```sh
-keytool -genkeypair -v -keystore headphone-bridge-release.jks -storetype JKS \
+keytool -genkeypair -v -keystore headphone-bridge-release.jks \
   -keyalg RSA -keysize 4096 -validity 10000 -alias headphone-bridge
 ```
 
@@ -165,7 +165,7 @@ with `gh secret set`:
 | `ANDROID_KEYSTORE_BASE64` | `base64 -i headphone-bridge-release.jks` (macOS) or `base64 -w0 headphone-bridge-release.jks` (Linux) |
 | `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
 | `ANDROID_KEY_ALIAS` | `headphone-bridge` |
-| `ANDROID_KEY_PASSWORD` | the key password (the same as the keystore password unless you chose another) |
+| `ANDROID_KEY_PASSWORD` | the keystore password again: a PKCS12 keystore, `keytool`'s default, has one password for the keystore and its key |
 
 Don't use backslashes in the passwords: the workflow writes them into a Java
 properties file. To sign a release build locally, write the same values to
