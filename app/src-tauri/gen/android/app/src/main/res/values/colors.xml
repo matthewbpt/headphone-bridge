@@ -9,4 +9,6 @@
     <color name="white">#FFFFFFFF</color>
     <!-- The page's background, bg in window.css: light here, dark in values-night. -->
     <color name="app_background">#FFF2F2F6</color>
+    <!-- The desktop icon's background, behind the launcher icon's headphones. -->
+    <color name="ic_launcher_background">#FF1F2937</color>
 </resources>
