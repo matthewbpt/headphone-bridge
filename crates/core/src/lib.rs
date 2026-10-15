@@ -30,7 +30,7 @@ pub use device_list::{
 };
 use frame_log::{Direction, FrameLog};
 pub use model::{
-    Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, StepRange, Steps,
+    Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, PresetId, StepRange, Steps,
 };
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
@@ -1045,7 +1045,7 @@ mod tests {
     #[test]
     fn an_equalizer_for_a_model_without_the_capability_is_rejected() {
         let preset = Equalizer {
-            preset: 0,
+            preset: PresetId(0),
             bands: None,
             clear_bass: None,
         };

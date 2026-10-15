@@ -95,9 +95,11 @@ export interface EqualizerCapability {
   clearBass: StepRange | null;
 }
 
+/** A Preset's id on the wire, as its Model's protocol numbers it. */
+export type PresetId = number;
+
 export interface Preset {
-  /** The Preset's id on the wire. */
-  id: number;
+  id: PresetId;
   /** In the Model's own words. */
   name: string;
   /** Whether its Bands can be changed while on it. */
@@ -124,8 +126,8 @@ export type StepRange = Steps;
 
 /** An Equalizer's settings, as reported by a Device or asked of it. */
 export interface Equalizer {
-  /** The Preset's wire id: possibly one the Model's Capability doesn't list. */
-  preset: number;
+  /** Possibly a Preset the Model's Capability doesn't list. */
+  preset: PresetId;
   /** Each Band's value, lowest first. Null when not reported, or for a set of the Preset alone. */
   bands: number[] | null;
   /** Null as for the Bands. A Model with both is set with both or neither. */

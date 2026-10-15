@@ -8,7 +8,7 @@ use uuid::{uuid, Uuid};
 
 use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::{Battery, EffectiveModeReason};
-use crate::model::Model;
+use crate::model::{Model, PresetId};
 pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, Deframer};
@@ -52,7 +52,7 @@ pub struct Session {
     /// two can't confirm each other.
     pending_noise_cancelling_level: Option<u8>,
     /// The Preset the app last asked for, until the Device confirms it.
-    pending_preset: Option<u8>,
+    pending_preset: Option<PresetId>,
     /// Whether a Chosen Mode has been reported yet.
     chosen_known: bool,
 }
@@ -104,9 +104,9 @@ impl Session {
     /// Confirmed by an ACK carrying the applied Preset, following the ACK
     /// rule of the other sets, and polled with `MANAGER_INFO` like them, as
     /// the extended status reports the Preset too (GalaxyBudsClient).
-    pub fn set_equalizer_preset(&mut self, preset: u8) -> Vec<Vec<u8>> {
+    pub fn set_equalizer_preset(&mut self, preset: PresetId) -> Vec<Vec<u8>> {
         self.pending_preset = Some(preset);
-        vec![encode(id::EQUALIZER, &[preset]), Self::handshake()]
+        vec![encode(id::EQUALIZER, &[preset.0]), Self::handshake()]
     }
 
     /// The update for a mode the Device reports applying while the buds are
@@ -207,7 +207,7 @@ impl Session {
                         self.pending_noise_cancelling_level = None;
                         self.noise_cancelling_level(p.get(1)).into_iter().collect()
                     }
-                    id::EQUALIZER if self.pending_preset == Some(p[1]) => {
+                    id::EQUALIZER if self.pending_preset == Some(PresetId(p[1])) => {
                         self.pending_preset = None;
                         vec![preset_update(p[1])]
                     }
@@ -244,7 +244,7 @@ impl Session {
 /// can read.
 fn preset_update(preset: u8) -> Update {
     Update::Equalizer(Equalizer {
-        preset,
+        preset: PresetId(preset),
         bands: None,
         clear_bass: None,
     })

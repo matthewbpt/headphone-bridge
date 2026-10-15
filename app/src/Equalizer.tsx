@@ -6,6 +6,7 @@ import type {
   Equalizer as EqualizerValue,
   EqualizerCapability,
   Preset,
+  PresetId,
   StepRange,
 } from "./deviceList";
 import { sameValue, usePendingSetting } from "./usePendingSetting";
@@ -246,11 +247,11 @@ function settles(asked: EqualizerValue, reported: EqualizerValue): boolean {
 }
 
 /** The Model's Preset with wire id `id`, if it lists one. */
-function preset(capability: EqualizerCapability, id: number): Preset | undefined {
+function preset(capability: EqualizerCapability, id: PresetId): Preset | undefined {
   return capability.presets.find((preset) => preset.id === id);
 }
 
 /** The Model's name for the Preset with wire id `id`. */
-function presetName(capability: EqualizerCapability, id: number): string {
+function presetName(capability: EqualizerCapability, id: PresetId): string {
   return preset(capability, id)?.name ?? String(id);
 }

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::model::PresetId;
 use crate::platform::DeviceAddress;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,9 +79,9 @@ pub enum NoiseControlMode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Equalizer {
-    /// The Preset's wire id. A Device may report one its Model's Capability
-    /// doesn't list, which is kept as it is.
-    pub preset: u8,
+    /// A Device may report a Preset its Model's Capability doesn't list,
+    /// which is kept as it is.
+    pub preset: PresetId,
     /// Each Band's value in the Model's own steps, lowest Band first. `None`
     /// when the Device doesn't report them, or a set of the Preset alone,
     /// which leaves its curve to the Device.

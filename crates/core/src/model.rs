@@ -131,17 +131,21 @@ pub struct EqualizerCapability {
 
 impl EqualizerCapability {
     /// The Preset with wire id `id`, if the Model has one.
-    pub fn preset(&self, id: u8) -> Option<&Preset> {
+    pub fn preset(&self, id: PresetId) -> Option<&Preset> {
         self.presets.iter().find(|preset| preset.id == id)
     }
 }
+
+/// A Preset's id on the wire, as its Model's protocol numbers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PresetId(pub u8);
 
 /// One of a Model's Presets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preset {
-    /// The Preset's id on the wire.
-    pub id: u8,
+    pub id: PresetId,
     /// The Preset's name in the Model's own words.
     pub name: &'static str,
     /// Whether its Bands can be changed while on it.
@@ -154,7 +158,7 @@ impl Preset {
     /// A Preset the app can pick, whose Bands can't be changed.
     fn fixed(id: u8, name: &'static str) -> Preset {
         Preset {
-            id,
+            id: PresetId(id),
             name,
             editable: false,
             selectable: true,

@@ -6,7 +6,7 @@ use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
     Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, NoiseControlMode,
-    Preset, StepRange,
+    Preset, PresetId, StepRange,
 };
 use support::{
     fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for, xm5, DeviceLink,
@@ -51,7 +51,7 @@ async fn the_capabilities_list_sonys_presets_five_bands_and_clear_bass_and_only_
             presets: presets
                 .into_iter()
                 .map(|(id, name, editable)| Preset {
-                    id,
+                    id: PresetId(id),
                     name,
                     editable,
                     selectable: true,
@@ -76,7 +76,7 @@ async fn attaching_reads_the_preset_and_keeps_the_reported_bands_and_clear_bass(
 /// Bright as the attach fixture reports it.
 fn bright() -> Equalizer {
     Equalizer {
-        preset: 0x10,
+        preset: PresetId(0x10),
         bands: Some(vec![-1, 0, 3, 5, 10]),
         clear_bass: Some(2),
     }
@@ -84,7 +84,7 @@ fn bright() -> Equalizer {
 
 fn preset(preset: u8) -> Equalizer {
     Equalizer {
-        preset,
+        preset: PresetId(preset),
         bands: None,
         clear_bass: None,
     }
@@ -133,7 +133,7 @@ async fn setting_a_preset_sends_it_alone_and_waits_for_the_device() {
     wait_for(&core, |list| {
         list.devices[0].equalizer
             == Some(Equalizer {
-                preset: 0x16,
+                preset: PresetId(0x16),
                 bands: Some(vec![6, 3, 0, 0, 0]),
                 clear_bass: Some(0),
             })
@@ -146,7 +146,7 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
     let (core, _os, mut link) = attached_xm5().await;
     // Bright's curve with the 2.5 kHz Band raised to +6, as the UI sends it.
     let manual = Equalizer {
-        preset: 0xa0,
+        preset: PresetId(0xa0),
         bands: Some(vec![-1, 0, 6, 5, 10]),
         clear_bass: Some(2),
     };
@@ -175,7 +175,7 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
     wait_for(&core, |list| {
         list.devices[0].equalizer
             == Some(Equalizer {
-                preset: 0xa0,
+                preset: PresetId(0xa0),
                 bands: Some(vec![-1, 0, 6, 5, 10]),
                 clear_bass: Some(2),
             })
@@ -194,13 +194,13 @@ async fn editing_a_band_on_custom_1_stays_on_custom_1() {
         ))
         .unwrap();
     wait_for(&core, |list| {
-        list.devices[0].equalizer.as_ref().map(|eq| eq.preset) == Some(0xa1)
+        list.devices[0].equalizer.as_ref().map(|eq| eq.preset) == Some(PresetId(0xa1))
     })
     .await;
     assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
 
     let custom_1 = Equalizer {
-        preset: 0xa1,
+        preset: PresetId(0xa1),
         bands: Some(vec![-10, 10, 0, -2, -10]),
         clear_bass: Some(1),
     };
@@ -253,7 +253,7 @@ async fn changes_from_sonys_app_appear_live() {
     wait_for(&core, |list| {
         list.devices[0].equalizer
             == Some(Equalizer {
-                preset: 0xa1,
+                preset: PresetId(0xa1),
                 bands: Some(vec![-10, 10, 0, -2, 2]),
                 clear_bass: Some(1),
             })
@@ -333,7 +333,7 @@ async fn xm5_on_manual() -> (Core, FakeOs, DeviceLink) {
         ))
         .unwrap();
     wait_for(&core, |list| {
-        list.devices[0].equalizer.as_ref().map(|eq| eq.preset) == Some(0xa0)
+        list.devices[0].equalizer.as_ref().map(|eq| eq.preset) == Some(PresetId(0xa0))
     })
     .await;
     assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
@@ -344,7 +344,7 @@ async fn xm5_on_manual() -> (Core, FakeOs, DeviceLink) {
 async fn changing_clear_bass_sends_it_first_in_the_curve_and_waits_for_the_device() {
     let (core, _os, mut link) = xm5_on_manual().await;
     let louder = Equalizer {
-        preset: 0xa0,
+        preset: PresetId(0xa0),
         bands: Some(vec![-10, 10, 0, -2, 2]),
         clear_bass: Some(7),
     };
@@ -388,7 +388,7 @@ async fn a_clear_bass_change_from_sonys_app_appears_live() {
     wait_for(&core, |list| {
         list.devices[0].equalizer
             == Some(Equalizer {
-                preset: 0xa0,
+                preset: PresetId(0xa0),
                 bands: Some(vec![-10, 10, 0, -2, 2]),
                 clear_bass: Some(10),
             })
@@ -551,7 +551,7 @@ async fn a_curve_edit_the_device_only_acks_is_read_back() {
     // notification; only a Preset change brings one.
     let (core, _os, mut link) = xm5_on_manual().await;
     let louder = Equalizer {
-        preset: 0xa0,
+        preset: PresetId(0xa0),
         bands: Some(vec![-10, 10, 0, -2, 2]),
         clear_bass: Some(7),
     };
@@ -588,12 +588,12 @@ async fn a_curve_edit_the_device_only_acks_is_read_back() {
 fn carried(data: &[u8]) -> Equalizer {
     match data[3..] {
         [6, clear_bass, ref bands @ ..] => Equalizer {
-            preset: data[2],
+            preset: PresetId(data[2]),
             clear_bass: Some(clear_bass as i8 - 10),
             bands: Some(bands.iter().map(|&band| band as i8 - 10).collect()),
         },
         _ => Equalizer {
-            preset: data[2],
+            preset: PresetId(data[2]),
             bands: None,
             clear_bass: None,
         },
@@ -648,7 +648,7 @@ async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
         let end = set_at.get(i + 1).copied().unwrap_or(records.len());
         replay(&mut link, &records[set_at[i]..end]).await;
         let reported = Equalizer {
-            preset,
+            preset: PresetId(preset),
             bands: Some(bands.to_vec()),
             clear_bass: Some(clear_bass),
         };
@@ -742,7 +742,7 @@ async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
     wait_for(&core, |list| {
         list.devices[0].equalizer
             == Some(Equalizer {
-                preset: 0xa0,
+                preset: PresetId(0xa0),
                 bands: Some(vec![0, -2, 7, 7, 9]),
                 clear_bass: Some(3),
             })

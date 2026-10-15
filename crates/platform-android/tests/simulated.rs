@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Device, DeviceList, DeviceState, Equalizer, Model, NoiseControlMode,
+    Battery, Command, Device, DeviceList, DeviceState, Equalizer, Model, NoiseControlMode, PresetId,
 };
 use headphone_bridge_platform_android::messages::Message;
 use headphone_bridge_platform_android::Host;
@@ -288,7 +288,7 @@ async fn the_simulated_device_keeps_its_settings_across_a_detach_like_a_real_one
 /// The Equalizer at `preset` with no curve.
 fn preset(preset: u8) -> Equalizer {
     Equalizer {
-        preset,
+        preset: PresetId(preset),
         bands: None,
         clear_bass: None,
     }
@@ -324,7 +324,7 @@ async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves
     assert_eq!(
         device.equalizer,
         Some(Equalizer {
-            preset: 0x10,
+            preset: PresetId(0x10),
             bands: Some(vec![-1, 0, 3, 5, 10]),
             clear_bass: Some(2),
         })
@@ -337,7 +337,7 @@ async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves
         .await
         .unwrap();
     let bass_boost = Equalizer {
-        preset: 0x16,
+        preset: PresetId(0x16),
         bands: Some(vec![0, 0, 0, 0, 0]),
         clear_bass: Some(7),
     };
@@ -349,7 +349,7 @@ async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves
     // only ACKs that, so the core reads it back.
     for clear_bass in [7, 3] {
         let manual = Equalizer {
-            preset: 0xa0,
+            preset: PresetId(0xa0),
             bands: Some(vec![0, 4, 0, 0, 0]),
             clear_bass: Some(clear_bass),
         };

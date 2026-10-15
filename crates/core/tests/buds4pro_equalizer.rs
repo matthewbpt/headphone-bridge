@@ -3,6 +3,7 @@ mod support;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
     Battery, Command, CommandError, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
+    PresetId,
 };
 use support::{
     buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
@@ -25,7 +26,7 @@ async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
 
 fn preset(preset: u8) -> Equalizer {
     Equalizer {
-        preset,
+        preset: PresetId(preset),
         bands: None,
         clear_bass: None,
     }
@@ -62,7 +63,7 @@ async fn the_snapshot_carries_the_models_presets_and_the_reported_one() {
             presets: presets
                 .into_iter()
                 .map(|(id, name, selectable)| Preset {
-                    id,
+                    id: PresetId(id),
                     name,
                     editable: false,
                     selectable,

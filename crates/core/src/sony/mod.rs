@@ -15,7 +15,7 @@ use uuid::{uuid, Uuid};
 
 use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
-use crate::model::{Model, WH_1000XM5_BANDS};
+use crate::model::{Model, PresetId, WH_1000XM5_BANDS};
 pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, DataType, Deframer};
@@ -219,7 +219,7 @@ impl Session {
     /// by the notification that follows it. A curve that stays on its Preset
     /// brings none, so it is read back once acknowledged.
     pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
-        let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset];
+        let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset.0];
         match (&equalizer.bands, equalizer.clear_bass) {
             (Some(bands), Some(clear_bass)) => {
                 payload.push(CURVE_STEPS as u8);
@@ -437,12 +437,12 @@ fn equalizer(preset: u8, steps: &[u8]) -> Equalizer {
     };
     match steps {
         Some(steps) => Equalizer {
-            preset,
+            preset: PresetId(preset),
             clear_bass: Some(steps[0]),
             bands: Some(steps[1..].to_vec()),
         },
         None => Equalizer {
-            preset,
+            preset: PresetId(preset),
             bands: None,
             clear_bass: None,
         },
