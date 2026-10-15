@@ -41,14 +41,18 @@ export function usePendingSetting<T>(
     setError(message);
   };
 
-  useEffect(
-    () =>
-      setAsked((asked) => {
-        const i = asked.findIndex((v) => v === reported);
-        return i < 0 ? [] : asked.slice(i + 1);
-      }),
-    [reported],
-  );
+  // Settles against a change of the reported value only. React runs this
+  // effect a moment after the first render, so without the check a value
+  // asked in that moment would be dropped as if the Device had moved.
+  const settledAgainst = useRef(reported);
+  useEffect(() => {
+    if (Object.is(settledAgainst.current, reported)) return;
+    settledAgainst.current = reported;
+    setAsked((asked) => {
+      const i = asked.findIndex((v) => v === reported);
+      return i < 0 ? [] : asked.slice(i + 1);
+    });
+  }, [reported]);
 
   useEffect(() => {
     if (pending === null) return;
