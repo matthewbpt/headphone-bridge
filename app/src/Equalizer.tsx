@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { setEqualizer } from "./core";
+import { setEqualizer, whyRejected } from "./core";
 import type {
   Bands,
   Device,
@@ -9,6 +9,12 @@ import type {
   StepRange,
 } from "./deviceList";
 import { sameValue, usePendingSetting } from "./usePendingSetting";
+
+/** The reason the card gives while Equalizer Unavailable: the core's own. */
+const UNAVAILABLE = (() => {
+  const why = whyRejected("equalizerUnavailable");
+  return `${why[0].toUpperCase()}${why.slice(1)}.`;
+})();
 
 /**
  * The Equalizer card, drawn from the Model's Capability alone: a Preset
@@ -29,7 +35,7 @@ export function Equalizer({
   disabled: boolean;
 }) {
   // A Pending curve is the whole value the Device should report, so its
-  // report settles it. Only what the Model lets the app set is sent.
+  // report settles it.
   const {
     shown: shownAsked,
     pending,
@@ -37,7 +43,7 @@ export function Equalizer({
     request,
   } = usePendingSetting(
     device.equalizer,
-    (asked: EqualizerValue) => setEqualizer(device.address, settable(capability, asked)),
+    (asked: EqualizerValue) => setEqualizer(device.address, asked),
     (asked) => `${presetName(capability, asked.preset)} ${asked.bands ? "curve" : "Preset"}`,
     settles,
   );
@@ -105,9 +111,7 @@ export function Equalizer({
           onRelease={(clearBass) => requestCurve({ clearBass })}
         />
       )}
-      {device.equalizerUnavailable && (
-        <p className="hint">The Device isn't taking Equalizer changes right now.</p>
-      )}
+      {device.equalizerUnavailable && <p className="hint">{UNAVAILABLE}</p>}
       {error && (
         <p className="error" role="alert">
           {error}
@@ -239,11 +243,6 @@ function settles(asked: EqualizerValue, reported: EqualizerValue): boolean {
     (asked.bands === null || sameValue(asked.bands, reported.bands)) &&
     (asked.clearBass === null || asked.clearBass === reported.clearBass)
   );
-}
-
-/** `asked`, with what the Model doesn't let the app set left unchanged. */
-function settable(capability: EqualizerCapability, asked: EqualizerValue): EqualizerValue {
-  return { ...asked, clearBass: capability.clearBass ? asked.clearBass : null };
 }
 
 /** The Model's Preset with wire id `id`, if it lists one. */
