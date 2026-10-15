@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -13,8 +14,10 @@ import android.service.quicksettings.TileService
 import android.util.Log
 
 /**
- * The "Noise Control" Quick Settings tile. Its label is the Primary Device's
- * Chosen Mode and its subtitle the Device's name, or what an action is doing.
+ * The "Noise Control" Quick Settings tile. Its label and icon are the Primary
+ * Device's Chosen Mode and its subtitle the Device's name, or what an action
+ * is doing. Its manifest icon stays the headphones, for the Quick Settings
+ * editor.
  * Each tap steps to the next Noise Control Mode through the widget's action
  * controller, which works with the phone locked. Long-pressing it opens the
  * app, through [OpenAppActivity].
@@ -53,6 +56,7 @@ class ModeTile : TileService() {
     val look = look()
     tile.label = look.label
     tile.subtitle = look.subtitle
+    tile.icon = Icon.createWithResource(this, look.icon)
     tile.state = when (look.state) {
       TileLook.State.ACTIVE -> Tile.STATE_ACTIVE
       TileLook.State.INACTIVE -> Tile.STATE_INACTIVE

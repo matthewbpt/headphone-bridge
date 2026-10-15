@@ -1,9 +1,11 @@
 package dev.matthewbpt.headphonebridge.bluetooth
 
+import androidx.annotation.DrawableRes
 import org.json.JSONObject
 
 // The widget's and tile's copies of the shell's labels, in
-// app/src-tauri/src/labels.rs. Keep the two in step.
+// app/src-tauri/src/labels.rs, and of the App Screen's mode icons, in
+// app/src/deviceArt.tsx. Keep them in step.
 
 fun modeLabel(mode: String): String = when (mode) {
   "off" -> "Off"
@@ -11,6 +13,16 @@ fun modeLabel(mode: String): String = when (mode) {
   "ambient" -> "Ambient"
   "adaptive" -> "Adaptive"
   else -> mode
+}
+
+/** A mode's icon; null for a mode the app doesn't know. */
+@DrawableRes
+fun modeIcon(mode: String): Int? = when (mode) {
+  "off" -> R.drawable.ic_mode_off
+  "noiseCancelling" -> R.drawable.ic_mode_noise_cancelling
+  "ambient" -> R.drawable.ic_mode_ambient
+  "adaptive" -> R.drawable.ic_mode_adaptive
+  else -> null
 }
 
 /** Why an action couldn't Attach the Primary Device in time, from the latest Device list. */

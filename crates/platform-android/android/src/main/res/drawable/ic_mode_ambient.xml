@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ambient: a person under an arc of dots, after the App Screen's ModeIcon in app/src/deviceArt.tsx. Keep the two in step. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:translateX="12"
+        android:translateY="1.5">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M-3.4,9a3.4,3.4 0,1 0,6.8,0a3.4,3.4 0,1 0,-6.8,0zM-6,19.5C-6,15.6 -3.4,13.6 0,13.6C3.4,13.6 6,15.6 6,19.5Z" />
+    </group>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.65,10.5a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM4.641,6.8a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM7.35,4.091a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM11.05,3.1a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM14.75,4.091a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM17.459,6.8a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0zM18.45,10.5a0.95,0.95 0,1 0,1.9,0a0.95,0.95 0,1 0,-1.9,0z" />
+</vector>
