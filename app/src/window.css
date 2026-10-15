@@ -94,8 +94,8 @@ button {
   gap: 12px;
 }
 
-/* Only the picture gives way when the column is too tall for the window
-   (two Devices, a hint and the slider); everything else keeps its size. */
+/* Nothing gives way when the column is too tall for the window, so no card
+   ever covers the picture or the battery: the column scrolls instead. */
 .window > * {
   flex-shrink: 0;
 }
@@ -240,14 +240,12 @@ button {
   align-items: center;
   gap: 8px;
   padding: 4px 0 6px;
-  flex-shrink: 1;
-  min-height: 0;
 }
 
 .device-picture {
-  flex: 0 1 140px;
+  flex: none;
   width: 190px;
-  min-height: 96px;
+  height: 140px;
 }
 
 .status {
@@ -571,4 +569,190 @@ button {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+
+/* Equalizer: a card below the mode card, with the Preset dropdown. A picked
+   Preset is dimmed until the Device confirms it. */
+
+.equalizer {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+.equalizer__title {
+  float: left;
+  padding: 0;
+  margin: 0 4px 6px;
+}
+
+.equalizer select {
+  clear: left;
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--circle);
+  color: var(--text);
+  font: inherit;
+}
+
+.equalizer select[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.equalizer:disabled select {
+  opacity: 0.5;
+}
+
+.equalizer__bands {
+  --thumb: 20px;
+  --height: 120px;
+  position: relative;
+  display: flex;
+  margin-top: 12px;
+}
+
+/* Spans the thumbs' travel, so the line meets each knob's centre. */
+.equalizer__line {
+  position: absolute;
+  top: calc(var(--thumb) / 2);
+  left: 0;
+  width: 100%;
+  height: calc(var(--height) - var(--thumb));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.equalizer__line polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* A released curve is dimmed until the Device confirms it, like a picked
+   Preset. Dashes would break the small knobs into arcs in WebKitGTK. */
+.equalizer__bands[data-pending="true"] .equalizer__line {
+  opacity: 0.6;
+}
+
+/* Only the ring fades, so the knob still hides the line behind it. */
+.equalizer__bands[data-pending="true"],
+.equalizer__clear-bass[data-pending="true"] {
+  --knob: color-mix(in srgb, var(--accent) 60%, var(--card));
+}
+
+.equalizer__band {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Holds a Band's upright slider: as wide as a knob, as tall as the travel. */
+.equalizer__slider {
+  position: relative;
+  width: var(--thumb);
+  height: var(--height);
+}
+
+/* A horizontal slider turned a quarter anticlockwise, so its minimum is at
+   the bottom and its knob travels the same span as the line. */
+.equalizer__band input {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--height);
+  height: var(--thumb);
+  transform: translate(-50%, -50%) rotate(-90deg);
+  margin: 0;
+  background: linear-gradient(var(--track), var(--track)) center / 100% 4px no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.equalizer__band input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  position: relative;
+  z-index: 1;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--knob, var(--accent));
+  background: var(--card);
+}
+
+.equalizer__band input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--knob, var(--accent));
+  background: var(--card);
+}
+
+.equalizer__band input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.equalizer:disabled .equalizer__bands {
+  opacity: 0.5;
+}
+
+/* Clear Bass: a horizontal slider below the Bands, its knob like theirs. */
+
+.equalizer__clear-bass {
+  --thumb: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.equalizer__clear-bass input {
+  flex: 1;
+  height: var(--thumb);
+  margin: 0;
+  background: linear-gradient(var(--track), var(--track)) center / 100% 4px no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.equalizer__clear-bass input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--knob, var(--accent));
+  background: var(--card);
+}
+
+.equalizer__clear-bass input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--knob, var(--accent));
+  background: var(--card);
+}
+
+.equalizer__clear-bass input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.equalizer:disabled .equalizer__clear-bass {
+  opacity: 0.5;
 }

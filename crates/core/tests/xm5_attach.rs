@@ -60,6 +60,8 @@ async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
             ambient_level: Some(LevelRange { min: 1, max: 20 }),
             noise_cancelling_level: None,
             power_off: true,
+            // Its Presets are covered in xm5_equalizer.
+            equalizer: device.capabilities.equalizer.clone(),
         }
     );
     assert_eq!(device.battery, Some(Battery::Headphones { level: 70 }));

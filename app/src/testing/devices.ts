@@ -10,6 +10,19 @@ const buds4ProCapabilities: Capabilities = {
   ambientLevel: { min: 0, max: 4 },
   noiseCancellingLevel: { min: 0, max: 4 },
   powerOff: false,
+  equalizer: {
+    presets: [
+      { id: 0, name: "Normal", editable: false, selectable: true },
+      { id: 1, name: "Bass boost", editable: false, selectable: true },
+      { id: 2, name: "Soft", editable: false, selectable: true },
+      { id: 3, name: "Dynamic", editable: false, selectable: true },
+      { id: 4, name: "Clear", editable: false, selectable: true },
+      { id: 5, name: "Treble boost", editable: false, selectable: true },
+      { id: 7, name: "Custom", editable: false, selectable: false },
+    ],
+    bands: null,
+    clearBass: null,
+  },
 };
 
 const xm5Capabilities: Capabilities = {
@@ -17,6 +30,27 @@ const xm5Capabilities: Capabilities = {
   ambientLevel: { min: 1, max: 20 },
   noiseCancellingLevel: null,
   powerOff: true,
+  equalizer: {
+    presets: [
+      { id: 0x00, name: "Off", editable: false, selectable: true },
+      { id: 0x10, name: "Bright", editable: false, selectable: true },
+      { id: 0x11, name: "Excited", editable: false, selectable: true },
+      { id: 0x12, name: "Mellow", editable: false, selectable: true },
+      { id: 0x13, name: "Relaxed", editable: false, selectable: true },
+      { id: 0x14, name: "Vocal", editable: false, selectable: true },
+      { id: 0x15, name: "Treble Boost", editable: false, selectable: true },
+      { id: 0x16, name: "Bass Boost", editable: false, selectable: true },
+      { id: 0x17, name: "Speech", editable: false, selectable: true },
+      { id: 0xa0, name: "Manual", editable: true, selectable: true },
+      { id: 0xa1, name: "Custom 1", editable: true, selectable: true },
+      { id: 0xa2, name: "Custom 2", editable: true, selectable: true },
+    ],
+    bands: {
+      frequencies: ["400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz"],
+      range: { min: -10, max: 10 },
+    },
+    clearBass: { min: -10, max: 10 },
+  },
 };
 
 /** An Attached Galaxy Buds4 Pro in Ambient. */
@@ -32,6 +66,8 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 1,
     noiseCancellingLevel: 4,
+    equalizer: { preset: 0, bands: null, clearBass: null },
+    equalizerUnavailable: false,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,
     reportedAt: null,
@@ -52,6 +88,8 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 12,
     noiseCancellingLevel: null,
+    equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 },
+    equalizerUnavailable: false,
     battery: { kind: "headphones", level: 70 },
     powerOffFailed: false,
     reportedAt: null,
@@ -69,12 +107,15 @@ export function notAttached(device: Device, state: Device["state"]): Device {
       ambientLevel: null,
       noiseCancellingLevel: null,
       powerOff: false,
+      equalizer: null,
     },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,
     ambientLevel: null,
     noiseCancellingLevel: null,
+    equalizer: null,
+    equalizerUnavailable: false,
     battery: null,
     reportedAt: null,
   };

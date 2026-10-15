@@ -27,7 +27,8 @@ HEADER = """\
 # protocol info reply is the XM5 fw 1.1.3 one; the support function list is
 # made up but, like the real fw 2.5.1 one, lists battery 0x20 and NC/ASM 0x6b
 # (NCASM type 0x17). Battery: 70 %. Noise control: Ambient, Focus on Voice on,
-# Ambient Level 10. Then a battery notification of 69 %."""
+# Ambient Level 10. Equalizer: available, Bright, Clear Bass +2, Bands -1 0 +3 +5 +10.
+# Then a battery notification of 69 %."""
 
 # (direction, type, seq, data, comment); the model name reply identifies the
 # Model, so it and later records carry the Model's slug, as the frame log does.
@@ -51,6 +52,14 @@ STEPS = [
     (">>", MDR, 0, "66 17", "GET noise control"),
     ("<<", ACK, 1, "", None),
     ("<<", MDR, 0, "67 17 01 01 01 01 0a", None),
+    (">>", ACK, 1, "", None),
+    (">>", MDR, 1, "52 00", "GET Equalizer status"),
+    ("<<", ACK, 0, "", None),
+    ("<<", MDR, 1, "53 00 00", None),
+    (">>", ACK, 0, "", None),
+    (">>", MDR, 0, "56 00", "GET Equalizer"),
+    ("<<", ACK, 1, "", None),
+    ("<<", MDR, 0, "57 00 10 06 0c 09 0a 0d 0f 14", None),
     (">>", ACK, 1, "", None),
     ("<<", MDR, 1, "25 00 45 00", None),
     (">>", ACK, 0, "", None),

@@ -94,6 +94,26 @@ _Avoid_: ANC level, NC strength, noise reduction level
 The state of a setting value the app has asked a Device for, until the Device reports it, the request is rejected, or it times out. A Pending value is shown as if it already applied.
 _Avoid_: Optimistic, in flight, unconfirmed
 
+**Equalizer**:
+The adjustable setting that shapes a Device's tonal balance. It is always set to one Preset.
+_Avoid_: EQ, sound profile, tone
+
+**Preset**:
+A named Equalizer curve the Model offers, under the Model's own name, e.g. Bright or Dynamic. Some Presets, such as a Manual or Custom one, have Bands the listener can edit; the rest are fixed.
+_Avoid_: Profile, sound mode, custom curve
+
+**Band**:
+One adjustable frequency region of the Equalizer, expressed in the Model's own steps.
+_Avoid_: Slider, frequency, channel
+
+**Clear Bass**:
+A Model-specific bass enhancement adjusted alongside the Equalizer's Bands, expressed in the Model's own steps. It is not a Band.
+_Avoid_: Bass boost, bass level, sub-band
+
+**Equalizer Unavailable**:
+The Status of a Device that has an Equalizer Capability but currently refuses Equalizer changes, as reported by the Device itself.
+_Avoid_: Disabled, locked, unsupported
+
 **Status**:
 Read-only facts reported by a Device, such as battery charge and Effective Mode.
 _Avoid_: Info, state

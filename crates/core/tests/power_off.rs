@@ -7,8 +7,8 @@ use headphone_bridge_core::{
     Command, CommandError, Core, DeviceState, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, DeviceLink,
-    FakeOs, SAMSUNG_SERVICE,
+    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, with_equalizer_read,
+    xm5, DeviceLink, FakeOs, SAMSUNG_SERVICE,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
@@ -342,6 +342,9 @@ async fn an_unsupported_model_refuses_power_off() {
 /// An ACK for a request the app sent with sequence number 1.
 const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c];
 
+/// `EQEBB_RET_PARAM`: Off, Clear Bass and every Band at 0.
+const FLAT_OFF: [u8; 10] = [0x57, 0x00, 0x00, 0x06, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a];
+
 /// The next frame the core writes.
 async fn written(link: &mut DeviceLink) -> Vec<u8> {
     tokio::time::timeout(Duration::from_secs(5), link.written.recv())
@@ -367,7 +370,9 @@ async fn real_xm5_power_offs_replay_from_their_frame_log() {
 
     for (i, &start) in session_at.iter().enumerate() {
         let end = session_at.get(i + 1).copied().unwrap_or(records.len());
-        let session = &records[start..end];
+        // Recorded before the Equalizer was read on Attach, so re-based onto
+        // an Attach that reads it: available, Off, flat.
+        let session = &with_equalizer_read(&records[start..end], &FLAT_OFF);
         // The Power Off is the session's last sent data frame, then its ACK.
         let power_off_at = session.len() - 2;
 

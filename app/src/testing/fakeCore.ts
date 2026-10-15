@@ -124,6 +124,7 @@ export class FakeCore {
     set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
     set_ambient_level: (args) => this.record("set_ambient_level", args),
     set_noise_cancelling_level: (args) => this.record("set_noise_cancelling_level", args),
+    set_equalizer: (args) => this.record("set_equalizer", args),
     retry_attach: (args) => this.record("retry_attach", args),
     power_off: (args) => this.record("power_off", args),
     frame_log: () => Promise.resolve(this.frameLog),
@@ -188,6 +189,7 @@ export type RecordedCommand =
   | "set_noise_control_mode"
   | "set_ambient_level"
   | "set_noise_cancelling_level"
+  | "set_equalizer"
   | "retry_attach"
   | "power_off"
   | "share_frame_log";

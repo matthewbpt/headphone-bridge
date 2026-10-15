@@ -57,10 +57,28 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
-- `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
-  mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
-  exist from the frame log. No WH-1000XM5 capture exists yet.
-  - `attach`: identification by model name, support functions and battery.
+- `wh-1000xm5/`: `attach` is synthesised from libmdr's protocol definitions
+  (MIT, mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`. The `real-`
+  fixtures are from the frame log.
+  - `attach`: identification by model name, support functions, battery,
+    noise control and the Equalizer.
   - `real-attach`: a real Attach from the frame log, WH-1000XM5 firmware 2.5.1.
   - `real-noise-control`: real mode and Ambient Level sets, each confirmed by
     a notification, firmware 2.5.1.
+  - `real-noise-control` and `real-power-off` were recorded before the app
+    read the Equalizer on Attach. Their replays re-base them with
+    `support::with_equalizer_read`, which inserts synthetic reads of the
+    Equalizer's Status and params. The two reads leave the sequence numbers
+    of every later frame as recorded.
+  - `real-equalizer-presets`: from the frame log on Linux, 2026-10-12, with
+    the same protocol info as `real-attach`. An Attach that reads the
+    Equalizer, then twelve Presets picked alone, each notified with its
+    curve. It replays exactly.
+  - `real-equalizer-curve`: the same link session continued: Band and Clear
+    Bass edits, and two Noise Control Mode sets. The Device notifies an edit
+    only when it moves onto Manual from another Preset. An edit already on
+    Manual is only ACKed. It was recorded before the app read a curve back
+    after its ACK, so its replay plays the Device's side from it rather than
+    matching every frame the app sends.
+  - `real-equalizer-kept`: the next Attach, two minutes later. The Device
+    reports the last curve sent, which it had only ACKed.

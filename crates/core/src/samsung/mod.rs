@@ -6,9 +6,9 @@ pub(crate) mod frame;
 
 use uuid::{uuid, Uuid};
 
-use crate::command::NoiseControlMode;
+use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::{Battery, EffectiveModeReason};
-use crate::model::Model;
+use crate::model::{Model, PresetId};
 pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, Deframer};
@@ -16,7 +16,7 @@ use frame::{encode, Deframer};
 /// The vendor's RFCOMM service.
 pub const SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
 
-mod id {
+pub mod id {
     pub const ACK: u8 = 66;
     pub const STATUS_UPDATED: u8 = 96;
     pub const EXTENDED_STATUS_UPDATED: u8 = 97;
@@ -24,6 +24,7 @@ mod id {
     pub const NOISE_CONTROLS: u8 = 120;
     pub const NOISE_REDUCTION_LEVEL: u8 = 131;
     pub const AMBIENT_VOLUME: u8 = 132;
+    pub const EQUALIZER: u8 = 134;
     pub const MANAGER_INFO: u8 = 136;
 }
 
@@ -50,6 +51,8 @@ pub struct Session {
     /// confirms it. Kept apart from the Ambient Level's, so that sets of the
     /// two can't confirm each other.
     pending_noise_cancelling_level: Option<u8>,
+    /// The Preset the app last asked for, until the Device confirms it.
+    pending_preset: Option<PresetId>,
     /// Whether a Chosen Mode has been reported yet.
     chosen_known: bool,
 }
@@ -95,6 +98,15 @@ impl Session {
             encode(id::NOISE_REDUCTION_LEVEL, &[level]),
             Self::handshake(),
         ]
+    }
+
+    /// The frames that ask the Device to switch its Equalizer to `preset`.
+    /// Confirmed by an ACK carrying the applied Preset, following the ACK
+    /// rule of the other sets, and polled with `MANAGER_INFO` like them, as
+    /// the extended status reports the Preset too (GalaxyBudsClient).
+    pub fn set_equalizer_preset(&mut self, preset: PresetId) -> Vec<Vec<u8>> {
+        self.pending_preset = Some(preset);
+        vec![encode(id::EQUALIZER, &[preset.0]), Self::handshake()]
     }
 
     /// The update for a mode the Device reports applying while the buds are
@@ -167,6 +179,8 @@ impl Session {
                         !self.chosen_known || mode != NoiseControlMode::Off || both_worn(p[6]);
                     updates.push(self.mode_update(mode, p[6], chosen));
                 }
+                // Byte 9 is the Preset.
+                updates.push(preset_update(p[9]));
                 updates.extend(self.ambient_level(p.get(23)));
                 // Byte 24, whatever the mode (real-nc-level-0 to 4).
                 updates.extend(self.noise_cancelling_level(p.get(24)));
@@ -192,6 +206,10 @@ impl Session {
                     {
                         self.pending_noise_cancelling_level = None;
                         self.noise_cancelling_level(p.get(1)).into_iter().collect()
+                    }
+                    id::EQUALIZER if self.pending_preset == Some(PresetId(p[1])) => {
+                        self.pending_preset = None;
+                        vec![preset_update(p[1])]
                     }
                     _ => Vec::new(),
                 };
@@ -219,6 +237,17 @@ impl Session {
         }
         updates
     }
+}
+
+/// The update for a Preset the Device reports, kept raw so one the Model
+/// doesn't list is still reported. Samsung's Presets have no Bands the app
+/// can read.
+fn preset_update(preset: u8) -> Update {
+    Update::Equalizer(Equalizer {
+        preset: PresetId(preset),
+        bands: None,
+        clear_bass: None,
+    })
 }
 
 /// The Noise Control Mode a Device reports as `value`.
