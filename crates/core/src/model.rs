@@ -1,11 +1,11 @@
 //! Models on the allowlist and their Capabilities.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::command::NoiseControlMode;
 
 /// A Model the app supports. Anything else is unsupported and never written to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Model {
     GalaxyBuds4Pro,

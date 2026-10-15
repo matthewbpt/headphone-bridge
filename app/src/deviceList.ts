@@ -2,8 +2,9 @@
 export interface DeviceList {
   devices: Device[];
   /**
-   * The Primary Device's address: the Attached Device the OS plays audio
-   * through, else the most recently Attached. Null while none is Attached.
+   * The Primary Device's address: the Connected Device the OS plays audio
+   * through, else the most recently Attached or shown, whether or not it's
+   * Attached. Null while no supported Device is Connected.
    */
   primary: string | null;
 }
@@ -36,6 +37,12 @@ export interface Device {
    * after. Cleared when it is asked to Power Off again.
    */
   powerOffFailed: boolean;
+  /**
+   * When a Detached Device last reported the values it keeps, in milliseconds
+   * since the Unix epoch: they may be out of date. Null while they're current,
+   * or there are none.
+   */
+  reportedAt: number | null;
 }
 
 export type Model = "galaxyBuds4Pro" | "wh1000xm5";
@@ -45,6 +52,9 @@ export type DeviceState =
   | { kind: "attached" }
   /** Asked to Power Off and still Connected: every command is refused. */
   | { kind: "poweringOff" }
+  /** The app chose not to Attach it, so another app or device can. */
+  | { kind: "detached" }
+  /** The app can't Attach it. */
   | { kind: "notAttached"; reason: NotAttachedReason };
 
 export type NotAttachedReason =

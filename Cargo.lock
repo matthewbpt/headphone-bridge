@@ -1566,9 +1566,12 @@ name = "headphone-bridge"
 version = "0.1.0"
 dependencies = [
  "headphone-bridge-core",
+ "headphone-bridge-platform-android",
  "headphone-bridge-platform-linux",
  "headphone-bridge-platform-macos",
+ "jni",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
@@ -1582,6 +1585,20 @@ name = "headphone-bridge-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "headphone-bridge-platform-android"
+version = "0.1.0"
+dependencies = [
+ "headphone-bridge-core",
+ "jni",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
  "tokio",
  "uuid",
 ]

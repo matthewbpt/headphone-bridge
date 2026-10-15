@@ -127,7 +127,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             }
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let core = app.state::<Core>();
+                let core = app.state::<&'static Core>();
                 if let Err(error) = core.command(command.clone()).await {
                     eprintln!("couldn't send {command:?} from the tray: {error:?}");
                 }
@@ -421,6 +421,7 @@ mod tests {
                 case: None,
             }),
             power_off_failed: false,
+            reported_at: None,
         }
     }
 
@@ -476,6 +477,10 @@ mod tests {
                 "In use by another app",
             ),
             (
+                NotAttachedReason::LinkDropped,
+                "Another app or device may be using it",
+            ),
+            (
                 NotAttachedReason::BluetoothPermissionDenied,
                 "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth",
             ),
@@ -527,6 +532,7 @@ mod tests {
                 noise_cancelling_level: None,
                 battery: Some(Battery::Headphones { level: 70 }),
                 power_off_failed: false,
+                reported_at: None,
             }],
             primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
         };
@@ -586,6 +592,7 @@ mod tests {
             noise_cancelling_level: None,
             battery: Some(Battery::Headphones { level: 70 }),
             power_off_failed: false,
+            reported_at: None,
         }
     }
 

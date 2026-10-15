@@ -34,6 +34,7 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     noiseCancellingLevel: 4,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,
+    reportedAt: null,
     ...overrides,
   };
 }
@@ -53,6 +54,7 @@ export function xm5(overrides: Partial<Device> = {}): Device {
     noiseCancellingLevel: null,
     battery: { kind: "headphones", level: 70 },
     powerOffFailed: false,
+    reportedAt: null,
     ...overrides,
   };
 }
@@ -69,6 +71,7 @@ export function notAttached(device: Device, state: Device["state"]): Device {
     ambientLevel: null,
     noiseCancellingLevel: null,
     battery: null,
+    reportedAt: null,
   };
 }
 
@@ -87,3 +90,6 @@ export function only(device: Device): DeviceList {
     primary: device.state.kind === "attached" ? device.address : null,
   };
 }
+
+/** No Device Connected, as Android reports when the app can't see them. */
+export const NO_DEVICES: DeviceList = { devices: [], primary: null };

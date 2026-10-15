@@ -32,6 +32,14 @@ _Avoid_: Release, yield, disconnect, let go
 The state of a Connected Device that the app has chosen not to Attach, as opposed to one it can't Attach.
 _Avoid_: Idle, released, Not Attached (which is for when the app can't Attach)
 
+**Hold**:
+A request that keeps a Device Attached while it lasts, whatever the Attach Policy; when it ends, the Device can be Detached. A Hold is either on every Connected Device, ones that Connect later included, as the App Screen takes while it's in the foreground, or on the Primary Device alone, as a widget or tile action takes, which stays on that Device even if another becomes Primary meanwhile.
+_Avoid_: Lock, lease, claim, keep-alive
+
+**Attach Policy**:
+When the app Attaches a Connected Device that no Hold is on: **Always**, for as long as it's Connected, as on desktop; or **On request**, never, so it stays Detached and another app or device can have its control link, as on Android.
+_Avoid_: Attach mode, auto-attach
+
 **Power Off**:
 The action of switching a Device off from the app. The Device then stops being Connected of its own accord; the app can't switch it back on.
 _Avoid_: Turn off, shut down, disconnect
@@ -89,3 +97,13 @@ _Avoid_: Optimistic, in flight, unconfirmed
 **Status**:
 Read-only facts reported by a Device, such as battery charge and Effective Mode.
 _Avoid_: Info, state
+
+## The app
+
+**App Screen**:
+The app's own window on Android, as opposed to its home screen widget and Quick Settings tile.
+_Avoid_: Main screen, activity, window (on Android)
+
+**Simulated Device**:
+A Device that exists only in a debug build of the app, answering as a real Model would, so the app can be tried without Bluetooth, e.g. on the Android emulator. It's Connected while switched on, and Attached and Detached like a real Device.
+_Avoid_: Fake device, mock device, demo device

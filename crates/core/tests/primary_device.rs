@@ -39,7 +39,7 @@ async fn wait_until_attached(core: &Core, identity: &DeviceIdentity) {
 }
 
 #[tokio::test]
-async fn with_nothing_attached_there_is_no_primary_device() {
+async fn with_nothing_connected_there_is_no_primary_device() {
     let (platform, os) = fake_platform();
     let core = Core::start(platform);
 
@@ -101,8 +101,7 @@ async fn when_the_audio_output_is_not_bluetooth_the_most_recently_attached_devic
 }
 
 #[tokio::test]
-async fn when_the_audio_output_is_a_device_that_is_not_attached_the_most_recently_attached_device_is_primary(
-) {
+async fn a_device_playing_audio_is_primary_while_it_is_still_attaching() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
     let _xm5 = attach_xm5(&core, &mut os).await;
@@ -112,8 +111,7 @@ async fn when_the_audio_output_is_a_device_that_is_not_attached_the_most_recentl
 
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
 
-    let list = wait_for(&core, |list| list.devices.len() == 2).await;
-    assert_eq!(list.primary, Some(xm5().address));
+    wait_for(&core, |list| list.primary == Some(buds4pro().address)).await;
 }
 
 #[tokio::test]
@@ -157,7 +155,7 @@ async fn when_the_only_attached_device_disconnects_there_is_no_primary_device() 
 }
 
 #[tokio::test]
-async fn when_the_primary_devices_control_link_drops_the_other_attached_device_becomes_primary() {
+async fn when_the_primary_devices_control_link_drops_it_stays_primary() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
     let _buds = attach_buds4pro(&core, &mut os).await;
@@ -167,7 +165,13 @@ async fn when_the_primary_devices_control_link_drops_the_other_attached_device_b
 
     drop(xm5_link);
 
-    wait_for(&core, |list| list.primary == Some(buds4pro().address)).await;
+    let list = wait_for(&core, |list| {
+        list.devices
+            .iter()
+            .any(|device| matches!(device.state, DeviceState::NotAttached { .. }))
+    })
+    .await;
+    assert_eq!(list.primary, Some(xm5().address));
 }
 
 #[tokio::test]

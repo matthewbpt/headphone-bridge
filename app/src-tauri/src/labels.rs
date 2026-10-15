@@ -9,7 +9,10 @@ use serde::Serialize;
 
 pub const NO_DEVICE: &str = "No Device";
 
+// Only the tray uses these.
+#[cfg_attr(mobile, allow(dead_code))]
 pub const POWER_OFF: &str = "Power Off";
+#[cfg_attr(mobile, allow(dead_code))]
 pub const POWERING_OFF: &str = "Powering Off…";
 
 pub fn mode(mode: NoiseControlMode) -> &'static str {
@@ -39,7 +42,7 @@ pub fn reason(reason: &NotAttachedReason) -> String {
         }
         NotAttachedReason::ServiceNotFound => "Control service not found".into(),
         NotAttachedReason::DeviceNotConnected => "Not Connected".into(),
-        NotAttachedReason::LinkDropped => "Control link dropped".into(),
+        NotAttachedReason::LinkDropped => "Another app or device may be using it".into(),
         NotAttachedReason::NoResponse => "The Device didn't respond".into(),
         NotAttachedReason::Other(message) => message.clone(),
     }

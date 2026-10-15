@@ -11,12 +11,14 @@ pub mod platform;
 mod samsung;
 mod sony;
 mod update;
+#[doc(hidden)]
+pub mod wire;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
@@ -33,48 +35,101 @@ use update::Update;
 
 /// A running core. Dropping it stops the core.
 pub struct Core {
-    commands: mpsc::UnboundedSender<(Command, oneshot::Sender<Result<(), CommandError>>)>,
+    requests: mpsc::UnboundedSender<Request>,
     device_list: watch::Receiver<DeviceList>,
+    next_hold: AtomicU64,
+}
+
+/// What the core is asked for, in the order it's asked.
+enum Request {
+    Command(Command, oneshot::Sender<Result<(), CommandError>>),
+    /// A hold on the Device at the address, or on every Connected Device.
+    Hold(u64, Option<DeviceAddress>),
+    EndHold(u64),
+}
+
+/// A hold on every Connected Device, or on one: while any is in place on a
+/// Device, the core Attaches it, whatever its [`AttachPolicy`]. Dropping it
+/// ends the hold.
+#[must_use = "the hold ends when it's dropped"]
+pub struct Hold {
+    id: u64,
+    device: Option<DeviceAddress>,
+    requests: mpsc::UnboundedSender<Request>,
+}
+
+impl Hold {
+    /// The Device held, for a hold on the Primary Device; `None` for a hold on
+    /// every Connected Device.
+    pub fn device(&self) -> Option<&DeviceAddress> {
+        self.device.as_ref()
+    }
+}
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        // A stopped core holds nothing.
+        let _ = self.requests.send(Request::EndHold(self.id));
+    }
 }
 
 impl Core {
-    /// Starts the core on the current Tokio runtime.
+    /// Starts the core on the current Tokio runtime, Attaching every
+    /// Connected Device.
     pub fn start(platform: impl Platform) -> Core {
-        Core::start_logging(platform, FrameLog::default())
+        Core::start_with(platform, AttachPolicy::Always)
     }
 
-    /// Starts the core with the frame log already on, appending to `path`,
+    /// Starts the core on the current Tokio runtime with `policy`.
+    pub fn start_with(platform: impl Platform, policy: AttachPolicy) -> Core {
+        Core::start_logging(platform, policy, FrameLog::default())
+    }
+
+    /// Starts the core like [`Core::start`], with the frame log already on, appending to `path`,
     /// so Devices Attached at startup are logged too. The core starts even if
     /// the file can't be opened, with the frame log off.
     pub fn start_with_frame_log(
         platform: impl Platform,
         path: &Path,
     ) -> (Core, Result<(), CommandError>) {
+        Core::start_with_policy_and_frame_log(platform, AttachPolicy::Always, path)
+    }
+
+    /// Starts the core like [`Core::start_with`], with the frame log already
+    /// on, like [`Core::start_with_frame_log`].
+    pub fn start_with_policy_and_frame_log(
+        platform: impl Platform,
+        policy: AttachPolicy,
+        path: &Path,
+    ) -> (Core, Result<(), CommandError>) {
         let frame_log = FrameLog::default();
         let started = frame_log
             .start(path)
             .map_err(CommandError::frame_log_unavailable);
-        (Core::start_logging(platform, frame_log), started)
+        (Core::start_logging(platform, policy, frame_log), started)
     }
 
-    fn start_logging(platform: impl Platform, frame_log: FrameLog) -> Core {
-        let (commands, commands_rx) = mpsc::unbounded_channel();
+    fn start_logging(platform: impl Platform, policy: AttachPolicy, frame_log: FrameLog) -> Core {
+        let (requests, requests_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
         let (link_events, link_events_rx) = mpsc::unbounded_channel();
         let state = State {
             platform: Arc::new(platform),
+            policy,
             device_list: device_list_tx,
             devices: BTreeMap::new(),
             link_events,
             next_attempt: 0,
-            next_attach: 0,
+            next_recency: 0,
             audio_output: None,
             frame_log,
+            holds: BTreeMap::new(),
         };
-        tokio::spawn(state.run(commands_rx, link_events_rx));
+        tokio::spawn(state.run(requests_rx, link_events_rx));
         Core {
-            commands,
+            requests,
             device_list,
+            next_hold: AtomicU64::new(0),
         }
     }
 
@@ -83,10 +138,36 @@ impl Core {
     /// Device confirms it.
     pub async fn command(&self, command: Command) -> Result<(), CommandError> {
         let (reply, response) = oneshot::channel();
-        self.commands
-            .send((command, reply))
+        self.requests
+            .send(Request::Command(command, reply))
             .expect("core task stopped");
         response.await.expect("core task stopped")
+    }
+
+    /// Holds every Connected Device, now and as they Connect, until the
+    /// returned [`Hold`] is dropped.
+    pub fn hold_all(&self) -> Hold {
+        self.hold(None)
+    }
+
+    /// Holds the Primary Device of the latest Device list snapshot until the
+    /// returned [`Hold`] is dropped, and only that Device, even if another
+    /// becomes Primary meanwhile. `None` if there is no Primary Device.
+    pub fn hold_primary(&self) -> Option<Hold> {
+        let primary = self.device_list.borrow().primary.clone()?;
+        Some(self.hold(Some(primary)))
+    }
+
+    fn hold(&self, device: Option<DeviceAddress>) -> Hold {
+        let id = self.next_hold.fetch_add(1, Ordering::Relaxed);
+        self.requests
+            .send(Request::Hold(id, device.clone()))
+            .expect("core task stopped");
+        Hold {
+            id,
+            device,
+            requests: self.requests.clone(),
+        }
     }
 
     /// The latest Device list snapshot.
@@ -100,20 +181,35 @@ impl Core {
     }
 }
 
+/// When the core Attaches a Connected Device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttachPolicy {
+    /// For as long as it's Connected.
+    Always,
+    /// Only while a hold asks for it; otherwise it stays Detached, so another
+    /// app or device can have its control link.
+    OnRequest,
+}
+
 struct State<P> {
     platform: Arc<P>,
+    policy: AttachPolicy,
     device_list: watch::Sender<DeviceList>,
     devices: BTreeMap<DeviceAddress, Tracked>,
     link_events: mpsc::UnboundedSender<LinkEvent>,
     /// Tells apart link sessions, so events from a session that has been
     /// replaced are ignored.
     next_attempt: u64,
-    /// Orders Attaches, so the most recently Attached Device can be found.
-    next_attach: u64,
+    /// Orders Connects and Attaches, so the most recently Attached or shown
+    /// Device can be found.
+    next_recency: u64,
     /// The Bluetooth Device the OS is playing audio through, if any. It may
     /// not be Attached, or even Connected yet.
     audio_output: Option<DeviceAddress>,
     frame_log: FrameLog,
+    /// The holds in place, by id: each on one Device, or (`None`) on every
+    /// Connected Device.
+    holds: BTreeMap<u64, Option<DeviceAddress>>,
 }
 
 /// A Connected Device and its control link session, if any.
@@ -124,21 +220,45 @@ struct Tracked {
     session: Option<LinkSession>,
     /// Automatic retries since the Device was last Attached.
     retries: u32,
-    /// The Device's place in the order of Attaches, while it is Attached.
-    attach_order: Option<u64>,
+    /// When the Device was last shown or Attached, in the order of those.
+    recency: u64,
+    /// When the Device last reported something, in milliseconds since the
+    /// Unix epoch. `None` once what it reported is dropped.
+    last_report: Option<u64>,
     /// When a Device that is Powering Off, and acknowledged it or closed its
     /// control link, is given up on if it is still Connected.
     power_off_deadline: Option<Instant>,
 }
 
 impl Tracked {
-    /// Detaches the Device, closing its control link, and puts it in `state`.
-    fn detach(&mut self, state: DeviceState) {
+    /// Detaches the Device on purpose, closing its control link. It keeps
+    /// what it last reported, for the rest of its Connected spell, marked
+    /// with when it reported it.
+    fn detach(&mut self) {
+        self.device.state = DeviceState::Detached;
+        self.device.reported_at = self.last_report;
+        self.end_session();
+    }
+
+    /// Closes the Device's control link, or forgets it after it dropped, and
+    /// puts the Device in `state`, dropping what it reported.
+    fn lose_link(&mut self, state: DeviceState) {
         self.device = self.device.detached(state);
+        self.last_report = None;
+        self.end_session();
+    }
+
+    fn end_session(&mut self) {
         self.session = None;
-        self.attach_order = None;
         self.power_off_deadline = None;
     }
+}
+
+/// The wall-clock time now, in milliseconds since the Unix epoch.
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as u64)
 }
 
 /// How long a Device has to identify itself once its control link is open.
@@ -242,7 +362,7 @@ enum LinkEventKind {
 impl<P: Platform> State<P> {
     async fn run(
         mut self,
-        mut commands: mpsc::UnboundedReceiver<(Command, oneshot::Sender<Result<(), CommandError>>)>,
+        mut requests: mpsc::UnboundedReceiver<Request>,
         mut link_events: mpsc::UnboundedReceiver<LinkEvent>,
     ) {
         let mut observations = self.platform.observations();
@@ -258,9 +378,17 @@ impl<P: Platform> State<P> {
                 () = power_off_timeout => self.power_off_timed_out(),
                 Some(observation) = observations.recv() => self.observe(observation),
                 Some(event) = link_events.recv() => self.link_event(event),
-                command = commands.recv() => match command {
-                    Some((command, reply)) => {
+                request = requests.recv() => match request {
+                    Some(Request::Command(command, reply)) => {
                         let _ = reply.send(self.command(command));
+                    }
+                    Some(Request::Hold(id, device)) => {
+                        self.holds.insert(id, device);
+                        self.follow_holds();
+                    }
+                    Some(Request::EndHold(id)) => {
+                        self.holds.remove(&id);
+                        self.follow_holds();
                     }
                     None => return,
                 },
@@ -295,24 +423,29 @@ impl<P: Platform> State<P> {
             Vendor::Samsung => samsung::candidate_model(&identity.name).is_some(),
             Vendor::Sony => true,
         };
-        let state = if attach {
-            DeviceState::Attaching
-        } else {
+        let state = if !attach {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             }
+        } else if self.wants_attached(&identity.address) {
+            DeviceState::Attaching
+        } else {
+            DeviceState::Detached
         };
+        let state_is_attaching = state == DeviceState::Attaching;
         let address = identity.address.clone();
+        self.next_recency += 1;
         let tracked = Tracked {
             device: Device::unidentified(identity.address, identity.name, state),
             vendor,
             session: None,
             retries: 0,
-            attach_order: None,
+            recency: self.next_recency,
+            last_report: None,
             power_off_deadline: None,
         };
         self.devices.insert(address.clone(), tracked);
-        if attach {
+        if state_is_attaching {
             self.reattach(&address, Duration::ZERO);
         }
     }
@@ -404,16 +537,20 @@ impl<P: Platform> State<P> {
         if tracked.session.as_ref().map(|session| session.attempt) != Some(event.attempt) {
             return;
         }
+        if let LinkEventKind::Update(_) = event.kind {
+            tracked.last_report = Some(now_millis());
+        }
         let device = &mut tracked.device;
         match event.kind {
             LinkEventKind::Attaching => device.state = DeviceState::Attaching,
             LinkEventKind::Update(Update::Identified(model)) => {
+                device.forget_reported();
                 device.model = Some(model);
                 device.capabilities = model.capabilities();
                 device.state = DeviceState::Attached;
                 tracked.retries = 0;
-                tracked.attach_order = Some(self.next_attach);
-                self.next_attach += 1;
+                tracked.recency = self.next_recency;
+                self.next_recency += 1;
             }
             // The session ends straight after, with that reason.
             LinkEventKind::Update(Update::Unsupported) => {}
@@ -454,7 +591,7 @@ impl<P: Platform> State<P> {
             }
             LinkEventKind::Ended(reason) => {
                 let retry = reason.is_transient() && tracked.retries < MAX_RETRIES;
-                tracked.detach(DeviceState::NotAttached { reason });
+                tracked.lose_link(DeviceState::NotAttached { reason });
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
@@ -520,6 +657,47 @@ impl<P: Platform> State<P> {
         }
     }
 
+    /// Whether the policy, or a hold, asks for the Device at `address` to be
+    /// Attached.
+    fn wants_attached(&self, address: &DeviceAddress) -> bool {
+        self.policy == AttachPolicy::Always
+            || self
+                .holds
+                .values()
+                .any(|held| held.as_ref().is_none_or(|held| held == address))
+    }
+
+    /// Attaches every Detached Device the policy or a hold now asks for, and
+    /// Detaches every other Device.
+    fn follow_holds(&mut self) {
+        let wanted: BTreeSet<DeviceAddress> = self
+            .devices
+            .keys()
+            .filter(|address| self.wants_attached(address))
+            .cloned()
+            .collect();
+        let mut to_attach = Vec::new();
+        for (address, tracked) in &mut self.devices {
+            let wanted = wanted.contains(address);
+            match tracked.device.state {
+                DeviceState::Detached if wanted => {
+                    tracked.device.state = DeviceState::Attaching;
+                    tracked.retries = 0;
+                    to_attach.push(address.clone());
+                }
+                // A Device Powering Off is left to finish, or to fail and
+                // be Detached then.
+                DeviceState::Detached | DeviceState::PoweringOff => {}
+                ref state if state.is_unsupported_model() => {}
+                _ if !wanted => tracked.detach(),
+                _ => {}
+            }
+        }
+        for address in to_attach {
+            self.reattach(&address, Duration::ZERO);
+        }
+    }
+
     /// The earliest moment a Device that is Powering Off is given up on.
     fn power_off_deadline(&self) -> Option<Instant> {
         self.devices
@@ -532,6 +710,7 @@ impl<P: Platform> State<P> {
     /// and reports that it didn't Power Off.
     /// A Device whose control link is still open is Attached again; one
     /// whose link closed is Attached afresh, as a newly Connected Device is.
+    /// Either is Detached instead if nothing asks for it to be Attached now.
     fn power_off_timed_out(&mut self) {
         let now = Instant::now();
         let timed_out: Vec<DeviceAddress> = self
@@ -541,17 +720,21 @@ impl<P: Platform> State<P> {
             .map(|(address, _)| address.clone())
             .collect();
         for address in timed_out {
+            let wanted = self.wants_attached(&address);
             let tracked = self.devices.get_mut(&address).expect("listed above");
             let link_open = tracked.session.is_some();
-            if link_open {
+            let reattach = wanted && !link_open;
+            if !wanted {
+                tracked.detach();
+            } else if link_open {
                 tracked.device.state = DeviceState::Attached;
                 tracked.power_off_deadline = None;
             } else {
-                tracked.detach(DeviceState::Attaching);
+                tracked.lose_link(DeviceState::Attaching);
                 tracked.retries = 0;
             }
             tracked.device.power_off_failed = true;
-            if !link_open {
+            if reattach {
                 self.reattach(&address, Duration::ZERO);
             }
         }
@@ -582,22 +765,20 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// The Attached Device playing audio, or else the most recently Attached
-    /// Device.
+    /// The Connected Device playing audio, or else the most recently
+    /// Attached or shown one, whether or not it's Attached now. Never an
+    /// unsupported Model.
     fn primary(&self) -> Option<DeviceAddress> {
-        let playing = self.audio_output.as_ref().filter(|address| {
+        let candidates = || {
             self.devices
-                .get(address)
-                .is_some_and(|t| t.attach_order.is_some())
-        });
-        if let Some(address) = playing {
-            return Some(address.clone());
-        }
-        self.devices
-            .values()
-            .filter_map(|tracked| Some((tracked.attach_order?, &tracked.device.address)))
-            .max()
-            .map(|(_, address)| address.clone())
+                .values()
+                .filter(|tracked| !tracked.device.state.is_unsupported_model())
+        };
+        let playing = candidates()
+            .find(|tracked| Some(&tracked.device.address) == self.audio_output.as_ref());
+        playing
+            .or_else(|| candidates().max_by_key(|tracked| tracked.recency))
+            .map(|tracked| tracked.device.address.clone())
     }
 
     fn publish(&self) {

@@ -1,6 +1,6 @@
 import { act } from "react";
-import type { Commands } from "../core";
-import type { DeviceList, Labels } from "../deviceList";
+import type { Commands, Events, Permission, Platform } from "../core";
+import type { DeviceList, Labels, Model } from "../deviceList";
 
 /**
  * A scripted stand-in for the core, behind the Tauri commands and events the
@@ -13,21 +13,67 @@ import type { DeviceList, Labels } from "../deviceList";
  */
 export class FakeCore {
   private deviceList: DeviceList;
-  private readonly listeners = new Set<(event: { payload: DeviceList }) => void>();
+  private readonly listeners = new Map<string, Set<(event: { payload: unknown }) => void>>();
   private readonly answers = new Map<AnsweredCommand, Answer>();
   private readonly calls: Call[] = [];
   private launchAtLogin = false;
   private frameLog: string | null = null;
+  private readonly platform: Platform;
+  private nearbyDevices: Permission;
+  private appSettingsOpens = 0;
+  /** The Simulated Device's Model, or null while it's off; undefined where the shell has none. */
+  private simulated: Model | null | undefined;
 
-  constructor(deviceList: DeviceList) {
+  /**
+   * A core in the desktop app, unless `platform` says otherwise, with the
+   * Nearby devices permission granted unless `nearbyDevices` says otherwise,
+   * whose shell has a Simulated Device only if `simulatedDevice` says so, as
+   * a debug Android build's does.
+   */
+  constructor(
+    deviceList: DeviceList,
+    {
+      platform = "desktop",
+      nearbyDevices = "granted",
+      simulatedDevice = false,
+    }: { platform?: Platform; nearbyDevices?: Permission; simulatedDevice?: boolean } = {},
+  ) {
     this.deviceList = structuredClone(deviceList);
+    this.platform = platform;
+    this.nearbyDevices = nearbyDevices;
+    this.simulated = simulatedDevice ? null : undefined;
+  }
+
+  /** The Simulated Device's Model, or null while it's off. */
+  simulatedDevice(): Model | null | undefined {
+    return this.simulated;
   }
 
   /** Emits a new Device list snapshot, as the core does after every change. */
   emit(deviceList: DeviceList) {
     this.deviceList = structuredClone(deviceList);
+    this.send("device-list", deviceList);
+  }
+
+  /**
+   * Changes the Nearby devices permission, as the listener does in the app's
+   * Android settings, and reports it as the app does on coming back.
+   */
+  setNearbyDevices(permission: Permission) {
+    this.nearbyDevices = permission;
+    this.send("nearby-devices-permission", permission);
+  }
+
+  /** How many times the window opened the app's Android settings. */
+  appSettingsOpened(): number {
+    return this.appSettingsOpens;
+  }
+
+  private send<E extends keyof Events>(event: E, payload: Events[E]) {
     act(() => {
-      for (const listener of this.listeners) listener({ payload: structuredClone(deviceList) });
+      for (const listener of this.listeners.get(event) ?? []) {
+        listener({ payload: structuredClone(payload) });
+      }
     });
   }
 
@@ -73,6 +119,7 @@ export class FakeCore {
     [C in keyof Commands]: (args: Commands[C]["args"]) => Promise<Commands[C]["result"]>;
   } = {
     labels: () => Promise.resolve(structuredClone(LABELS)),
+    platform: () => Promise.resolve(this.platform),
     device_list: () => Promise.resolve(structuredClone(this.deviceList)),
     set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
     set_ambient_level: (args) => this.record("set_ambient_level", args),
@@ -86,13 +133,29 @@ export class FakeCore {
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
+    share_frame_log: (args) => this.record("share_frame_log", args),
+    nearby_devices_permission: () => Promise.resolve(this.nearbyDevices),
+    open_app_settings: () => {
+      this.appSettingsOpens += 1;
+      return Promise.resolve();
+    },
+    simulated_device: () =>
+      this.simulated === undefined
+        ? Promise.reject("command simulated_device not found")
+        : Promise.resolve(this.simulated),
+    set_simulated_device: ({ model }) => {
+      if (this.simulated === undefined) return Promise.reject("command set_simulated_device not found");
+      this.simulated = model;
+      return Promise.resolve();
+    },
   };
 
   /** The window's `listen`, for `@tauri-apps/api/event`. */
-  listen(event: string, handler: (event: { payload: DeviceList }) => void): () => void {
-    if (event !== "device-list") return () => {};
-    this.listeners.add(handler);
-    return () => this.listeners.delete(handler);
+  listen(event: string, handler: (event: { payload: unknown }) => void): () => void {
+    const listeners = this.listeners.get(event) ?? new Set();
+    this.listeners.set(event, listeners);
+    listeners.add(handler);
+    return () => listeners.delete(handler);
   }
 
   /** The OS login item, for `@tauri-apps/plugin-autostart`. */
@@ -125,7 +188,8 @@ export type RecordedCommand =
   | "set_ambient_level"
   | "set_noise_cancelling_level"
   | "retry_attach"
-  | "power_off";
+  | "power_off"
+  | "share_frame_log";
 
 /** The commands a test can tell the fake core how to answer. */
 type AnsweredCommand = RecordedCommand | "set_frame_log";
@@ -163,7 +227,7 @@ export const LABELS: Labels = {
     },
     { reason: { kind: "serviceNotFound" }, text: "Control service not found" },
     { reason: { kind: "deviceNotConnected" }, text: "Not Connected" },
-    { reason: { kind: "linkDropped" }, text: "Control link dropped" },
+    { reason: { kind: "linkDropped" }, text: "Another app or device may be using it" },
     { reason: { kind: "noResponse" }, text: "The Device didn't respond" },
   ],
 };

@@ -32,7 +32,7 @@ Lines starting with `#` are comments. The parser is
 
 Switch on **Developer › Frame log** in the window. Frames are appended to
 `frame-log.frames` in the app's log directory (on macOS
-`~/Library/Logs/io.github.matthewbpt.headphone-bridge/`); the window shows the full path. Each
+`~/Library/Logs/dev.matthewbpt.headphonebridge/`); the window shows the full path. Each
 time the log is switched on it adds a `# Headphone Bridge frame log` comment,
 and one file can hold several link sessions and Devices. Cut out the session
 you want, add a comment saying what happened, and save it here as a `.frames`

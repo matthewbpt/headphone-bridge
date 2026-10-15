@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import type { DeviceList, Labels, NoiseControlMode } from "./deviceList";
+import type { DeviceList, Labels, Model, NoiseControlMode } from "./deviceList";
 
 // The window's only way in to the core: its commands, as named and typed
 // functions, and the hooks that follow its snapshots, labels and frame log.
@@ -14,6 +14,7 @@ import type { DeviceList, Labels, NoiseControlMode } from "./deviceList";
  */
 export type Commands = {
   labels: { args: Record<string, never>; result: Labels };
+  platform: { args: Record<string, never>; result: Platform };
   device_list: { args: Record<string, never>; result: DeviceList };
   set_noise_control_mode: { args: { address: string; mode: NoiseControlMode }; result: void };
   set_ambient_level: { args: { address: string; level: number }; result: void };
@@ -22,7 +23,31 @@ export type Commands = {
   power_off: { args: { address: string }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
+  share_frame_log: { args: Record<string, never>; result: void };
+  nearby_devices_permission: { args: Record<string, never>; result: Permission };
+  open_app_settings: { args: Record<string, never>; result: void };
+  /** Debug Android builds alone: release builds and desktop don't have them. */
+  simulated_device: { args: Record<string, never>; result: Model | null };
+  set_simulated_device: { args: { model: Model | null }; result: void };
 };
+
+/**
+ * Every event the core sends the window, by name, with its payload. Exported
+ * for the fake core alone.
+ */
+export type Events = {
+  "device-list": DeviceList;
+  "nearby-devices-permission": Permission;
+};
+
+/** Which kind of app the window is in: some settings exist only on one. */
+export type Platform = "desktop" | "android";
+
+/**
+ * Whether Android lets the app use Bluetooth: the Nearby devices permission.
+ * Without it the app can't see any Device.
+ */
+export type Permission = "granted" | "refused";
 
 /** Why the core rejected a command before sending anything. */
 export type CommandError =
@@ -35,17 +60,23 @@ export type CommandError =
   | "settingsNotReported"
   | { frameLogUnavailable: string };
 
-/** Each reason the core gives, as the name it's sent under. */
-type CommandErrorKey = CommandError extends infer E ? (E extends string ? E : keyof E) : never;
+/** Why the shell couldn't hand the frame log to Android's share sheet. */
+export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string };
+
+/** Why a command was rejected, by the core or the shell. */
+type Rejection = CommandError | ShareError;
+
+/** Each reason given, as the name it's sent under. */
+type RejectionKey = Rejection extends infer E ? (E extends string ? E : keyof E) : never;
 
 /**
  * Each reason in words, for the listener. A reason that carries a message is
- * worded from it. The type makes every reason in `CommandError` need words.
+ * worded from it. The type makes every reason in `Rejection` need words.
  */
 const WORDS: {
-  [K in CommandErrorKey]: K extends CommandError
+  [K in RejectionKey]: K extends Rejection
     ? string
-    : (message: Extract<CommandError, Record<K, unknown>>[K]) => string;
+    : (message: Extract<Rejection, Record<K, unknown>>[K]) => string;
 } = {
   unknownDevice: "the Device isn't Connected",
   notAttached: "the Device isn't Attached",
@@ -55,6 +86,9 @@ const WORDS: {
   outOfRange: "that value is outside the Model's range",
   settingsNotReported: "the Device hasn't reported its settings yet",
   frameLogUnavailable: (message) => message,
+  frameLogOff: "the frame log is off",
+  frameLogEmpty: "it's empty until a Device is Attached",
+  shareFailed: (message) => message,
 };
 
 /**
@@ -77,7 +111,7 @@ function reasonOf(error: unknown): [key: string, message?: unknown] | null {
 function inWords(error: unknown): string {
   const reason = reasonOf(error);
   if (reason && Object.hasOwn(WORDS, reason[0])) {
-    const words = WORDS[reason[0] as CommandErrorKey];
+    const words = WORDS[reason[0] as RejectionKey];
     if (typeof words === "string" && reason.length === 1) return words;
     if (typeof words === "function" && reason.length === 2) return words(reason[1] as never);
   }
@@ -136,6 +170,14 @@ function setFrameLog(enabled: boolean): Promise<string | null> {
 }
 
 /**
+ * Hands the frame log file to Android's share sheet. Rejects, with why in
+ * words, while the frame log is off or empty.
+ */
+export function shareFrameLog(): Promise<void> {
+  return send("share_frame_log", {});
+}
+
+/**
  * The frame log's file: null while it's off, undefined until it's known. Turning
  * it on or off through `setEnabled` follows the file; when the core rejects
  * that, it rejects with why, in words, and the file is unchanged.
@@ -150,6 +192,64 @@ export function useFrameLog(): {
   }, []);
   const setEnabled = useCallback((enabled: boolean) => setFrameLog(enabled).then(setFile), []);
   return { file, setEnabled };
+}
+
+/**
+ * The Simulated Device, a stand-in for headphones on the emulator: the Model
+ * it answers as, or null while it's off. Undefined until known, and for good
+ * where the shell has none, as in release builds.
+ */
+export function useSimulatedDevice(): {
+  model: Model | null | undefined;
+  simulate: (model: Model | null) => Promise<void>;
+} {
+  const [model, setModel] = useState<Model | null | undefined>(undefined);
+  useEffect(() => {
+    send("simulated_device", {}).then(setModel, () => {});
+  }, []);
+  const simulate = useCallback(
+    (model: Model | null) => send("set_simulated_device", { model }).then(() => setModel(model)),
+    [],
+  );
+  return { model, simulate };
+}
+
+/** Which kind of app the window is in, or null until it's known. */
+export function usePlatform(): Platform | null {
+  const [platform, setPlatform] = useState<Platform | null>(null);
+  useEffect(() => {
+    send("platform", {}).then(setPlatform);
+  }, []);
+  return platform;
+}
+
+/**
+ * The Nearby devices permission, or null until it's known or when the app
+ * isn't on Android. It follows the listener granting or refusing it in the
+ * app's Android settings.
+ */
+export function useNearbyDevicesPermission(platform: Platform | null): Permission | null {
+  const [permission, setPermission] = useState<Permission | null>(null);
+  useEffect(() => {
+    if (platform !== "android") return;
+    let receivedEvent = false;
+    const unlisten = listen<Permission>("nearby-devices-permission", (event) => {
+      receivedEvent = true;
+      setPermission(event.payload);
+    });
+    send("nearby_devices_permission", {}).then((current) => {
+      if (!receivedEvent) setPermission(current);
+    });
+    return () => {
+      unlisten.then((stop) => stop());
+    };
+  }, [platform]);
+  return permission;
+}
+
+/** Opens the app's page in Android's settings, where the listener can grant permissions. */
+export function openAppSettings(): Promise<void> {
+  return send("open_app_settings", {});
 }
 
 /** The labels, or null until they arrive. */

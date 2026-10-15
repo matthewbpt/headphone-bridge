@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
-import { BUDS_ADDRESS, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
+import { BUDS_ADDRESS, NO_DEVICES, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
 
@@ -753,6 +753,32 @@ describe("a Device that isn't Attached", () => {
     expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
   });
 
+  it("shows a Detached Device as left for other apps, with no Retry or controls", async () => {
+    renderWindow(new FakeCore(only(reattaching(xm5(), { kind: "detached" }))));
+
+    expect(await screen.findByText("Detached, so other apps can use it")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Battery" })).not.toBeInTheDocument();
+  });
+
+  it("shows a Detached Device's last reported values as possibly out of date, with every control disabled", async () => {
+    const reportedAt = new Date(2026, 9, 14, 9, 5).getTime();
+    renderWindow(
+      new FakeCore(only(xm5({ chosenMode: "ambient", state: { kind: "detached" }, reportedAt }))),
+    );
+
+    expect(await screen.findByText(/^Last reported at 9:05.*, may be out of date$/)).toBeVisible();
+    expect(screen.getByText("Detached, so other apps can use it")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Battery" })).toHaveTextContent(/^70%$/);
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    for (const radio of radios) expect(radio).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /^Ambient/ })).toBeChecked();
+    expect(screen.getByRole("slider")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
   it("shows the reason and tries to Attach again on Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
@@ -764,6 +790,14 @@ describe("a Device that isn't Attached", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
 
     expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
+  });
+
+  it("says who may be using a Device whose control link dropped", async () => {
+    renderWindow(
+      new FakeCore(only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } }))),
+    );
+
+    expect(await screen.findByText("Another app or device may be using it")).toBeVisible();
   });
 
   it("shows why the core rejected Retry", async () => {
@@ -980,6 +1014,54 @@ describe("the Device switcher", () => {
   });
 });
 
+describe("the Nearby devices permission", () => {
+  const banner = () => screen.queryByRole("region", { name: "Nearby devices permission" });
+
+  it("explains, when it's refused on Android, why it's needed and links to the app's settings", async () => {
+    const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
+    renderWindow(core);
+
+    const region = await screen.findByRole("region", { name: "Nearby devices permission" });
+    expect(region).toHaveTextContent(
+      "Headphone Bridge needs the Nearby devices permission to see and control your Devices.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open app settings" }));
+
+    expect(core.appSettingsOpened()).toBe(1);
+  });
+
+  it("goes once it's granted in the app's settings, and the Devices show without a restart", async () => {
+    const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
+    renderWindow(core);
+    expect(await screen.findByRole("region", { name: "Nearby devices permission" })).toBeVisible();
+
+    core.setNearbyDevices("granted");
+    core.emit(only(buds4Pro()));
+
+    expect(banner()).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Matthew's Buds4 Pro" })).toBeVisible();
+  });
+
+  it("comes back if the permission is refused again", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await screen.findByRole("heading", { name: "Matthew's Buds4 Pro" });
+    expect(banner()).not.toBeInTheDocument();
+
+    core.setNearbyDevices("refused");
+
+    expect(await screen.findByRole("region", { name: "Nearby devices permission" })).toBeVisible();
+  });
+
+  it("never shows on desktop", async () => {
+    const core = new FakeCore(NO_DEVICES, { nearbyDevices: "refused" });
+    renderWindow(core);
+
+    await screen.findByText("No Device");
+    expect(banner()).not.toBeInTheDocument();
+  });
+});
+
 describe("Settings", () => {
   it("is collapsed, with the frame log in a further collapsed Developer section", async () => {
     const core = new FakeCore(only(buds4Pro()));
@@ -997,6 +1079,17 @@ describe("Settings", () => {
     expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
   });
 
+  it("hides Launch at login on Android, keeping the Developer section", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(await screen.findByText("Developer"));
+
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: "Launch at login" })).not.toBeInTheDocument();
+  });
+
   it("shows why the frame log couldn't be opened", async () => {
     const core = new FakeCore(only(buds4Pro()));
     core.answer("set_frame_log", { reject: { frameLogUnavailable: "Permission denied (os error 13)" } });
@@ -1010,5 +1103,103 @@ describe("Settings", () => {
       await screen.findByText("Couldn't open the frame log: Permission denied (os error 13)"),
     ).toBeVisible();
     expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeChecked();
+  });
+
+  it("switches on a Simulated Device from the Developer section of a debug Android build", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android", simulatedDevice: true });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+    const simulated = await screen.findByRole("combobox", { name: "Simulated Device" });
+    expect(simulated).toHaveValue("");
+
+    await userEvent.selectOptions(simulated, "WH-1000XM5");
+    expect(core.simulatedDevice()).toBe("wh1000xm5");
+    expect(simulated).toHaveValue("wh1000xm5");
+
+    await userEvent.selectOptions(simulated, "None");
+    expect(core.simulatedDevice()).toBeNull();
+  });
+
+  it("has no Simulated Device where the shell has none, as in release builds", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+
+    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Simulated Device" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Share frame log", () => {
+  async function openDeveloper() {
+    await userEvent.click(await screen.findByText("Settings"));
+    await userEvent.click(screen.getByText("Developer"));
+  }
+
+  it("hands the frame log to the share sheet on Android", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(core.sent()).toEqual([{ command: "share_frame_log", args: {} }]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("is disabled while the frame log is off, saying why", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    renderWindow(core);
+    await openDeveloper();
+
+    expect(screen.getByRole("button", { name: "Share frame log" })).toBeDisabled();
+    expect(screen.getByText("Turn the frame log on to share it.")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    expect(screen.getByRole("button", { name: "Share frame log" })).toBeEnabled();
+    expect(screen.queryByText("Turn the frame log on to share it.")).not.toBeInTheDocument();
+  });
+
+  it("explains that an empty frame log has nothing to share", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    core.answer("share_frame_log", { reject: "frameLogEmpty" });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't share the frame log: it's empty until a Device is Attached",
+    );
+  });
+
+  it("shows why the share sheet couldn't open", async () => {
+    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
+    core.answer("share_frame_log", { reject: { shareFailed: "No app can share files" } });
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share frame log" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't share the frame log: No app can share files",
+    );
+  });
+
+  it("isn't offered on desktop, where the file is in reach", async () => {
+    const core = new FakeCore(only(buds4Pro()));
+    renderWindow(core);
+    await openDeveloper();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Frame log" }));
+    expect(screen.getByText(/Logging frames to/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Share frame log" })).not.toBeInTheDocument();
   });
 });
