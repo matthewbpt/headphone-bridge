@@ -180,30 +180,22 @@ pub struct Bands {
     pub range: StepRange,
 }
 
-/// A signed setting's steps in the Model's own units, both ends included.
+/// A setting's steps in the Model's own units, both ends included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct StepRange {
-    pub min: i8,
-    pub max: i8,
+pub struct Steps<T> {
+    pub min: T,
+    pub max: T,
 }
 
-impl StepRange {
+impl<T: PartialOrd> Steps<T> {
     /// Whether `step` is one of the range's steps.
-    pub fn contains(self, step: i8) -> bool {
-        (self.min..=self.max).contains(&step)
+    pub fn contains(self, step: T) -> bool {
+        self.min <= step && step <= self.max
     }
 }
 
-/// A level Capability's steps in the Model's own units, both ends included.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct LevelRange {
-    pub min: u8,
-    pub max: u8,
-}
+/// A level Capability's steps.
+pub type LevelRange = Steps<u8>;
 
-impl LevelRange {
-    /// Whether `level` is one of the range's steps.
-    pub fn contains(self, level: u8) -> bool {
-        (self.min..=self.max).contains(&level)
-    }
-}
+/// A signed setting's steps, such as a Band's or Clear Bass.
+pub type StepRange = Steps<i8>;

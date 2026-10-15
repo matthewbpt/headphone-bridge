@@ -29,7 +29,9 @@ pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
 use frame_log::{Direction, FrameLog};
-pub use model::{Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, StepRange};
+pub use model::{
+    Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, StepRange, Steps,
+};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
 

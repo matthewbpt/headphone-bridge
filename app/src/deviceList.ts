@@ -113,27 +113,27 @@ export interface Bands {
   range: StepRange;
 }
 
-/** A signed setting's steps in the Model's own units, both ends included. */
-export interface StepRange {
+/** A setting's steps in the Model's own units, both ends included. */
+export interface Steps {
   min: number;
   max: number;
 }
+
+/** A signed setting's steps, such as a Band's or Clear Bass. */
+export type StepRange = Steps;
 
 /** An Equalizer's settings, as reported by a Device or asked of it. */
 export interface Equalizer {
   /** The Preset's wire id: possibly one the Model's Capability doesn't list. */
   preset: number;
-  /** Each Band's value, lowest first. Null when not reported, or left unchanged by a set. */
+  /** Each Band's value, lowest first. Null when not reported, or for a set of the Preset alone. */
   bands: number[] | null;
-  /** Null when not reported, or left unchanged by a set. */
+  /** Null as for the Bands. A Model with both is set with both or neither. */
   clearBass: number | null;
 }
 
-/** A level Capability's steps in the Model's own units, both ends included. */
-export interface LevelRange {
-  min: number;
-  max: number;
-}
+/** A level Capability's steps. */
+export type LevelRange = Steps;
 
 /** Percentages; for earbuds, null where the level is unknown. */
 export type Battery =
