@@ -144,8 +144,9 @@ commits since the last release (a `fix` bumps the patch, a `feat` the minor,
 and a `!` or `BREAKING CHANGE:` footer the major), writes it into every file
 that carries it (`tauri.conf.json`, `app/package.json` and its lockfile,
 each crate's `Cargo.toml` and `Cargo.lock`), and adds a `CHANGELOG.md`
-entry. The files are listed in `release-please-config.json`; add any new
-crate there too. The first release is `0.1.0`.
+entry. The files are listed in `release-please-config.json`; add a new
+crate there twice, as its own `Cargo.toml` entry and to the `Cargo.lock`
+filter. The first release is `0.1.0`.
 
 To release, merge the release PR. release-please then tags `vX.Y.Z` and
 creates its GitHub Release with the changelog entry as notes, and the same
