@@ -25,7 +25,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "deb", "appimage"],
+    "targets": [
+      "app",
+      "deb",
+      "appimage"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,7 +42,10 @@
     },
     "linux": {
       "deb": {
-        "depends": ["bluez", "libpulse0"]
+        "depends": [
+          "bluez",
+          "libpulse0"
+        ]
       }
     },
     "android": {

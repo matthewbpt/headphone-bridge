@@ -1,17 +1,30 @@
 name: Release
 
-# Pushing a tag vX.Y.Z builds the macOS, Linux and Android apps and attaches
-# them all to one GitHub Release for that tag. Desktop and Android share the
-# version in app/src-tauri/tauri.conf.json, which the tag must match. The
-# Android version code is derived from it (major * 1000000 + minor * 1000 +
-# patch), so it increases with each release.
+# Builds the macOS, Linux and Android apps for a tag vX.Y.Z and attaches them
+# all to one GitHub Release for that tag. The Release PR workflow calls this
+# once merging a release PR has created the tag and its Release; pushing a tag
+# by hand also runs it. Desktop and Android share the version in
+# app/src-tauri/tauri.conf.json, which the tag must match. The Android version
+# code is derived from it (major * 1000000 + minor * 1000 + patch), so it
+# increases with each release.
 
 on:
   push:
     tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to build and release, e.g. v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+env:
+  # A pushed tag is the ref that started the run; a caller names it instead,
+  # since under workflow_call github.ref is the caller's branch.
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   version:
@@ -21,11 +34,13 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - id: version
         run: |
           version=$(jq -r .version app/src-tauri/tauri.conf.json)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match tauri.conf.json version $version"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG doesn't match tauri.conf.json version $version"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -36,6 +51,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -60,6 +77,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
@@ -92,6 +111,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
@@ -148,8 +169,8 @@ jobs:
 
   publish:
     # One job attaches every platform's files, so they all land on the same
-    # Release. If the Release already exists (e.g. drafted by hand), its
-    # notes are kept and the files are added to it.
+    # Release. If the Release already exists (release-please made it, or it
+    # was drafted by hand), its notes are kept and the files are added to it.
     name: Publish the GitHub Release
     needs: [version, macos-app, linux-app, android-app]
     runs-on: ubuntu-latest
@@ -157,6 +178,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -165,10 +188,10 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" files/* --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" files/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" files/* --verify-tag \
+            gh release create "$TAG" files/* --verify-tag \
               --title "Headphone Bridge ${{ needs.version.outputs.version }}" \
               --generate-notes
           fi

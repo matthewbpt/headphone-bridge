@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "initial-version": "0.1.0",
+  "bootstrap-sha": "357177613f026ac6084fe2accd7f095ca8e30fbd",
+  "pull-request-title-pattern": "chore: release ${version}",
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "json", "path": "app/src-tauri/tauri.conf.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "app/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "app/package-lock.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "app/package-lock.json", "jsonpath": "$.packages[''].version" },
+        { "type": "toml", "path": "app/src-tauri/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/core/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/platform-macos/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/platform-linux/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/platform-android/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(@.name.value == 'headphone-bridge' || @.name.value == 'headphone-bridge-core' || @.name.value == 'headphone-bridge-platform-android' || @.name.value == 'headphone-bridge-platform-linux' || @.name.value == 'headphone-bridge-platform-macos')].version" }
+      ]
+    }
+  }
+}

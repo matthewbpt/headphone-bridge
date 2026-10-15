@@ -1,0 +1,45 @@
+name: Release PR
+
+# After every merge to main, release-please opens or updates one release PR
+# from the Conventional Commits since the last release: it bumps the version
+# in every file listed in release-please-config.json and adds a CHANGELOG.md
+# entry. Merging that PR creates the tag vX.Y.Z and its GitHub Release, and
+# the release job then builds and attaches the apps.
+#
+# A tag or Release made with GITHUB_TOKEN doesn't start other workflows, so
+# the release job calls release.yml here rather than waiting for the tag.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: Open or update the release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  release:
+    name: Release
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
