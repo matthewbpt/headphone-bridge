@@ -4,7 +4,11 @@ import { usePendingSetting } from "./usePendingSetting";
 
 /** A level the Device reports as 1, stepped up by clicking. */
 function Level() {
-  const { shown, pending, request } = usePendingSetting<number>(1, () => new Promise(() => {}), String);
+  const { shown, pending, request } = usePendingSetting<number>(
+    1,
+    () => new Promise(() => {}),
+    String,
+  );
   return (
     <button aria-busy={pending !== null} onClick={() => request((shown ?? 0) + 1)}>
       {shown}

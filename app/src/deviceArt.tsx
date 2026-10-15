@@ -43,7 +43,14 @@ function Buds4Pro() {
 function Earbud() {
   return (
     <g>
-      <ellipse cx="-20" cy="25" rx="9" ry="12" fill="var(--art-tip)" transform="rotate(-20 -20 25)" />
+      <ellipse
+        cx="-20"
+        cy="25"
+        rx="9"
+        ry="12"
+        fill="var(--art-tip)"
+        transform="rotate(-20 -20 25)"
+      />
       <path
         d="M-14 34 C-24 24 -18 4 0 2 C16 0 23 12 21 23 C19 33 10 38 0 38 C-6 38 -11 37 -14 34 Z"
         fill="var(--art-body)"
@@ -88,8 +95,22 @@ function EarCup({ x, padSide }: { x: number; padSide: "left" | "right" }) {
   return (
     <>
       <rect x={x} y="88" width="38" height="56" rx="19" fill="var(--art-body)" />
-      <rect x={padSide === "right" ? x + 24 : x} y="92" width="14" height="48" rx="7" fill="var(--art-tip)" />
-      <rect x={padSide === "right" ? x + 6 : x + 26} y="96" width="6" height="36" rx="3" fill="var(--art-body-shade)" />
+      <rect
+        x={padSide === "right" ? x + 24 : x}
+        y="92"
+        width="14"
+        height="48"
+        rx="7"
+        fill="var(--art-tip)"
+      />
+      <rect
+        x={padSide === "right" ? x + 6 : x + 26}
+        y="96"
+        width="6"
+        height="36"
+        rx="3"
+        fill="var(--art-body-shade)"
+      />
     </>
   );
 }
@@ -116,7 +137,16 @@ export function BatteryGlyph({ level }: { level: number | null }) {
   const fill = level === null ? 0 : Math.max(1, (12 * level) / 100);
   return (
     <svg className="battery-glyph" viewBox="0 0 18 10" aria-hidden>
-      <rect x="0.6" y="0.6" width="14.8" height="8.8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect
+        x="0.6"
+        y="0.6"
+        width="14.8"
+        height="8.8"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
       <rect x="16" y="3.2" width="1.6" height="3.6" rx="0.8" fill="currentColor" />
       <rect className="battery-glyph__fill" x="2" y="2" width={fill} height="6" rx="1" />
     </svg>
@@ -189,7 +219,15 @@ const ICONS: Record<NoiseControlMode, ReactElement> = {
 /** The ⏻ power symbol, as on the Power Off button. */
 export function PowerIcon() {
   return (
-    <svg className="power-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+    <svg
+      className="power-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
       <path d="M12 3v8" />
       <path d="M6.3 6.8a8 8 0 1 0 11.4 0" />
     </svg>

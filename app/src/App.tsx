@@ -145,7 +145,13 @@ function Header({ device, labels }: { device: Device; labels: Labels }) {
 }
 
 /** Icon only, with no confirmation step. */
-function PowerOffButton({ device, onRefused }: { device: Device; onRefused: (error: string | null) => void }) {
+function PowerOffButton({
+  device,
+  onRefused,
+}: {
+  device: Device;
+  onRefused: (error: string | null) => void;
+}) {
   return (
     <button
       className="icon-button"
@@ -251,8 +257,11 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
           {device.reportedAt !== null && (
             <span className="muted">
               Last reported at{" "}
-              {new Date(device.reportedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}, may
-              be out of date
+              {new Date(device.reportedAt).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+              , may be out of date
             </span>
           )}
         </div>
@@ -353,7 +362,8 @@ function BatteryView({ battery }: { battery: Battery }) {
             { label: "L", level: battery.left },
             { label: "R", level: battery.right },
           ];
-  if (battery.kind === "buds" && battery.case !== null) values.push({ label: "Case", level: battery.case });
+  if (battery.kind === "buds" && battery.case !== null)
+    values.push({ label: "Case", level: battery.case });
   return (
     <div className="status battery" role="group" aria-label="Battery">
       {values.map(({ label, level }, i) => (

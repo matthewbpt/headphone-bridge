@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => ({
     // Whether this is a debug build: `vite dev`, the tests, or the production
     // build `tauri build --debug` runs with TAURI_ENV_DEBUG set. Vite drops
     // what's gated on it from release builds.
-    __DEBUG_BUILD__: JSON.stringify(mode !== "production" || process.env.TAURI_ENV_DEBUG === "true"),
+    __DEBUG_BUILD__: JSON.stringify(
+      mode !== "production" || process.env.TAURI_ENV_DEBUG === "true",
+    ),
   },
 }));
