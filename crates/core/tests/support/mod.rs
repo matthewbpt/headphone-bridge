@@ -275,7 +275,7 @@ fn sony_encode(data_type: u8, seq: u8, data: &[u8]) -> Vec<u8> {
 }
 
 /// A Sony frame's type, sequence number and data.
-fn sony_decode(frame: &[u8]) -> (u8, u8, Vec<u8>) {
+pub fn sony_decode(frame: &[u8]) -> (u8, u8, Vec<u8>) {
     let mut body = Vec::new();
     let mut escaped = frame[1..frame.len() - 1].iter();
     while let Some(&byte) = escaped.next() {

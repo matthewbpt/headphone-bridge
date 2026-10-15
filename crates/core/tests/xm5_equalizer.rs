@@ -2,12 +2,15 @@ mod support;
 
 use std::time::Duration;
 
+use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
-    Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, Preset, StepRange,
+    Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, NoiseControlMode,
+    Preset, StepRange,
 };
 use support::{
-    fake_platform, fixture, replay, sony_ack, sony_frame, wait_for, xm5, DeviceLink, FakeOs,
+    fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for, xm5, DeviceLink,
+    FakeOs,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -680,6 +683,173 @@ async fn a_curve_edit_the_device_only_acks_is_read_back() {
         .unwrap();
     wait_for(&core, |list| {
         list.devices[0].equalizer == Some(louder.clone())
+    })
+    .await;
+}
+
+/// The Equalizer a real `EQEBB_SET_PARAM` or notification carries after its
+/// command id and type: a Preset, then its curve if it has one.
+fn carried(data: &[u8]) -> Equalizer {
+    match data[3..] {
+        [6, clear_bass, ref bands @ ..] => Equalizer {
+            preset: data[2],
+            clear_bass: Some(clear_bass as i8 - 10),
+            bands: Some(bands.iter().map(|&band| band as i8 - 10).collect()),
+        },
+        _ => Equalizer {
+            preset: data[2],
+            bands: None,
+            clear_bass: None,
+        },
+    }
+}
+
+/// Attaches a core to the real WH-1000XM5 of real-equalizer-presets and plays
+/// its Preset picks, checking each Preset's curve as the Device reports it.
+/// It ends on Excited.
+async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+    let records = fixture("wh-1000xm5/real-equalizer-presets");
+    // Each Preset picked, with the Clear Bass and Bands the Device reported.
+    let picks: [(u8, i8, [i8; 5]); 12] = [
+        (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
+        (0x11, 8, [-1, 1, 0, 3, 5]),      // Excited
+        (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
+        (0x13, -9, [-3, -1, -3, -5, -8]), // Relaxed
+        (0x16, 7, [0, 0, 0, 0, 0]),       // Bass Boost
+        (0xa0, 0, [0, 0, 0, 0, 0]),       // Manual
+        (0x17, -10, [4, 3, 1, 2, -10]),   // Speech
+        (0x15, 0, [0, 0, 2, 6, 10]),      // Treble Boost
+        (0x13, -9, [-3, -1, -3, -5, -8]), // Relaxed
+        (0x00, 0, [0, 0, 0, 0, 0]),       // Off
+        (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
+        (0x11, 8, [-1, 1, 0, 3, 5]),      // Excited
+    ];
+    // The capture split before each EQEBB_SET_PARAM the app sent.
+    let set_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(7) == Some(&0x58))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(set_at.len(), picks.len());
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    // Attach reads the Equalizer: available, on Off and flat.
+    let list = wait_for(&core, |list| list.devices[0].equalizer.is_some()).await;
+    assert!(!list.devices[0].equalizer_unavailable);
+    assert_eq!(
+        list.devices[0].equalizer,
+        Some(carried(&[0x57, 0x00, 0x00, 6, 10, 10, 10, 10, 10, 10]))
+    );
+    for (i, (preset, clear_bass, bands)) in picks.into_iter().enumerate() {
+        core.command(Command::SetEqualizer(xm5().address, self::preset(preset)))
+            .await
+            .unwrap();
+        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[set_at[i]..end]).await;
+        let reported = Equalizer {
+            preset,
+            bands: Some(bands.to_vec()),
+            clear_bass: Some(clear_bass),
+        };
+        wait_for(&core, |list| {
+            list.devices[0].equalizer == Some(reported.clone())
+        })
+        .await;
+    }
+    (core, os, link)
+}
+
+#[tokio::test]
+async fn real_xm5_preset_picks_replay_from_their_frame_log() {
+    real_xm5_after_its_preset_picks().await;
+}
+
+/// The next data frame the core writes, past any ACKs.
+async fn written_data(link: &mut DeviceLink) -> (u8, Vec<u8>) {
+    loop {
+        let (data_type, seq, data) = sony_decode(&written(link).await);
+        if data_type != 0x01 {
+            return (seq, data);
+        }
+    }
+}
+
+#[tokio::test]
+async fn real_xm5_curve_edits_are_read_back_after_their_ack() {
+    use NoiseControlMode::*;
+    let (core, _os, mut link) = real_xm5_after_its_preset_picks().await;
+    // Recorded before the app read a curve back, so the Device's side is
+    // played from it: each notification as recorded, an ACK for each frame
+    // the core sends, and a reply to each read with the curve last set.
+    let mut device_seq = 0;
+    for record in fixture("wh-1000xm5/real-equalizer-curve") {
+        let (data_type, _, data) = sony_decode(&record.bytes);
+        if data_type == 0x01 {
+            continue;
+        }
+        if record.direction == Direction::Received {
+            link.send.send(record.bytes).unwrap();
+            continue;
+        }
+        // A set the app sent: sent again, with the same data. Besides the
+        // Equalizer, the listener moved to Ambient and back mid-capture.
+        let asked = carried(&data);
+        let command = match data[..] {
+            [0x68, _, _, _, 0x01, ..] => Command::SetNoiseControlMode(xm5().address, Ambient),
+            [0x68, ..] => Command::SetNoiseControlMode(xm5().address, NoiseCancelling),
+            _ => Command::SetEqualizer(xm5().address, asked.clone()),
+        };
+        let curve = matches!(command, Command::SetEqualizer(..)) && asked.bands.is_some();
+        core.command(command).await.unwrap();
+        let (seq, sent) = written_data(&mut link).await;
+        assert_eq!(sent, data, "expected {record}");
+        link.send.send(sony_ack(1 - seq)).unwrap();
+        if !curve {
+            continue;
+        }
+        // EQEBB_GET_PARAM, answered as the Device holds the curve.
+        let (seq, read) = written_data(&mut link).await;
+        assert_eq!(read, [0x56, 0x00]);
+        link.send.send(sony_ack(1 - seq)).unwrap();
+        let reply = [&[0x57][..], &data[1..]].concat();
+        link.send.send(sony_frame(device_seq, &reply)).unwrap();
+        device_seq = 1 - device_seq;
+        wait_for(&core, |list| {
+            list.devices[0].equalizer == Some(asked.clone())
+        })
+        .await;
+    }
+    // The last edit: Clear Bass +3 on Manual, only ACKed by the Device.
+    let list = core.device_list();
+    assert_eq!(
+        list.devices[0].equalizer,
+        Some(carried(&[0x58, 0x00, 0xa0, 6, 13, 10, 8, 17, 17, 19]))
+    );
+}
+
+#[tokio::test]
+async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+
+    replay(&mut link, &fixture("wh-1000xm5/real-equalizer-kept")).await;
+
+    // Manual, Clear Bass +3 and Bands 0, −2, +7, +7, +9: real-equalizer-curve's
+    // last edit.
+    wait_for(&core, |list| {
+        list.devices[0].equalizer
+            == Some(Equalizer {
+                preset: 0xa0,
+                bands: Some(vec![0, -2, 7, 7, 9]),
+                clear_bass: Some(3),
+            })
     })
     .await;
 }
