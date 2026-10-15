@@ -94,8 +94,8 @@ button {
   gap: 12px;
 }
 
-/* Only the picture gives way when the column is too tall for the window
-   (two Devices, a hint and the slider); everything else keeps its size. */
+/* Nothing gives way when the column is too tall for the window, so no card
+   ever covers the picture or the battery: the column scrolls instead. */
 .window > * {
   flex-shrink: 0;
 }
@@ -240,14 +240,12 @@ button {
   align-items: center;
   gap: 8px;
   padding: 4px 0 6px;
-  flex-shrink: 1;
-  min-height: 0;
 }
 
 .device-picture {
-  flex: 0 1 140px;
+  flex: none;
   width: 190px;
-  min-height: 96px;
+  height: 140px;
 }
 
 .status {
