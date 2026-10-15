@@ -170,5 +170,5 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" files/* --verify-tag \
               --title "Headphone Bridge ${{ needs.version.outputs.version }}" \
-              --notes-file .github/release-notes.md --generate-notes
+              --generate-notes
           fi

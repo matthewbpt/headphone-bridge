@@ -136,10 +136,8 @@ Desktop and Android share one version, `version` in
 `app/src-tauri/tauri.conf.json`. To release, bump it, merge, then push a tag
 `v` + that version (e.g. `v0.2.0`). The `Release` workflow checks the tag
 matches, builds the macOS dmg, the Linux deb and AppImage and a signed
-Android APK, and attaches them all to the tag's GitHub Release. The release
-notes are `.github/release-notes.md` followed by the generated list of
-changes; remove the "Upgrading the desktop app" section after the release
-that changes the identifier.
+Android APK, and attaches them all to the tag's GitHub Release, with
+GitHub's generated list of changes as its notes.
 
 The Android version name is the version, and the version code is
 major × 1,000,000 + minor × 1,000 + patch, so each release's code is
