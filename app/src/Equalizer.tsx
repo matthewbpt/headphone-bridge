@@ -30,7 +30,12 @@ export function Equalizer({
 }) {
   // A Pending curve is the whole value the Device should report, so its
   // report settles it. Only what the Model lets the app set is sent.
-  const { shown: shownAsked, pending, error, request } = usePendingSetting(
+  const {
+    shown: shownAsked,
+    pending,
+    error,
+    request,
+  } = usePendingSetting(
     device.equalizer,
     (asked: EqualizerValue) => setEqualizer(device.address, settable(capability, asked)),
     (asked) => `${presetName(capability, asked.preset)} ${asked.bands ? "curve" : "Preset"}`,
@@ -52,7 +57,9 @@ export function Equalizer({
    * curve can be changed, else on the Model's first editable Preset (the
    * XM5's Manual), which starts from the shown curve so nothing jumps.
    */
-  const requestCurve = (edit: Pick<EqualizerValue, "bands"> | Pick<EqualizerValue, "clearBass">) => {
+  const requestCurve = (
+    edit: Pick<EqualizerValue, "bands"> | Pick<EqualizerValue, "clearBass">,
+  ) => {
     if (shown === null) return;
     const id = preset(capability, shown.preset)?.editable
       ? shown.preset
@@ -156,7 +163,9 @@ function Curve({
               aria-label={`${frequency} Band`}
               aria-orientation="vertical"
               aria-busy={pending}
-              onChange={(e) => drag(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))}
+              onChange={(e) =>
+                drag(curve.map((value, j) => (j === i ? Number(e.target.value) : value)))
+              }
               onPointerUp={release}
               onKeyUp={release}
             />

@@ -18,9 +18,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 use headphone_bridge_core::platform::DeviceAddress;
-use headphone_bridge_core::{
-    Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode,
-};
+use headphone_bridge_core::{Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// The process's one core. On Android it's the platform adapter's instead,

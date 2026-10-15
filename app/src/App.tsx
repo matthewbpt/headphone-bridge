@@ -216,7 +216,11 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
         </fieldset>
       )}
       {(attached || poweringOff) && device.capabilities.equalizer && (
-        <Equalizer device={device} capability={device.capabilities.equalizer} disabled={poweringOff} />
+        <Equalizer
+          device={device}
+          capability={device.capabilities.equalizer}
+          disabled={poweringOff}
+        />
       )}
     </>
   );

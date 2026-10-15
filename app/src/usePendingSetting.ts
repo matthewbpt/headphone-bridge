@@ -97,6 +97,8 @@ export function sameValue(a: unknown, b: unknown): boolean {
   const keys = Object.keys(a);
   if (keys.length !== Object.keys(b).length) return false;
   return keys.every(
-    (key) => key in b && sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    (key) =>
+      key in b &&
+      sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
   );
 }

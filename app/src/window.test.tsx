@@ -709,7 +709,9 @@ describe("Equalizer", () => {
     Array.from((await preset()).querySelectorAll("option"), (option) => option.textContent);
 
   it("lists the Buds4 Pro's Presets under Samsung's names, with the current one selected", async () => {
-    renderWindow(new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } }))));
+    renderWindow(
+      new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } }))),
+    );
 
     expect(await optionNames()).toEqual([
       "Normal",
@@ -724,7 +726,9 @@ describe("Equalizer", () => {
   });
 
   it("sends a picked Preset and shows it Pending until a snapshot confirms it", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
     renderWindow(core);
 
     await userEvent.selectOptions(await preset(), "Bass boost");
@@ -745,7 +749,9 @@ describe("Equalizer", () => {
   });
 
   it("shows a Preset the app doesn't know as Unrecognised, and recovers when a known one is picked", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 9, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 9, bands: null, clearBass: null } })),
+    );
     renderWindow(core);
 
     expect(await preset()).toHaveDisplayValue("Unrecognised Preset");
@@ -768,7 +774,9 @@ describe("Equalizer", () => {
   });
 
   it("shows Custom, set from Samsung's app, without offering it to pick", async () => {
-    renderWindow(new FakeCore(only(buds4Pro({ equalizer: { preset: 7, bands: null, clearBass: null } }))));
+    renderWindow(
+      new FakeCore(only(buds4Pro({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
+    );
 
     expect(await preset()).toHaveDisplayValue("Custom");
     expect(screen.getByRole("option", { name: "Custom" })).toBeDisabled();
@@ -776,7 +784,9 @@ describe("Equalizer", () => {
   });
 
   it("keeps the newest Preset Pending until it lands, past the one picked before it", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
     renderWindow(core);
 
     await userEvent.selectOptions(await preset(), "Bass boost");
@@ -796,7 +806,9 @@ describe("Equalizer", () => {
   });
 
   it("goes back to the reported Preset when the Device doesn't confirm within 10 s", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
     renderWindow(core);
     const select = await preset();
     freezeClock();
@@ -805,25 +817,33 @@ describe("Equalizer", () => {
     expect(select).toHaveAttribute("aria-busy", "true");
 
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByRole("alert")).toHaveTextContent("Bass boost Preset wasn't confirmed by the Device");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Bass boost Preset wasn't confirmed by the Device",
+    );
     expect(select).toHaveDisplayValue("Dynamic");
     expect(select).toHaveAttribute("aria-busy", "false");
   });
 
   it("goes back to the reported Preset and shows why when the core rejects it", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
     core.answer("set_equalizer", "hold");
     renderWindow(core);
 
     await userEvent.selectOptions(await preset(), "Clear");
     await core.release("set_equalizer", { reject: "unavailablePreset" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Clear Preset: the app can't pick that Preset");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't set Clear Preset: the app can't pick that Preset",
+    );
     expect(await preset()).toHaveDisplayValue("Dynamic");
   });
 
   it("follows a Preset changed from Samsung's app", async () => {
-    const core = new FakeCore(only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })));
+    const core = new FakeCore(
+      only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
     renderWindow(core);
     expect(await preset()).toHaveDisplayValue("Dynamic");
 
@@ -861,7 +881,9 @@ describe("Equalizer", () => {
     core.emit(only(xm5({ equalizerUnavailable: false })));
 
     expect(await preset()).toBeEnabled();
-    expect(screen.queryByText("The Device isn't taking Equalizer changes right now.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("The Device isn't taking Equalizer changes right now."),
+    ).not.toBeInTheDocument();
   });
 
   it("is hidden while the Device isn't Attached", async () => {
@@ -876,7 +898,9 @@ describe("Equalizer", () => {
   });
 
   it("lists the XM5's Presets under Sony's names, with the current one selected", async () => {
-    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x12, bands: null, clearBass: null } }))));
+    renderWindow(
+      new FakeCore(only(xm5({ equalizer: { preset: 0x12, bands: null, clearBass: null } }))),
+    );
 
     expect(await optionNames()).toEqual([
       "Off",
@@ -970,10 +994,16 @@ describe("Equalizer", () => {
 
   const band = (frequency: string) => screen.findByRole("slider", { name: `${frequency} Band` });
   const bandValues = () =>
-    screen.getAllByRole<HTMLInputElement>("slider", { name: / Band$/ }).map((slider) => Number(slider.value));
+    screen
+      .getAllByRole<HTMLInputElement>("slider", { name: / Band$/ })
+      .map((slider) => Number(slider.value));
 
   it("draws the XM5's reported curve as a Band slider per frequency, lowest first", async () => {
-    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } }))));
+    renderWindow(
+      new FakeCore(
+        only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+      ),
+    );
 
     const bands = await screen.findAllByRole("slider", { name: / Band$/ });
     expect(bands.map((slider) => slider.getAttribute("aria-label"))).toEqual([
@@ -989,14 +1019,18 @@ describe("Equalizer", () => {
   });
 
   it("draws no curve until the XM5 reports its Bands", async () => {
-    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: null, clearBass: null } }))));
+    renderWindow(
+      new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: null, clearBass: null } }))),
+    );
 
     expect(await preset()).toHaveDisplayValue("Bright");
     expect(screen.queryByRole("slider", { name: / Band$/ })).not.toBeInTheDocument();
   });
 
   it("sends nothing while a Band is dragged, then the whole curve once it's released, staying on Custom 1", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await band("1 kHz");
 
@@ -1010,14 +1044,19 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: 2 } },
+        args: {
+          address: XM5_ADDRESS,
+          equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: 2 },
+        },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Custom 1");
   });
 
   it("moves a fixed Preset onto Manual when a Band is released, starting from that Preset's curve", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await band("16 kHz");
 
@@ -1027,7 +1066,10 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 } },
+        args: {
+          address: XM5_ADDRESS,
+          equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 },
+        },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Manual");
@@ -1041,7 +1083,9 @@ describe("Equalizer", () => {
   });
 
   it("sends a Band moved from the keyboard once the key is let go", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await band("400 Hz");
 
@@ -1057,7 +1101,9 @@ describe("Equalizer", () => {
   });
 
   it("keeps the newest curve Pending when two Bands are released in a row, until it lands", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
+    );
     renderWindow(core);
 
     fireEvent.change(await band("400 Hz"), { target: { value: "3" } });
@@ -1079,7 +1125,9 @@ describe("Equalizer", () => {
   });
 
   it("goes back to the reported curve and shows why when the core rejects a Band", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
+    );
     core.answer("set_equalizer", "hold");
     renderWindow(core);
 
@@ -1094,7 +1142,9 @@ describe("Equalizer", () => {
   });
 
   it("goes back to the reported curve when the Device doesn't confirm a Band within 10 s", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await band("1 kHz");
     freezeClock();
@@ -1104,14 +1154,20 @@ describe("Equalizer", () => {
     expect(bandValues()).toEqual([0, 5, 0, 0, 0]);
 
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByRole("alert")).toHaveTextContent("Manual curve wasn't confirmed by the Device");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Manual curve wasn't confirmed by the Device",
+    );
     expect(bandValues()).toEqual([0, 0, 0, 0, 0]);
   });
 
   const clearBass = () => screen.findByRole("slider", { name: "Clear Bass" });
 
   it("shows the XM5's reported Clear Bass on its own slider below the Bands", async () => {
-    renderWindow(new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } }))));
+    renderWindow(
+      new FakeCore(
+        only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+      ),
+    );
 
     const slider = await clearBass();
     expect(slider).toHaveValue("2");
@@ -1121,7 +1177,9 @@ describe("Equalizer", () => {
   });
 
   it("sends nothing while Clear Bass is dragged, then it with the Bands once it's released, staying on Custom 1", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await clearBass();
 
@@ -1135,14 +1193,19 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: -6 } },
+        args: {
+          address: XM5_ADDRESS,
+          equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: -6 },
+        },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Custom 1");
   });
 
   it("moves a fixed Preset onto Manual when Clear Bass is released, starting from that Preset's curve", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0x10, bands: [-1, 0, 3, 5, 10], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await clearBass();
 
@@ -1152,7 +1215,10 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([
       {
         command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 } },
+        args: {
+          address: XM5_ADDRESS,
+          equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 },
+        },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Manual");
@@ -1166,7 +1232,9 @@ describe("Equalizer", () => {
   });
 
   it("shows a Clear Bass change from Sony's app", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
+    );
     renderWindow(core);
     expect(await clearBass()).toHaveValue("2");
 
@@ -1176,7 +1244,9 @@ describe("Equalizer", () => {
   });
 
   it("goes back to the reported Clear Bass when the Device doesn't confirm it within 10 s", async () => {
-    const core = new FakeCore(only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })));
+    const core = new FakeCore(
+      only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
+    );
     renderWindow(core);
     const slider = await clearBass();
     freezeClock();
@@ -1186,7 +1256,9 @@ describe("Equalizer", () => {
     expect(slider).toHaveValue("9");
 
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByRole("alert")).toHaveTextContent("Manual curve wasn't confirmed by the Device");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Manual curve wasn't confirmed by the Device",
+    );
     expect(slider).toHaveValue("2");
   });
 
