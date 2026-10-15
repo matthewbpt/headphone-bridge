@@ -26,7 +26,7 @@ class StoredCopy(
     val battery: String?,
     /** The Primary Device's Noise Control Modes, in Capability order; empty if not known. */
     val modes: List<String>,
-    /** The mode to highlight. */
+    /** The mode to highlight: the Chosen Mode, or the mode an action is setting. */
     val mode: String?,
     /** When the mode and battery were last reported, in ms since the epoch, if ever. */
     val updatedAt: Long?,
@@ -34,6 +34,8 @@ class StoredCopy(
     val note: String?,
     /** Whether a tap anywhere opens the app, as there's nothing else it can do. */
     val opensApp: Boolean = false,
+    /** Whether [mode] is one an action is setting rather than the Chosen Mode. */
+    val pending: Boolean = false,
   )
 
   /** What a Device last reported. */
@@ -117,6 +119,7 @@ class StoredCopy(
         device.modes.isEmpty() -> TAP_TO_REFRESH
         else -> null
       },
+      pending = pending != null,
     )
   }
 

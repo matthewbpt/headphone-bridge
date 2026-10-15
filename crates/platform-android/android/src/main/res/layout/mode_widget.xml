@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -34,17 +35,73 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- The modes, joined by a track from the first circle's centre to the
+         last's: each slot draws the halves of it either side of its circle. As laid
+         out here, for the picker's preview, it's a Galaxy Buds4 Pro in Off.
+         Each slot is described by its label, so its images aren't; and
+         RemoteViews inflate plain ImageViews, which take android:tint. -->
     <LinearLayout
+        android:id="@+id/modes"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="8dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        tools:ignore="ContentDescription,UseAppTint">
 
-        <TextView android:id="@+id/mode0" style="@style/HbModeButton" />
-        <TextView android:id="@+id/mode1" style="@style/HbModeButton" />
-        <TextView android:id="@+id/mode2" style="@style/HbModeButton" />
-        <TextView android:id="@+id/mode3" style="@style/HbModeButton" />
+        <LinearLayout android:id="@+id/slot0" style="@style/HbModeSlot">
+            <FrameLayout style="@style/HbModeCircleBox">
+                <LinearLayout style="@style/HbModeTrackRow">
+                    <ImageView android:id="@+id/track0_start" style="@style/HbModeTrack" android:visibility="invisible" />
+                    <ImageView android:id="@+id/track0_end" style="@style/HbModeTrack" />
+                </LinearLayout>
+                <ImageView
+                    android:id="@+id/circle0"
+                    style="@style/HbModeCircle"
+                    android:background="@drawable/mode_selected"
+                    android:src="@drawable/ic_mode_off"
+                    android:tint="@color/hb_on_accent" />
+            </FrameLayout>
+            <TextView
+                android:id="@+id/label0"
+                style="@style/HbModeLabel"
+                android:text="@string/hb_preview_off"
+                android:textColor="@color/hb_accent"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/slot1" style="@style/HbModeSlot">
+            <FrameLayout style="@style/HbModeCircleBox">
+                <LinearLayout style="@style/HbModeTrackRow">
+                    <ImageView android:id="@+id/track1_start" style="@style/HbModeTrack" />
+                    <ImageView android:id="@+id/track1_end" style="@style/HbModeTrack" />
+                </LinearLayout>
+                <ImageView android:id="@+id/circle1" style="@style/HbModeCircle" android:src="@drawable/ic_mode_ambient" />
+            </FrameLayout>
+            <TextView android:id="@+id/label1" style="@style/HbModeLabel" android:text="@string/hb_preview_ambient" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/slot2" style="@style/HbModeSlot">
+            <FrameLayout style="@style/HbModeCircleBox">
+                <LinearLayout style="@style/HbModeTrackRow">
+                    <ImageView android:id="@+id/track2_start" style="@style/HbModeTrack" />
+                    <ImageView android:id="@+id/track2_end" style="@style/HbModeTrack" />
+                </LinearLayout>
+                <ImageView android:id="@+id/circle2" style="@style/HbModeCircle" android:src="@drawable/ic_mode_adaptive" />
+            </FrameLayout>
+            <TextView android:id="@+id/label2" style="@style/HbModeLabel" android:text="@string/hb_preview_adaptive" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/slot3" style="@style/HbModeSlot">
+            <FrameLayout style="@style/HbModeCircleBox">
+                <LinearLayout style="@style/HbModeTrackRow">
+                    <ImageView android:id="@+id/track3_start" style="@style/HbModeTrack" />
+                    <ImageView android:id="@+id/track3_end" style="@style/HbModeTrack" android:visibility="invisible" />
+                </LinearLayout>
+                <ImageView android:id="@+id/circle3" style="@style/HbModeCircle" android:src="@drawable/ic_mode_noise_cancelling" />
+            </FrameLayout>
+            <TextView android:id="@+id/label3" style="@style/HbModeLabel" android:text="@string/hb_preview_noise_cancelling" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout

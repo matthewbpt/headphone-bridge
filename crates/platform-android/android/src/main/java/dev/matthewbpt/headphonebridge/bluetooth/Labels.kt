@@ -4,8 +4,15 @@ import androidx.annotation.DrawableRes
 import org.json.JSONObject
 
 // The widget's and tile's copies of the shell's labels, in
-// app/src-tauri/src/labels.rs, and of the App Screen's mode icons, in
-// app/src/deviceArt.tsx. Keep them in step.
+// app/src-tauri/src/labels.rs, of the App Screen's mode icons, in
+// app/src/deviceArt.tsx, and of its mode order, in app/src/App.tsx. Keep
+// them in step.
+
+/**
+ * The App Screen's mode order, from hearing everything to hearing nothing,
+ * after MODE_ORDER in app/src/App.tsx. The core's Capability order is its own.
+ */
+val MODE_ORDER = listOf("off", "ambient", "adaptive", "noiseCancelling")
 
 fun modeLabel(mode: String): String = when (mode) {
   "off" -> "Off"
