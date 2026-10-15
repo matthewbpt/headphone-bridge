@@ -133,11 +133,37 @@ it isn't in `/Applications`). The scenes are in
 ## Releasing
 
 Desktop and Android share one version, `version` in
-`app/src-tauri/tauri.conf.json`. To release, bump it, merge, then push a tag
-`v` + that version (e.g. `v0.2.0`). The `Release` workflow checks the tag
-matches, builds the macOS dmg, the Linux deb and AppImage and a signed
-Android APK, and attaches them all to the tag's GitHub Release, with
-GitHub's generated list of changes as its notes.
+`app/src-tauri/tauri.conf.json`. Nobody edits it by hand:
+[release-please](https://github.com/googleapis/release-please-action) works
+out each release from the [Conventional Commits](docs/agents/commits.md) on
+`main`.
+
+After every merge to `main`, the `Release PR` workflow opens or updates one
+release PR, titled `chore: release X.Y.Z`. It bumps the version from the
+commits since the last release (a `fix` bumps the patch, a `feat` the minor,
+and a `!` or `BREAKING CHANGE:` footer the major), writes it into every file
+that carries it (`tauri.conf.json`, `app/package.json` and its lockfile,
+each crate's `Cargo.toml` and `Cargo.lock`), and adds a `CHANGELOG.md`
+entry. The files are listed in `release-please-config.json`; add any new
+crate there too. The first release is `0.1.0`.
+
+To release, merge the release PR. release-please then tags `vX.Y.Z` and
+creates its GitHub Release with the changelog entry as notes, and the same
+workflow runs `Release`. That workflow checks the tag matches
+`tauri.conf.json`, builds the macOS dmg, the Linux deb and AppImage and a
+signed Android APK, and attaches them all to the Release.
+
+The release PR is opened with the workflow's own token, which doesn't start
+other workflows, so CI and the commit check don't run on it by themselves.
+Close and reopen the PR to run them.
+
+As an escape hatch, pushing a tag `v` + the version in `tauri.conf.json`
+(e.g. `v0.2.0`) still runs `Release`, and creates the Release with
+GitHub's generated list of changes if there isn't one.
+
+release-please needs **Allow GitHub Actions to create and approve pull
+requests** switched on, under Settings → Actions → General → Workflow
+permissions.
 
 The Android version name is the version, and the version code is
 major × 1,000,000 + minor × 1,000 + patch, so each release's code is
