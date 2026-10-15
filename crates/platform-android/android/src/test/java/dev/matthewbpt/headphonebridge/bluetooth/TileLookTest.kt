@@ -52,8 +52,10 @@ class TileLookTest {
 
   @Test
   fun theIconIsTheChosenModes() {
-    assertEquals(R.drawable.ic_mode_ambient, tileLook(shown("ambient")).icon)
+    assertEquals(R.drawable.ic_mode_off, tileLook(shown("off")).icon)
     assertEquals(R.drawable.ic_mode_noise_cancelling, tileLook(shown("noiseCancelling")).icon)
+    assertEquals(R.drawable.ic_mode_ambient, tileLook(shown("ambient")).icon)
+    assertEquals(R.drawable.ic_mode_adaptive, tileLook(shown("adaptive")).icon)
   }
 
   @Test
