@@ -36,10 +36,10 @@
     </LinearLayout>
 
     <!-- The modes, joined by a track from the first circle's centre to the
-         last's: each slot draws the halves of it either side of its circle. As laid
-         out here, for the picker's preview, it's a Galaxy Buds4 Pro in Off.
-         Each slot is described by its label, so its images aren't; and
-         RemoteViews inflate plain ImageViews, which take android:tint. -->
+         last's: each slot draws the halves of it either side of its circle.
+         As laid out here, for the picker's preview, it's a Galaxy Buds4 Pro
+         in Off. Each slot is described by its label, so its images aren't;
+         and RemoteViews inflate plain ImageViews, which take android:tint. -->
     <LinearLayout
         android:id="@+id/modes"
         android:layout_width="match_parent"

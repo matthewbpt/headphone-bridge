@@ -6,7 +6,8 @@ import org.json.JSONObject
 // The widget's and tile's copies of the shell's labels, in
 // app/src-tauri/src/labels.rs, of the App Screen's mode icons, in
 // app/src/deviceArt.tsx, and of its mode order, in app/src/App.tsx. Keep
-// them in step.
+// them in step, and the widget picker's preview labels in
+// res/values/strings.xml.
 
 /**
  * The App Screen's mode order, from hearing everything to hearing nothing,

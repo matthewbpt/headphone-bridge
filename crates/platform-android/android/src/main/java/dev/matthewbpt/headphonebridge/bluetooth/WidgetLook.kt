@@ -10,10 +10,13 @@ data class WidgetLook(val slots: List<Slot>) {
   )
 }
 
-/** The widget's modes for what the surfaces show, in the App Screen's order. */
+/**
+ * The widget's modes for what the surfaces show, in the App Screen's order,
+ * then any the app doesn't know (a future core value) in Capability order.
+ */
 fun widgetLook(shown: StoredCopy.Shown): WidgetLook =
   WidgetLook(
-    MODE_ORDER.filter { it in shown.modes }.map { mode ->
+    (MODE_ORDER.filter { it in shown.modes } + shown.modes.filter { it !in MODE_ORDER }).map { mode ->
       val filled = mode == shown.mode
       WidgetLook.Slot(mode, modeLabel(mode), filled, pending = filled && shown.pending)
     },

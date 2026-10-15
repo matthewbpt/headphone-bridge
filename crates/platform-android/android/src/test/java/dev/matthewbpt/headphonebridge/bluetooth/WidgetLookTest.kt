@@ -33,6 +33,13 @@ class WidgetLookTest {
   }
 
   @Test
+  fun aModeTheAppDoesntKnowComesAfterTheKnownOnes() {
+    val look = widgetLook(shown(mode = "somethingNew", modes = listOf("somethingNew") + xm5))
+    assertEquals(listOf("off", "ambient", "noiseCancelling", "somethingNew"), look.slots.map { it.mode })
+    assertEquals(listOf("somethingNew"), look.slots.filter { it.filled }.map { it.mode })
+  }
+
+  @Test
   fun eachSlotIsLabelledAsTheShellLabelsItsMode() {
     assertEquals(
       listOf("Off", "Ambient", "Adaptive", "Noise Cancelling"),

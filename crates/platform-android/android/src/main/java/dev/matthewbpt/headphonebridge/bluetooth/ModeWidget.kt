@@ -19,9 +19,9 @@ import androidx.core.content.ContextCompat
 /**
  * The "Noise Control" home screen widget. It follows the Primary Device:
  * its name and battery, a round button per Noise Control Mode joined by a
- * track, as on the App Screen, and what the last action did. Tapping a mode sets it, tapping the name refreshes, and "Open"
- * opens the app. Without the Nearby devices permission, every tap opens the
- * app.
+ * track, as on the App Screen, and what the last action did. Tapping a mode
+ * sets it, tapping the name refreshes, and "Open" opens the app. Without the
+ * Nearby devices permission, every tap opens the app.
  */
 class ModeWidget : AppWidgetProvider() {
   override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
