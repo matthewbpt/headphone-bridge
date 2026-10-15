@@ -2,7 +2,16 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Battery, Device } from "./deviceList";
-import { BUDS_ADDRESS, NO_DEVICES, XM5_ADDRESS, buds4Pro, notAttached, only, reattaching, xm5 } from "./testing/devices";
+import {
+  BUDS_ADDRESS,
+  NO_DEVICES,
+  XM5_ADDRESS,
+  buds4Pro,
+  notAttached,
+  only,
+  reattaching,
+  xm5,
+} from "./testing/devices";
 import { FakeCore } from "./testing/fakeCore";
 import { renderWindow } from "./testing/renderWindow";
 
@@ -64,7 +73,9 @@ describe("Noise Control Mode", () => {
 
     await core.release("set_noise_control_mode", { reject: "notAttached" });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't set Ambient: the Device isn't Attached");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't set Ambient: the Device isn't Attached",
+    );
     expect(await mode("Ambient")).toHaveAttribute("aria-busy", "false");
     expect(await mode("Ambient")).not.toBeChecked();
     expect(await mode("Noise Cancelling")).toBeChecked();
@@ -282,7 +293,15 @@ describe("Ambient Level", () => {
     expect(slider()).toHaveAttribute("aria-busy", "true");
 
     // A snapshot from before the Device applied either level confirms nothing.
-    core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1, battery: { kind: "headphones", level: 50 } })));
+    core.emit(
+      only(
+        buds4Pro({
+          chosenMode: "ambient",
+          ambientLevel: 1,
+          battery: { kind: "headphones", level: 50 },
+        }),
+      ),
+    );
     expect(slider()).toHaveAttribute("aria-busy", "true");
 
     core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
@@ -322,7 +341,9 @@ describe("Ambient Level", () => {
     core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 2 })));
 
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByRole("alert")).toHaveTextContent("Ambient Level 1 wasn't confirmed by the Device");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Ambient Level 1 wasn't confirmed by the Device",
+    );
     expect(slider()).toHaveValue("2");
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
@@ -339,7 +360,9 @@ describe("Ambient Level", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(100));
-    expect(screen.getByRole("alert")).toHaveTextContent("Ambient Level 2 wasn't confirmed by the Device");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Ambient Level 2 wasn't confirmed by the Device",
+    );
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
@@ -352,7 +375,9 @@ describe("Ambient Level", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Less" }));
     await core.release("set_ambient_level", { reject: "notAttached" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't set Ambient Level 0: the Device isn't Attached");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't set Ambient Level 0: the Device isn't Attached",
+    );
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "false");
   });
@@ -441,9 +466,7 @@ describe("Noise Cancelling Level", () => {
     expect(await mode("Off")).toBeChecked();
     expect(slider()).not.toBeInTheDocument();
 
-    core.emit(
-      only(buds4Pro({ chosenMode: "noiseCancelling", effectiveMode: "noiseCancelling" })),
-    );
+    core.emit(only(buds4Pro({ chosenMode: "noiseCancelling", effectiveMode: "noiseCancelling" })));
     expect(slider()).toBeInTheDocument();
 
     core.emit(only(buds4Pro({ chosenMode: "adaptive", effectiveMode: "adaptive" })));
@@ -455,9 +478,7 @@ describe("Noise Cancelling Level", () => {
       new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: 3 }))),
     );
 
-    expect(
-      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
-    ).toHaveValue("3");
+    expect(await screen.findByRole("slider", { name: "Noise Cancelling Level" })).toHaveValue("3");
     expect(screen.getAllByTestId("notch")).toHaveLength(5);
     expect(screen.queryByText("3")).not.toBeInTheDocument();
   });
@@ -467,9 +488,7 @@ describe("Noise Cancelling Level", () => {
       new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel: null }))),
     );
 
-    expect(
-      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
-    ).toBeDisabled();
+    expect(await screen.findByRole("slider", { name: "Noise Cancelling Level" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Less" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
   });
@@ -502,7 +521,11 @@ describe("Noise Cancelling Level", () => {
 
   const at = (noiseCancellingLevel: number | null, battery?: Battery) =>
     only(
-      buds4Pro({ chosenMode: "noiseCancelling", noiseCancellingLevel, ...(battery && { battery }) }),
+      buds4Pro({
+        chosenMode: "noiseCancelling",
+        noiseCancellingLevel,
+        ...(battery && { battery }),
+      }),
     );
   const set = (level: number) => ({
     command: "set_noise_cancelling_level",
@@ -650,9 +673,7 @@ describe("Noise Cancelling Level", () => {
     const core = new FakeCore({ devices: [home, work], primary: BUDS_ADDRESS });
     renderWindow(core);
 
-    expect(
-      await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
-    ).toHaveValue("1");
+    expect(await screen.findByRole("slider", { name: "Noise Cancelling Level" })).toHaveValue("1");
     await userEvent.click(screen.getByRole("button", { name: "More" }));
     expect(slider()).toHaveValue("2");
 
@@ -703,7 +724,12 @@ describe("the Device picture", () => {
   it("shows a generic headphone for an unsupported Model", async () => {
     renderWindow(
       new FakeCore(
-        only(notAttached(xm5({ model: null }), { kind: "notAttached", reason: { kind: "unsupportedModel" } })),
+        only(
+          notAttached(xm5({ model: null }), {
+            kind: "notAttached",
+            reason: { kind: "unsupportedModel" },
+          }),
+        ),
       ),
     );
     expect(await picture()).toHaveAccessibleName("Headphones");
@@ -739,7 +765,9 @@ describe("the battery", () => {
   });
 
   it("shows one value for headphones", async () => {
-    expect(await battery(xm5({ battery: { kind: "headphones", level: 70 } }))).toHaveTextContent(/^70%$/);
+    expect(await battery(xm5({ battery: { kind: "headphones", level: 70 } }))).toHaveTextContent(
+      /^70%$/,
+    );
   });
 });
 
@@ -794,7 +822,9 @@ describe("a Device that isn't Attached", () => {
 
   it("says who may be using a Device whose control link dropped", async () => {
     renderWindow(
-      new FakeCore(only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } }))),
+      new FakeCore(
+        only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "linkDropped" } })),
+      ),
     );
 
     expect(await screen.findByText("Another app or device may be using it")).toBeVisible();
@@ -810,7 +840,9 @@ describe("a Device that isn't Attached", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await core.release("retry_attach", { reject: "unknownDevice" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't retry: the Device isn't Connected");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't retry: the Device isn't Connected",
+    );
   });
 
   it("shows a rejection that isn't one of the core's reasons as it is", async () => {
@@ -829,7 +861,12 @@ describe("a Device that isn't Attached", () => {
   it("shows an unsupported Model's reason without Retry", async () => {
     renderWindow(
       new FakeCore(
-        only(notAttached(xm5({ model: null }), { kind: "notAttached", reason: { kind: "unsupportedModel" } })),
+        only(
+          notAttached(xm5({ model: null }), {
+            kind: "notAttached",
+            reason: { kind: "unsupportedModel" },
+          }),
+        ),
       ),
     );
 
@@ -917,7 +954,9 @@ describe("Power Off", () => {
     await userEvent.click(await powerOff());
     await core.release("power_off", { reject: "poweringOff" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't Power Off: the Device is Powering Off");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't Power Off: the Device is Powering Off",
+    );
   });
 
   it("tells the listener a Device didn't Power Off, and enables its controls again", async () => {
@@ -972,7 +1011,9 @@ describe("the Device switcher", () => {
     const core = new FakeCore(only(buds4Pro()));
     renderWindow(core);
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Matthew's Buds4 Pro");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "Matthew's Buds4 Pro",
+    );
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
@@ -985,14 +1026,20 @@ describe("the Device switcher", () => {
       "Matthew's Buds4 Pro",
       expect.stringMatching(/^WH-1000XM5.*Primary/),
     ]);
-    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^WH-1000XM5$/);
 
     await userEvent.click(screen.getByRole("tab", { name: /Buds4 Pro/ }));
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Matthew's Buds4 Pro$/);
     expect(screen.getByRole("tab", { name: /Buds4 Pro/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: /WH-1000XM5/ })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 
   it("follows the Primary Device when the OS switches audio output, over a pick", async () => {
@@ -1000,7 +1047,9 @@ describe("the Device switcher", () => {
     renderWindow(core);
     const title = () => screen.getByRole("heading", { level: 1 });
 
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/^Matthew's Buds4 Pro$/);
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      /^Matthew's Buds4 Pro$/,
+    );
     await userEvent.click(screen.getByRole("tab", { name: /WH-1000XM5/ }));
     expect(title()).toHaveTextContent(/^WH-1000XM5$/);
 
@@ -1092,7 +1141,9 @@ describe("Settings", () => {
 
   it("shows why the frame log couldn't be opened", async () => {
     const core = new FakeCore(only(buds4Pro()));
-    core.answer("set_frame_log", { reject: { frameLogUnavailable: "Permission denied (os error 13)" } });
+    core.answer("set_frame_log", {
+      reject: { frameLogUnavailable: "Permission denied (os error 13)" },
+    });
     renderWindow(core);
 
     await userEvent.click(await screen.findByText("Settings"));

@@ -64,7 +64,12 @@ export function notAttached(device: Device, state: Device["state"]): Device {
   return {
     ...device,
     state,
-    capabilities: { noiseControlModes: [], ambientLevel: null, noiseCancellingLevel: null, powerOff: false },
+    capabilities: {
+      noiseControlModes: [],
+      ambientLevel: null,
+      noiseCancellingLevel: null,
+      powerOff: false,
+    },
     chosenMode: null,
     effectiveMode: null,
     effectiveModeReason: null,

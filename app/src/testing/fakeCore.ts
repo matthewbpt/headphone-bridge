@@ -144,7 +144,8 @@ export class FakeCore {
         ? Promise.reject("command simulated_device not found")
         : Promise.resolve(this.simulated),
     set_simulated_device: ({ model }) => {
-      if (this.simulated === undefined) return Promise.reject("command set_simulated_device not found");
+      if (this.simulated === undefined)
+        return Promise.reject("command set_simulated_device not found");
       this.simulated = model;
       return Promise.resolve();
     },

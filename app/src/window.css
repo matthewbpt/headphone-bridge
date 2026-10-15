@@ -57,7 +57,12 @@ body,
 
 body {
   margin: 0;
-  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Ubuntu, sans-serif;
+  font:
+    14px/1.35 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Ubuntu,
+    sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -386,7 +391,9 @@ button {
   border-radius: 50%;
   background: var(--circle);
   color: var(--circle-icon);
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .mode:not(:disabled):hover .mode__circle {
