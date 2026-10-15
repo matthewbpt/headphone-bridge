@@ -188,10 +188,13 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The Linux artifact keeps its deb/ and appimage/ folders, and the
+          # bundle names have spaces, so collect the files themselves.
+          mapfile -t assets < <(find files -type f)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" files/* --clobber
+            gh release upload "$TAG" "${assets[@]}" --clobber
           else
-            gh release create "$TAG" files/* --verify-tag \
+            gh release create "$TAG" "${assets[@]}" --verify-tag \
               --title "Headphone Bridge ${{ needs.version.outputs.version }}" \
               --generate-notes
           fi
