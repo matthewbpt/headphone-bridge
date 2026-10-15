@@ -3,6 +3,7 @@
   "release-type": "simple",
   "include-component-in-tag": false,
   "initial-version": "0.1.0",
+  "bootstrap-sha": "357177613f026ac6084fe2accd7f095ca8e30fbd",
   "pull-request-title-pattern": "chore: release ${version}",
   "packages": {
     ".": {
