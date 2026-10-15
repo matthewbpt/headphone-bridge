@@ -20,8 +20,8 @@ const PENDING_TIMEOUT_MS = 10_000;
  * `command` asks the Device for a value and resolves once the core accepts
  * it. `name` names a value in the errors: "<name> wasn't confirmed by the
  * Device" after 10 s, "Couldn't set <name>: <why>" when the core rejects
- * it, with the rejection in words as the why. The latest `command` and
- * `name` are always used, so neither has to be a stable reference.
+ * it, with the rejection in words as the why. The latest `command`, `name`
+ * and `settles` are always used, so none has to be a stable reference.
  */
 export function usePendingSetting<T>(
   reportedNow: T | null,
@@ -36,6 +36,8 @@ export function usePendingSetting<T>(
   commandRef.current = command;
   const nameRef = useRef(name);
   nameRef.current = name;
+  const settlesRef = useRef(settles);
+  settlesRef.current = settles;
   const pending = asked.length > 0 ? asked[asked.length - 1] : null;
   const shown = pending ?? reported;
 
@@ -53,7 +55,7 @@ export function usePendingSetting<T>(
     if (Object.is(settledAgainst.current, reported)) return;
     settledAgainst.current = reported;
     setAsked((asked) => {
-      const i = reported === null ? -1 : asked.findIndex((v) => settles(v, reported));
+      const i = reported === null ? -1 : asked.findIndex((v) => settlesRef.current(v, reported));
       return i < 0 ? [] : asked.slice(i + 1);
     });
   }, [reported]);

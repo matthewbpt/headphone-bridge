@@ -9,7 +9,10 @@ const bright = (): Curve => ({ preset: 0x10, bands: [1, 2, 3, 2, 1], clearBass: 
 const manual = (): Curve => ({ preset: 0xa0, bands: [4, 0, -2, 0, 4], clearBass: 3 });
 
 /** Renders the hook with `reported`, returning it and a way to report anew. */
-function renderCurve(reported: Curve | null, command = vi.fn(async (_: Curve) => {})) {
+function renderCurve(
+  reported: Curve | null,
+  command = vi.fn<(value: Curve) => Promise<void>>(async () => {}),
+) {
   const hook = renderHook(
     ({ reported }) => usePendingSetting(reported, command, () => "the curve"),
     { initialProps: { reported } },
