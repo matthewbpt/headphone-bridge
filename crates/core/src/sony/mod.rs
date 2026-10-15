@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 
 use uuid::{uuid, Uuid};
 
-use crate::command::{CommandError, Equalizer, NoiseControlMode};
+use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
 use crate::model::{Model, WH_1000XM5_BANDS};
 pub use crate::update::Update;
@@ -142,10 +142,6 @@ pub struct Session {
     /// field of these and sends the rest back as they were. `None` until the
     /// Device first reports them.
     noise_control: Option<NoiseControl>,
-    /// The Equalizer last reported, or since sent. Bands and Clear Bass are
-    /// sent together, so a set giving one keeps the other from here. `None`
-    /// until the Device first reports it.
-    equalizer: Option<Equalizer>,
 }
 
 impl Session {
@@ -159,7 +155,6 @@ impl Session {
             outgoing: Vec::new(),
             identified: false,
             noise_control: None,
-            equalizer: None,
         };
         session.request(vec![command::CONNECT_GET_PROTOCOL_INFO, FIXED_VALUE]);
         session
@@ -218,49 +213,32 @@ impl Session {
         self.set_noise_control(params);
     }
 
-    /// Asks the Device to set its Equalizer. A Preset alone leaves its curve
-    /// to the Device. Bands and Clear Bass are sent together, so one given
-    /// alone keeps the other as last reported or sent; with none to keep,
-    /// it is rejected as not reported and nothing is sent. A Preset change
-    /// is confirmed by the notification that follows it. A curve that stays
-    /// on its Preset brings none, so it is read back once acknowledged.
-    pub fn set_equalizer(&mut self, equalizer: &Equalizer) -> Result<(), CommandError> {
-        let curve = match (&equalizer.bands, equalizer.clear_bass) {
-            (None, None) => None,
-            (bands, clear_bass) => {
-                let kept = self.equalizer.as_ref();
-                let bands = bands.clone().or_else(|| kept?.bands.clone());
-                let clear_bass = clear_bass.or_else(|| kept?.clear_bass);
-                let (Some(bands), Some(clear_bass)) = (bands, clear_bass) else {
-                    return Err(CommandError::SettingsNotReported);
-                };
-                Some((bands, clear_bass))
-            }
-        };
+    /// Asks the Device to set its Equalizer: a Preset alone, which leaves
+    /// its curve to the Device, or with the whole curve, Bands and Clear Bass
+    /// together, as the core checks they come. A Preset change is confirmed
+    /// by the notification that follows it. A curve that stays on its Preset
+    /// brings none, so it is read back once acknowledged.
+    pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
         let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset];
-        match &curve {
-            Some((bands, clear_bass)) => {
-                payload.push(1 + bands.len() as u8);
+        match (&equalizer.bands, equalizer.clear_bass) {
+            (Some(bands), Some(clear_bass)) => {
+                payload.push(CURVE_STEPS as u8);
                 payload.extend(
-                    std::iter::once(*clear_bass)
+                    std::iter::once(clear_bass)
                         .chain(bands.iter().copied())
                         .map(|step| (step + EQUALIZER_STEP_OFFSET) as u8),
                 );
-            }
-            None => payload.push(0),
-        }
-        match curve {
-            Some((bands, clear_bass)) => {
-                self.equalizer = Some(Equalizer {
-                    preset: equalizer.preset,
-                    bands: Some(bands),
-                    clear_bass: Some(clear_bass),
-                });
                 self.request_as(payload, RequestKind::EqualizerCurve);
             }
-            None => self.request(payload),
+            (bands, clear_bass) => {
+                debug_assert!(
+                    bands.is_none() && clear_bass.is_none(),
+                    "the core sends Bands and Clear Bass together"
+                );
+                payload.push(0);
+                self.request(payload);
+            }
         }
-        Ok(())
     }
 
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
@@ -410,9 +388,7 @@ impl Session {
             [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
                 if self.identified && steps.len() == n as usize =>
             {
-                let equalizer = equalizer(preset, steps);
-                self.equalizer = Some(equalizer.clone());
-                vec![Update::Equalizer(equalizer)]
+                vec![Update::Equalizer(equalizer(preset, steps))]
             }
             _ => Vec::new(),
         }

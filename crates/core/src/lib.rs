@@ -141,9 +141,7 @@ impl Core {
         self.requests
             .send(Request::Command(command, reply))
             .expect("core task stopped");
-        // A reply handed on to a session is dropped if the session ends
-        // before answering, which leaves the Device not Attached.
-        response.await.unwrap_or(Err(CommandError::NotAttached))
+        response.await.expect("core task stopped")
     }
 
     /// Holds every Connected Device, now and as they Connect, until the
@@ -304,29 +302,41 @@ fn check_equalizer(
         .filter(|preset| preset.selectable)
         .ok_or(CommandError::UnavailablePreset)?;
     if let Some(bands) = &equalizer.bands {
-        let range = capability
+        let shape = capability
             .bands
             .as_ref()
             .ok_or(CommandError::MissingCapability)?;
-        if !preset.editable {
-            return Err(CommandError::FixedPreset);
-        }
-        if bands.len() != range.frequencies.len()
-            || !bands.iter().all(|&band| range.range.contains(band))
-        {
+        if bands.len() != shape.frequencies.len() {
             return Err(CommandError::OutOfRange);
         }
+        check_steps(Some(shape.range), preset, bands)?;
     }
     if let Some(clear_bass) = equalizer.clear_bass {
-        let range = capability
-            .clear_bass
-            .ok_or(CommandError::MissingCapability)?;
-        if !preset.editable {
-            return Err(CommandError::FixedPreset);
-        }
-        if !range.contains(clear_bass) {
-            return Err(CommandError::OutOfRange);
-        }
+        check_steps(capability.clear_bass, preset, &[clear_bass])?;
+    }
+    // A Model with both takes them together.
+    if capability.bands.is_some()
+        && capability.clear_bass.is_some()
+        && equalizer.bands.is_some() != equalizer.clear_bass.is_some()
+    {
+        return Err(CommandError::IncompleteEqualizer);
+    }
+    Ok(())
+}
+
+/// Rejects `steps` unless a Device with the step Capability `range` can set
+/// them on `preset`.
+fn check_steps(
+    range: Option<StepRange>,
+    preset: &Preset,
+    steps: &[i8],
+) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !preset.editable {
+        return Err(CommandError::FixedPreset);
+    }
+    if !steps.iter().all(|&step| range.contains(step)) {
+        return Err(CommandError::OutOfRange);
     }
     Ok(())
 }
@@ -377,9 +387,7 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
-    /// Answered by the session, as only it knows whether the Equalizer can
-    /// be sent.
-    SetEqualizer(Equalizer, Reply),
+    SetEqualizer(Equalizer),
     PowerOff,
 }
 
@@ -426,9 +434,6 @@ impl<P: Platform> State<P> {
                 Some(observation) = observations.recv() => self.observe(observation),
                 Some(event) = link_events.recv() => self.link_event(event),
                 request = requests.recv() => match request {
-                    Some(Request::Command(Command::SetEqualizer(address, equalizer), reply)) => {
-                        self.set_equalizer(&address, equalizer, reply);
-                    }
                     Some(Request::Command(command, reply)) => {
                         let _ = reply.send(self.command(command));
                     }
@@ -657,33 +662,6 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// Checks `equalizer` and hands it, with `reply`, to the Device's
-    /// session, which answers once it knows whether it can send it.
-    fn set_equalizer(&mut self, address: &DeviceAddress, equalizer: Equalizer, reply: Reply) {
-        let checked = self.attached(address).and_then(|(device, session)| {
-            check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
-            if device.equalizer_unavailable {
-                return Err(CommandError::EqualizerUnavailable);
-            }
-            if device.equalizer.is_none() {
-                return Err(CommandError::SettingsNotReported);
-            }
-            Ok(session)
-        });
-        match checked {
-            Ok(session) => {
-                // A session that has ended drops the reply, answering
-                // NotAttached.
-                let _ = session
-                    .commands
-                    .send(SessionCommand::SetEqualizer(equalizer, reply));
-            }
-            Err(error) => {
-                let _ = reply.send(Err(error));
-            }
-        }
-    }
-
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
             Command::SetNoiseControlMode(address, mode) => {
@@ -706,7 +684,18 @@ impl<P: Platform> State<P> {
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
             }
-            Command::SetEqualizer(..) => unreachable!("answered by set_equalizer"),
+            Command::SetEqualizer(address, equalizer) => {
+                let (device, session) = self.attached(&address)?;
+                // Before anything else: the Device takes no Equalizer change.
+                if device.equalizer_unavailable {
+                    return Err(CommandError::EqualizerUnavailable);
+                }
+                check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
+                if device.equalizer.is_none() {
+                    return Err(CommandError::SettingsNotReported);
+                }
+                session.send(SessionCommand::SetEqualizer(equalizer))
+            }
             Command::PowerOff(address) => {
                 let (device, session) = self.attached(&address)?;
                 if !device.capabilities.power_off {
@@ -936,8 +925,7 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
-                    SessionCommand::SetEqualizer(equalizer, reply) => {
-                        let _ = reply.send(Ok(()));
+                    SessionCommand::SetEqualizer(equalizer) => {
                         session.set_equalizer_preset(equalizer.preset)
                     }
                     // No Samsung Model can Power Off, so the command is
@@ -1035,9 +1023,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
-                    SessionCommand::SetEqualizer(equalizer, reply) => {
-                        let _ = reply.send(session.set_equalizer(&equalizer));
-                    }
+                    SessionCommand::SetEqualizer(equalizer) => session.set_equalizer(&equalizer),
                     SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {
@@ -1045,5 +1031,25 @@ async fn run_sony_session(
                 }
             }
         }
+    }
+}
+
+// Every Model on the allowlist has an Equalizer, so a Device can't be asked
+// for one without it; the rule is checked here instead.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_equalizer_for_a_model_without_the_capability_is_rejected() {
+        let preset = Equalizer {
+            preset: 0,
+            bands: None,
+            clear_bass: None,
+        };
+        assert_eq!(
+            check_equalizer(None, &preset),
+            Err(CommandError::MissingCapability)
+        );
     }
 }

@@ -148,7 +148,7 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
     let manual = Equalizer {
         preset: 0xa0,
         bands: Some(vec![-1, 0, 6, 5, 10]),
-        clear_bass: None,
+        clear_bass: Some(2),
     };
 
     core.command(Command::SetEqualizer(xm5().address, manual))
@@ -156,7 +156,7 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
         .unwrap();
 
     // EQEBB_SET_PARAM: Manual, six steps each + 10: Bright's Clear Bass
-    // (+2) kept, then the Bands.
+    // (+2), then the Bands.
     assert_eq!(
         written(&mut link).await,
         sony_frame(
@@ -202,7 +202,7 @@ async fn editing_a_band_on_custom_1_stays_on_custom_1() {
     let custom_1 = Equalizer {
         preset: 0xa1,
         bands: Some(vec![-10, 10, 0, -2, -10]),
-        clear_bass: None,
+        clear_bass: Some(1),
     };
     core.command(Command::SetEqualizer(xm5().address, custom_1))
         .await
@@ -292,9 +292,11 @@ async fn a_preset_the_model_does_not_list_is_rejected_before_anything_is_sent() 
     rejected(preset(0x18), CommandError::UnavailablePreset).await;
 }
 
+/// A curve at `preset`: `bands`, with Clear Bass at 0.
 fn bands(preset: u8, bands: Vec<i8>) -> Equalizer {
     Equalizer {
         bands: Some(bands),
+        clear_bass: Some(0),
         ..self::preset(preset)
     }
 }
@@ -370,92 +372,6 @@ async fn changing_clear_bass_sends_it_first_in_the_curve_and_waits_for_the_devic
         list.devices[0].equalizer == Some(louder.clone())
     })
     .await;
-}
-
-#[tokio::test]
-async fn clear_bass_alone_is_sent_with_the_reported_bands() {
-    let (core, _os, mut link) = xm5_on_manual().await;
-    let softer = Equalizer {
-        clear_bass: Some(-3),
-        ..preset(0xa0)
-    };
-
-    core.command(Command::SetEqualizer(xm5().address, softer))
-        .await
-        .unwrap();
-
-    assert_eq!(
-        written(&mut link).await,
-        sony_frame(
-            1,
-            &[0x58, 0x00, 0xa0, 0x06, 0x07, 0x00, 0x14, 0x0a, 0x08, 0x0c]
-        )
-    );
-}
-
-#[tokio::test]
-async fn clear_bass_alone_keeps_bands_just_sent_and_not_yet_reported() {
-    let (core, _os, mut link) = xm5_on_manual().await;
-
-    core.command(Command::SetEqualizer(
-        xm5().address,
-        bands(0xa0, vec![1, 2, 3, 4, 5]),
-    ))
-    .await
-    .unwrap();
-    core.command(Command::SetEqualizer(
-        xm5().address,
-        Equalizer {
-            clear_bass: Some(-3),
-            ..preset(0xa0)
-        },
-    ))
-    .await
-    .unwrap();
-
-    assert_eq!(
-        written(&mut link).await,
-        sony_frame(
-            1,
-            &[0x58, 0x00, 0xa0, 0x06, 0x0b, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
-        )
-    );
-    link.send.send(sony_ack(0)).unwrap();
-    assert_eq!(
-        written(&mut link).await,
-        sony_frame(
-            0,
-            &[0x58, 0x00, 0xa0, 0x06, 0x07, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]
-        )
-    );
-}
-
-#[tokio::test]
-async fn clear_bass_alone_is_rejected_while_the_device_reports_no_bands_to_keep() {
-    let (core, _os, mut link) = attached_xm5().await;
-    // The Device reports Manual without its curve.
-    link.send
-        .send(sony_frame(0, &[0x59, 0x00, 0xa0, 0x00]))
-        .unwrap();
-    wait_for(&core, |list| {
-        list.devices[0].equalizer == Some(preset(0xa0))
-    })
-    .await;
-    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
-
-    let result = core
-        .command(Command::SetEqualizer(
-            xm5().address,
-            Equalizer {
-                clear_bass: Some(3),
-                ..preset(0xa0)
-            },
-        ))
-        .await;
-
-    assert_eq!(result, Err(CommandError::SettingsNotReported));
-    drop(core);
-    assert_eq!(link.written.recv().await, None, "nothing else written");
 }
 
 #[tokio::test]
@@ -593,8 +509,13 @@ async fn a_set_while_the_equalizer_is_unavailable_is_rejected_and_nothing_is_sen
     let result = core
         .command(Command::SetEqualizer(xm5().address, preset(0x16)))
         .await;
+    // Before anything else is checked: even a Preset the Model lacks.
+    let unlisted = core
+        .command(Command::SetEqualizer(xm5().address, preset(0x18)))
+        .await;
 
     assert_eq!(result, Err(CommandError::EqualizerUnavailable));
+    assert_eq!(unlisted, Err(CommandError::EqualizerUnavailable));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }
@@ -620,31 +541,6 @@ async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equ
         .await;
 
     assert_eq!(result, Err(CommandError::EqualizerUnavailable));
-    drop(core);
-    assert_eq!(link.written.recv().await, None, "nothing else written");
-}
-
-#[tokio::test]
-async fn bands_are_rejected_while_the_device_reports_no_clear_bass_to_keep() {
-    let (core, _os, mut link) = attached_xm5().await;
-    // The Device reports Manual without its curve.
-    link.send
-        .send(sony_frame(0, &[0x59, 0x00, 0xa0, 0x00]))
-        .unwrap();
-    wait_for(&core, |list| {
-        list.devices[0].equalizer == Some(preset(0xa0))
-    })
-    .await;
-    assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
-
-    let result = core
-        .command(Command::SetEqualizer(
-            xm5().address,
-            bands(0xa0, vec![0, 0, 0, 0, 0]),
-        ))
-        .await;
-
-    assert_eq!(result, Err(CommandError::SettingsNotReported));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
 }
@@ -851,5 +747,26 @@ async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
                 clear_bass: Some(3),
             })
     })
+    .await;
+}
+
+#[tokio::test]
+async fn bands_or_clear_bass_alone_are_rejected_before_anything_is_sent() {
+    // The XM5 takes its Bands and Clear Bass in one message.
+    rejected(
+        Equalizer {
+            bands: Some(vec![0, 0, 0, 0, 0]),
+            ..preset(0xa0)
+        },
+        CommandError::IncompleteEqualizer,
+    )
+    .await;
+    rejected(
+        Equalizer {
+            clear_bass: Some(3),
+            ..preset(0xa0)
+        },
+        CommandError::IncompleteEqualizer,
+    )
     .await;
 }

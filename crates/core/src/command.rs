@@ -45,6 +45,9 @@ pub enum CommandError {
     /// Bands or Clear Bass were given for a Preset whose curve can't be
     /// changed.
     FixedPreset,
+    /// Only one of Bands and Clear Bass was given, for a Model that takes
+    /// them together.
+    IncompleteEqualizer,
     /// The Device is Attached but hasn't reported its Noise Control Mode and
     /// Ambient Level yet, so a set couldn't keep the other unchanged. Or it
     /// hasn't reported its Equalizer yet.
@@ -79,9 +82,10 @@ pub struct Equalizer {
     /// doesn't list, which is kept as it is.
     pub preset: u8,
     /// Each Band's value in the Model's own steps, lowest Band first. `None`
-    /// when the Device doesn't report them, or a set leaves them unchanged.
+    /// when the Device doesn't report them, or a set of the Preset alone,
+    /// which leaves its curve to the Device.
     pub bands: Option<Vec<i8>>,
-    /// In the Model's own steps. `None` when the Device doesn't report it,
-    /// or a set leaves it unchanged.
+    /// In the Model's own steps. `None` as for the Bands. A Model with both
+    /// is set with both or neither.
     pub clear_bass: Option<i8>,
 }

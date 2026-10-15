@@ -32,6 +32,15 @@ fn preset(preset: u8) -> Equalizer {
 }
 
 #[tokio::test]
+async fn a_buds4pro_is_attached_with_its_preset_so_a_set_never_finds_it_unreported() {
+    // The extended status that identifies the Model also reports the Preset,
+    // so the "not reported yet" rejection the XM5 tests can't arise here.
+    let (core, _os, _link) = attached_buds4pro().await;
+
+    assert_eq!(core.device_list().devices[0].equalizer, Some(preset(3)));
+}
+
+#[tokio::test]
 async fn the_snapshot_carries_the_models_presets_and_the_reported_one() {
     let (core, _os, _link) = attached_buds4pro().await;
 
