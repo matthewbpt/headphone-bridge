@@ -12,14 +12,15 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import android.text.format.DateUtils
 import android.util.Log
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
-import androidx.core.content.ContextCompat
 
 /**
  * The "Noise Control" home screen widget. It follows the Primary Device:
  * its name and battery, a round button per Noise Control Mode joined by a
- * track, as on the App Screen, and what the last action did. Tapping a mode
+ * track, as on the App Screen, and what the last action did: on one line
+ * above the modes at one row high, under them from two rows. Tapping a mode
  * sets it, tapping the name refreshes, and "Open" opens the app. Without the
  * Nearby devices permission, every tap opens the app.
  */
@@ -51,6 +52,12 @@ class ModeWidget : AppWidgetProvider() {
     /** How faded a Pending mode's circle and label are; RemoteViews can't spin a ring round it. */
     private const val PENDING_ALPHA = 0.6f
 
+    /** The narrowest the widget gets, in dp, as in mode_widget_info.xml. */
+    private const val MIN_WIDTH = 240f
+
+    /** The height, in dp, from which the full layout fits: two rows on One UI and Pixel. */
+    private const val FULL_HEIGHT = 160f
+
     private class SlotViews(val slot: Int, val trackStart: Int, val trackEnd: Int, val circle: Int, val label: Int)
 
     private val SLOT_VIEWS = listOf(
@@ -68,7 +75,18 @@ class ModeWidget : AppWidgetProvider() {
 
     private fun render(context: Context, manager: AppWidgetManager, ids: IntArray) {
       val shown = Surfaces.copy(context).shown(hasNearbyDevicesPermission(context))
-      val views = RemoteViews(context.packageName, R.layout.mode_widget)
+      // One row gets the compact layout; two rows and up the full one.
+      val views = RemoteViews(
+        mapOf(
+          SizeF(MIN_WIDTH, 0f) to layout(context, R.layout.mode_widget_compact, shown, compact = true),
+          SizeF(MIN_WIDTH, FULL_HEIGHT) to layout(context, R.layout.mode_widget, shown, compact = false),
+        ),
+      )
+      manager.updateAppWidget(ids, views)
+    }
+
+    private fun layout(context: Context, layout: Int, shown: StoredCopy.Shown, compact: Boolean): RemoteViews {
+      val views = RemoteViews(context.packageName, layout)
       val open = openApp(context)
 
       views.setTextViewText(R.id.name, shown.name ?: context.getString(R.string.hb_no_device))
@@ -82,21 +100,21 @@ class ModeWidget : AppWidgetProvider() {
       renderModes(context, views, widgetLook(shown))
 
       views.setTextViewText(R.id.note, shown.note ?: shown.updatedAt?.let {
-        "Updated " + DateUtils.getRelativeTimeSpanString(
+        // The compact layout shares its line with the name and battery: "5 min. ago".
+        val ago = DateUtils.getRelativeTimeSpanString(
           it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+          if (compact) DateUtils.FORMAT_ABBREV_RELATIVE else 0,
         )
+        if (compact) ago else "Updated $ago"
       } ?: "")
       views.setOnClickPendingIntent(R.id.note, if (shown.opensApp) open else null)
       views.setOnClickPendingIntent(R.id.open, open)
-      manager.updateAppWidget(ids, views)
+      return views
     }
 
     private fun renderModes(context: Context, views: RemoteViews, look: WidgetLook) {
       // Invisible rather than gone, so the note stays at the bottom.
       views.setViewVisibility(R.id.modes, if (look.slots.isEmpty()) View.INVISIBLE else View.VISIBLE)
-      val accent = ContextCompat.getColor(context, R.color.hb_accent)
-      val onAccent = ContextCompat.getColor(context, R.color.hb_on_accent)
-      val text = ContextCompat.getColor(context, R.color.hb_text)
       SLOT_VIEWS.forEachIndexed { i, ids ->
         val slot = look.slots.getOrNull(i)
         if (slot == null) {
@@ -113,9 +131,10 @@ class ModeWidget : AppWidgetProvider() {
           "setBackgroundResource",
           if (slot.filled) R.drawable.mode_selected else R.drawable.mode_unselected,
         )
-        views.setInt(ids.circle, "setColorFilter", if (slot.filled) onAccent else text)
+        // Colour resources, which the launcher resolves from the palette it themes widgets with.
+        views.setColor(ids.circle, "setColorFilter", if (slot.filled) R.color.hb_on_accent else R.color.hb_text)
         views.setTextViewText(ids.label, if (slot.filled) bold(slot.label) else slot.label)
-        views.setTextColor(ids.label, if (slot.filled) accent else text)
+        views.setColor(ids.label, "setTextColor", if (slot.filled) R.color.hb_accent else R.color.hb_text)
         val alpha = if (slot.pending) PENDING_ALPHA else 1f
         views.setFloat(ids.circle, "setAlpha", alpha)
         views.setFloat(ids.label, "setAlpha", alpha)
