@@ -215,7 +215,8 @@ struct State<P> {
 /// A Connected Device and its control link session, if any.
 struct Tracked {
     device: Device,
-    vendor: Vendor,
+    /// `None` for an unsupported Model, which no session runs with.
+    vendor: Option<Vendor>,
     /// Includes a session waiting to retry.
     session: Option<LinkSession>,
     /// Automatic retries since the Device was last Attached.
@@ -341,8 +342,8 @@ enum SessionCommand {
 
 #[derive(Debug, Clone, Copy)]
 enum Vendor {
-    /// With the Model its OS name points to, if any (ADR-0003).
-    Samsung(Option<Model>),
+    /// With the Model its OS name points to (ADR-0003).
+    Samsung(Model),
     Sony,
 }
 
@@ -410,21 +411,17 @@ impl<P: Platform> State<P> {
 
     fn connected(&mut self, identity: DeviceIdentity) {
         let has_service = |service| identity.service_uuids.contains(&service);
-        let vendor = if has_service(samsung::SERVICE) {
-            Vendor::Samsung(samsung::candidate_model(&identity.name))
-        } else if has_service(sony::SERVICE) {
-            Vendor::Sony
-        } else {
-            return;
-        };
         // A Sony Device reveals its Model in reply to reads alone, so every one
         // is Attached to identify it. A Samsung Device needs a write first, so
         // only those whose name points at the allowlist are (ADR-0003).
-        let attach = match vendor {
-            Vendor::Samsung(candidate) => candidate.is_some(),
-            Vendor::Sony => true,
+        let vendor = if has_service(samsung::SERVICE) {
+            samsung::candidate_model(&identity.name).map(Vendor::Samsung)
+        } else if has_service(sony::SERVICE) {
+            Some(Vendor::Sony)
+        } else {
+            return;
         };
-        let state = if !attach {
+        let state = if vendor.is_none() {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             }
@@ -454,7 +451,7 @@ impl<P: Platform> State<P> {
     /// Starts a new session for the tracked Device at `address` that opens
     /// the control link after `delay`, in place of any session it had.
     fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
-        let Some(vendor) = self.devices.get(address).map(|tracked| tracked.vendor) else {
+        let Some(vendor) = self.devices.get(address).and_then(|tracked| tracked.vendor) else {
             return;
         };
         let session = self.attach(address, vendor, delay);
@@ -812,7 +809,7 @@ impl<P: Platform> State<P> {
 /// Device turns out not to be its `candidate` Model. Returns why it ended.
 async fn run_samsung_session(
     mut link: ControlLink,
-    candidate: Option<Model>,
+    candidate: Model,
     mut commands: mpsc::UnboundedReceiver<SessionCommand>,
     frame_log: FrameLog,
     mut on_update: impl FnMut(Update),

@@ -43,12 +43,12 @@ pub fn candidate_model(name: &str) -> Option<Model> {
 }
 
 /// One control link session with a Samsung Device.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Session {
     deframer: Deframer,
     /// The Model the Device's name points to: the only one its device id
     /// may confirm.
-    candidate: Option<Model>,
+    candidate: Model,
     /// `None` until the extended status identifies the Model.
     model: Option<Model>,
     buds: Buds,
@@ -66,10 +66,16 @@ pub struct Session {
 
 impl Session {
     /// A session with a Device whose name points to `candidate`.
-    pub fn new(candidate: Option<Model>) -> Session {
+    pub fn new(candidate: Model) -> Session {
         Session {
+            deframer: Deframer::default(),
             candidate,
-            ..Session::default()
+            model: None,
+            buds: Buds::default(),
+            pending_mode: None,
+            pending_ambient_level: None,
+            pending_noise_cancelling_level: None,
+            chosen_known: false,
         }
     }
 
@@ -170,7 +176,7 @@ impl Session {
                     match [device_id(14), device_id(16)]
                         .into_iter()
                         .find_map(model_for_device_id)
-                        .filter(|model| Some(*model) == self.candidate)
+                        .filter(|model| *model == self.candidate)
                     {
                         Some(model) => {
                             self.model = Some(model);
