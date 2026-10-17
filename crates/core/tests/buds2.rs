@@ -290,9 +290,9 @@ async fn adaptive_is_never_sent_to_a_buds2() {
 async fn a_short_noise_controls_update_is_a_gesture_that_sets_the_chosen_mode() {
     let (core, _os, link) = attached_buds2().await;
 
-    // The Buds2 sends no cause byte: one byte (the mode) or two (with the
-    // placement, both buds in), as GalaxyBudsClient decodes them. No real
-    // Buds2 gesture has been captured yet.
+    // Too short to carry a cause (byte 4, as in real-gesture): one byte (the
+    // mode) or two (with the placement, both buds in), as GalaxyBudsClient
+    // decodes them.
     link.send.send(samsung_frame(0x77, &[0x02])).unwrap();
     wait_for(&core, |list| {
         list.devices[0].chosen_mode == Some(NoiseControlMode::Ambient)
@@ -547,4 +547,53 @@ async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
     }
     let list = core.device_list();
     assert_eq!(list.devices[0].chosen_mode, Some(NoiseControlMode::Ambient));
+}
+
+#[tokio::test]
+async fn real_buds2_long_presses_each_set_the_chosen_mode_and_nothing_is_written() {
+    use NoiseControlMode::*;
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds2()));
+    let mut link = os.next_link().await;
+    let records = fixture("galaxy-buds2/real-gesture");
+    let press_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.bytes.get(3) == Some(&0x77))
+        .map(|(i, _)| i)
+        .collect();
+    let modes = [NoiseCancelling, Ambient, NoiseCancelling, Ambient];
+    assert_eq!(press_at.len(), modes.len());
+
+    replay(&mut link, &records[..press_at[0]]).await;
+    wait_for(&core, |list| list.devices[0].chosen_mode == Some(Ambient)).await;
+    for (i, mode) in modes.into_iter().enumerate() {
+        let end = press_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[press_at[i]..end]).await;
+        let list = wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;
+        assert_eq!(list.devices[0].effective_mode, Some(mode));
+    }
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "only MANAGER_INFO written");
+}
+
+#[tokio::test]
+async fn a_buds2_placement_update_with_both_buds_in_is_only_the_effective_mode() {
+    let (core, _os, link) = attached_buds2().await;
+
+    // Cause 2 at byte 4 is a placement change, as in real-noise-control, so
+    // the Off it reports is not chosen, even with both buds in (0x11).
+    link.send
+        .send(samsung_frame(0x77, &[0x00, 0x11, 0x01, 0x66, 0x02]))
+        .unwrap();
+
+    let list = wait_for(&core, |list| {
+        list.devices[0].effective_mode == Some(NoiseControlMode::Off)
+    })
+    .await;
+    assert_eq!(
+        list.devices[0].chosen_mode,
+        Some(NoiseControlMode::NoiseCancelling)
+    );
 }

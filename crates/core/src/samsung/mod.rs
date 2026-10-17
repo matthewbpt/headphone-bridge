@@ -250,17 +250,21 @@ impl Session {
                 let Some(mode) = noise_control_mode(p[0]) else {
                     return Vec::new();
                 };
-                // Byte 1 is the placement and byte 6 the cause: 1 for a
-                // gesture, which chooses a mode. Other causes are placement
-                // changes, whose mode is only the Effective Mode, unless it is
-                // the one the app asked for: the Device confirms a set with
-                // such a cause too. A Buds2 sends no cause byte, and pauses
-                // the mode with a bud out (`00 12 01 66 02` in
-                // galaxy-buds2/real-noise-control), so its update is taken
-                // as a gesture only with both buds in. No Buds2 gesture has
-                // been captured yet.
+                // Byte 1 is the placement and the cause is 1 for a gesture,
+                // which chooses a mode. Other causes are placement changes,
+                // whose mode is only the Effective Mode, unless it is the one
+                // the app asked for: the Device confirms a set with such a
+                // cause too. A Buds4 Pro sends the cause at byte 6, a Buds2
+                // at byte 4: `01 11 01 66 01` for a long-press in
+                // galaxy-buds2/real-gesture, `00 12 01 66 02` for a bud out
+                // in galaxy-buds2/real-noise-control. An update too short to
+                // carry one is taken as a gesture only with both buds in.
                 let placement = p.get(1).copied().unwrap_or(0x11);
-                let gesture = match p.get(6) {
+                let cause_at = match self.model {
+                    Some(Model::GalaxyBuds2) => 4,
+                    _ => 6,
+                };
+                let gesture = match p.get(cause_at) {
                     Some(&cause) => cause == 0x01,
                     None => both_worn(placement),
                 };
