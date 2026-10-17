@@ -1,0 +1,48 @@
+# Galaxy Buds2 on macOS, captured by the frame log on 2026-10-17
+# (feat/galaxy-buds2 at 9837169), firmware revision 11, device id 314. Cut
+# from one session, debug/log frames (242, 244) and unrelated traffic left
+# out. Attach (extended status: Ambient, Ambient Level 1), then the app sets
+# the Ambient Level to 2, 1, 0, 1, 2, 1. Each set is ACKed (66) with
+# `84 <applied level>`, 0 included, and its MANAGER_INFO is answered only by
+# two bare `88 00`: the ACK is the confirmation.
+2026-10-17T18:26:34.479Z samsung >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:26:34.520Z galaxy-buds2 << fd 2a 08 61 0b 03 63 63 01 01 11 00 00 00 3f 12 02 00 3a 01 3a 01 02 00 03 66 00 01 00 10 00 00 00 00 11 02 00 01 00 00 40 00 00 81 54 dd
+2026-10-17T18:26:34.616Z galaxy-buds2 << fd 06 54 c2 26 01 01 ba 49 dd
+2026-10-17T18:26:34.704Z galaxy-buds2 << fd 0d 88 63 00 00 01 a5 01 01 a5 01 00 00 dc e3 dd
+2026-10-17T18:26:34.793Z galaxy-buds2 << fd 04 d4 88 00 31 92 dd
+2026-10-17T18:26:34.823Z galaxy-buds2 << fd 29 14 41 02 11 35 00 63 00 00 00 00 00 00 00 00 00 00 00 00 43 a3 01 00 63 00 00 00 00 00 00 00 00 00 00 00 00 43 a3 01 00 ac 94 dd
+2026-10-17T18:26:34.854Z galaxy-buds2 << fd 06 54 c2 26 00 01 8b 7a dd
+2026-10-17T18:26:34.882Z galaxy-buds2 << fd 0d 80 27 01 de 0a 06 42 10 12 44 08 3f 84 80 dd
+2026-10-17T18:26:34.884Z galaxy-buds2 << fd 28 c0 40 04 41 42 44 42 00 04 00 00 00 57 41 4c 44 00 04 00 00 00 42 53 43 4c 00 df 4e 00 00 42 53 43 52 00 68 4d 00 00 60 f3 dd
+2026-10-17T18:26:34.946Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-17T18:26:35.096Z galaxy-buds2 << fd 0d 40 27 01 1e 0a 06 42 10 12 44 08 3f ef 60 dd
+2026-10-17T18:27:09.458Z galaxy-buds2 >> fd 04 00 84 02 1e f7 dd
+2026-10-17T18:27:09.458Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:09.512Z galaxy-buds2 << fd 05 14 42 84 02 d3 84 dd
+2026-10-17T18:27:09.570Z galaxy-buds2 << fd 04 54 88 00 31 92 dd
+2026-10-17T18:27:09.648Z galaxy-buds2 << fd 04 94 88 00 31 92 dd
+2026-10-17T18:27:11.776Z galaxy-buds2 >> fd 04 00 84 01 7d c7 dd
+2026-10-17T18:27:11.776Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:11.833Z galaxy-buds2 << fd 05 d4 42 84 01 b0 b4 dd
+2026-10-17T18:27:11.913Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-17T18:27:11.967Z galaxy-buds2 << fd 04 54 88 00 31 92 dd
+2026-10-17T18:27:13.584Z galaxy-buds2 >> fd 04 00 84 00 5c d7 dd
+2026-10-17T18:27:13.584Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:13.684Z galaxy-buds2 << fd 05 94 42 84 00 91 a4 dd
+2026-10-17T18:27:13.782Z galaxy-buds2 << fd 04 d4 88 00 31 92 dd
+2026-10-17T18:27:13.815Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-17T18:27:15.866Z galaxy-buds2 >> fd 04 00 84 01 7d c7 dd
+2026-10-17T18:27:15.866Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:15.931Z galaxy-buds2 << fd 05 54 42 84 01 b0 b4 dd
+2026-10-17T18:27:16.011Z galaxy-buds2 << fd 04 94 88 00 31 92 dd
+2026-10-17T18:27:16.041Z galaxy-buds2 << fd 04 d4 88 00 31 92 dd
+2026-10-17T18:27:18.441Z galaxy-buds2 >> fd 04 00 84 02 1e f7 dd
+2026-10-17T18:27:18.441Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:18.512Z galaxy-buds2 << fd 05 14 42 84 02 d3 84 dd
+2026-10-17T18:27:18.583Z galaxy-buds2 << fd 04 54 88 00 31 92 dd
+2026-10-17T18:27:18.654Z galaxy-buds2 << fd 04 94 88 00 31 92 dd
+2026-10-17T18:27:19.746Z galaxy-buds2 >> fd 04 00 84 01 7d c7 dd
+2026-10-17T18:27:19.746Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T18:27:19.798Z galaxy-buds2 << fd 05 d4 42 84 01 b0 b4 dd
+2026-10-17T18:27:19.903Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-17T18:27:19.939Z galaxy-buds2 << fd 04 54 88 00 31 92 dd

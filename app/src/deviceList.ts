@@ -45,7 +45,7 @@ export interface Device {
   reportedAt: number | null;
 }
 
-export type Model = "galaxyBuds4Pro" | "wh1000xm5";
+export type Model = "galaxyBuds4Pro" | "galaxyBuds2" | "wh1000xm5";
 
 export type DeviceState =
   | { kind: "attaching" }

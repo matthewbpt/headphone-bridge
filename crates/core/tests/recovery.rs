@@ -53,25 +53,25 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
 async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
-    let buds2 = DeviceIdentity {
+    let buds2pro = DeviceIdentity {
         address: DeviceAddress("A1:B2:C3:00:00:02".into()),
-        name: "Galaxy Buds2 (0002)".into(),
+        name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
-    os.observe(Observation::DeviceConnected(buds2.clone()));
+    os.observe(Observation::DeviceConnected(buds2pro.clone()));
     wait_for(&core, |list| {
         is(list, not_attached(NotAttachedReason::UnsupportedModel))
     })
     .await;
 
     assert_eq!(
-        core.command(Command::RetryAttach(buds2.address.clone()))
+        core.command(Command::RetryAttach(buds2pro.address.clone()))
             .await,
         Err(CommandError::UnsupportedModel)
     );
     assert_eq!(
         core.command(Command::SetNoiseControlMode(
-            buds2.address.clone(),
+            buds2pro.address.clone(),
             NoiseControlMode::Off
         ))
         .await,

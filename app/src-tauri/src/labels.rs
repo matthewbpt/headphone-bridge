@@ -55,7 +55,7 @@ const MODES: [NoiseControlMode; 4] = [
     NoiseControlMode::Adaptive,
 ];
 
-const MODELS: [Model; 2] = [Model::GalaxyBuds4Pro, Model::Wh1000Xm5];
+const MODELS: [Model; 3] = [Model::GalaxyBuds4Pro, Model::GalaxyBuds2, Model::Wh1000Xm5];
 
 const HINTS: [EffectiveModeReason; 2] = [
     EffectiveModeReason::BudOutOfEar,

@@ -1,6 +1,8 @@
-//! The Samsung Galaxy Buds protocol (pure, no I/O), starting with the
-//! Galaxy Buds4 Pro. Ported from omarchy-buds (MIT) and checked against its
-//! Buds4 Pro captures (firmware revision 4).
+//! The Samsung Galaxy Buds protocol (pure, no I/O), for the Galaxy Buds4 Pro
+//! and Galaxy Buds2. Ported from omarchy-buds (MIT) and checked against its
+//! Buds4 Pro captures (firmware revision 4). The Buds2 uses the same messages
+//! at the same offsets, after GalaxyBudsClient's Buds2 definitions, checked
+//! against a real Buds2 frame log (revision 11, 2026-10-17).
 
 pub(crate) mod frame;
 
@@ -27,18 +29,35 @@ mod id {
     pub const MANAGER_INFO: u8 = 136;
 }
 
+/// Where each Model reports its charging bits in the extended status.
+mod charging {
+    /// A Buds2's byte (GalaxyBudsClient).
+    pub const BUDS2_AT: usize = 36;
+    /// The extended-status revision (byte 0) a Buds2's bits exist from.
+    pub const BUDS2_FROM_REVISION: u8 = 10;
+    pub const BUDS4_PRO_AT: usize = 42;
+}
+
 /// The Model the OS-reported identity points to, before Attaching. Only these
 /// Devices are Attached, and so sent the handshake (ADR-0003).
 pub fn candidate_model(name: &str) -> Option<Model> {
-    name.to_lowercase()
-        .contains("buds4 pro")
-        .then_some(Model::GalaxyBuds4Pro)
+    let name = name.to_lowercase();
+    if name.contains("buds4 pro") {
+        Some(Model::GalaxyBuds4Pro)
+    } else if name.contains("buds2") && !name.contains("buds2 pro") {
+        Some(Model::GalaxyBuds2)
+    } else {
+        None
+    }
 }
 
 /// One control link session with a Samsung Device.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Session {
     deframer: Deframer,
+    /// The Model the Device's name points to: the only one its device id
+    /// may confirm.
+    candidate: Model,
     /// `None` until the extended status identifies the Model.
     model: Option<Model>,
     buds: Buds,
@@ -55,9 +74,25 @@ pub struct Session {
 }
 
 impl Session {
+    /// A session with a Device whose name points to `candidate`.
+    pub fn new(candidate: Model) -> Session {
+        Session {
+            deframer: Deframer::default(),
+            candidate,
+            model: None,
+            buds: Buds::default(),
+            pending_mode: None,
+            pending_ambient_level: None,
+            pending_noise_cancelling_level: None,
+            chosen_known: false,
+        }
+    }
+
     /// The frames to send when the link opens: the `MANAGER_INFO` handshake,
     /// introducing the app the way Samsung's own app does. The Device answers
-    /// with an extended status, which identifies the Model.
+    /// with an extended status, which identifies the Model. A Buds2 sends an
+    /// extended status only for the Attach's; it answers a later one with a
+    /// bare `88 00` (real-noise-control).
     pub fn handshake() -> Vec<u8> {
         encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
     }
@@ -66,7 +101,9 @@ impl Session {
     /// Buds4 Pro confirms with an ACK carrying the applied mode
     /// (real-noise-control). In capture-2 it sent no ACK, and confirmed with
     /// a `NOISE_CONTROLS_UPDATE` only after the next `MANAGER_INFO`, so a set
-    /// is followed by one as a poll.
+    /// is followed by one as a poll. A Buds2's ACK also carries the applied
+    /// mode, and is its only confirmation: it answers the poll with no
+    /// extended status (galaxy-buds2/real-noise-control).
     pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) -> Vec<Vec<u8>> {
         self.pending_mode = Some(mode);
         vec![
@@ -78,8 +115,9 @@ impl Session {
     /// The frames that ask the Device to set the Ambient Level, in the
     /// Model's own steps. A Buds4 Pro confirms with an ACK carrying the
     /// applied level, one per set even when sets arrive in quick succession
-    /// (frame log, 2026-10-11). Like a mode set it is followed by
-    /// `MANAGER_INFO`, whose extended status also reports the level.
+    /// (frame log, 2026-10-11), as does a Buds2 (real-ambient-level). Like a
+    /// mode set it is followed by `MANAGER_INFO`, whose extended status, if
+    /// any, also reports the level.
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
         self.pending_ambient_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
@@ -144,9 +182,12 @@ impl Session {
             id::EXTENDED_STATUS_UPDATED if p.len() > 17 => {
                 if self.model.is_none() {
                     let device_id = |at: usize| u16::from_le_bytes([p[at], p[at + 1]]);
+                    // The device id, not the name, decides the Model, and it
+                    // must be the one the name pointed to (ADR-0003).
                     match [device_id(14), device_id(16)]
                         .into_iter()
                         .find_map(model_for_device_id)
+                        .filter(|model| *model == self.candidate)
                     {
                         Some(model) => {
                             self.model = Some(model);
@@ -155,7 +196,16 @@ impl Session {
                         None => return vec![Update::Unsupported],
                     }
                 }
-                let charging = p.get(42).copied().unwrap_or(0);
+                let charging = match self.model {
+                    // Before a Buds2's charging bits exist they're unknown,
+                    // and placement alone docks a bud.
+                    Some(Model::GalaxyBuds2) => p
+                        .get(charging::BUDS2_AT)
+                        .filter(|_| p[0] >= charging::BUDS2_FROM_REVISION),
+                    _ => p.get(charging::BUDS4_PRO_AT),
+                }
+                .copied()
+                .unwrap_or(0);
                 self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
                 // Byte 12 is the mode the Device is applying: Off while it has
                 // paused the Chosen Mode because a bud is out (capture-1c).
@@ -200,17 +250,30 @@ impl Session {
                 let Some(mode) = noise_control_mode(p[0]) else {
                     return Vec::new();
                 };
-                // Byte 1 is the placement and byte 6 the cause: 1 for a
-                // gesture, which chooses a mode. Other causes are placement
-                // changes, whose mode is only the Effective Mode, unless it is
-                // the one the app asked for: the Device confirms a set with
-                // such a cause too. Older Models send only the mode.
-                let gesture = p.len() < 7 || p[6] == 0x01;
+                // Byte 1 is the placement and the cause is 1 for a gesture,
+                // which chooses a mode. Other causes are placement changes,
+                // whose mode is only the Effective Mode, unless it is the one
+                // the app asked for: the Device confirms a set with such a
+                // cause too. A Buds4 Pro sends the cause at byte 6, a Buds2
+                // at byte 4: `01 11 01 66 01` for a long-press in
+                // galaxy-buds2/real-gesture, `00 12 01 66 02` for a bud out
+                // in galaxy-buds2/real-noise-control. An update too short to
+                // carry one is taken as a gesture only with both buds in.
                 let placement = p.get(1).copied().unwrap_or(0x11);
+                let cause_at = match self.model {
+                    Some(Model::GalaxyBuds2) => 4,
+                    _ => 6,
+                };
+                let gesture = match p.get(cause_at) {
+                    Some(&cause) => cause == 0x01,
+                    None => both_worn(placement),
+                };
                 return vec![self.mode_update(mode, placement, gesture)];
             }
-            id::STATUS_UPDATED if p.len() >= 8 => {
-                self.buds.apply(p[5], p[7], [p[1], p[2], p[6]]);
+            // Older firmware sends 7 bytes, without the charging byte.
+            id::STATUS_UPDATED if p.len() >= 7 => {
+                let charging = p.get(7).copied().unwrap_or(0);
+                self.buds.apply(p[5], charging, [p[1], p[2], p[6]]);
             }
             _ => return Vec::new(),
         }
@@ -241,11 +304,15 @@ fn noise_control_value(mode: NoiseControlMode) -> u8 {
     }
 }
 
-/// Device ids are per colour: 359 Black, 360 White, 361 Apricot.
+/// Device ids are per colour. Buds4 Pro: 359 Black, 360 White, 361 Apricot.
+/// Buds2: 313 White to 321 Grey, as GalaxyBudsClient lists them; its 14337,
+/// an unknown Buds2, isn't accepted until a real Device reports it.
 fn model_for_device_id(device_id: u16) -> Option<Model> {
-    (359..=361)
-        .contains(&device_id)
-        .then_some(Model::GalaxyBuds4Pro)
+    match device_id {
+        359..=361 => Some(Model::GalaxyBuds4Pro),
+        313..=321 => Some(Model::GalaxyBuds2),
+        _ => None,
+    }
 }
 
 /// Whether placement nibbles (L high, R low) put both buds in the ear.
