@@ -29,6 +29,15 @@ mod id {
     pub const MANAGER_INFO: u8 = 136;
 }
 
+/// Where each Model reports its charging bits in the extended status.
+mod charging {
+    /// A Buds2's byte (GalaxyBudsClient).
+    pub const BUDS2_AT: usize = 36;
+    /// The extended-status revision (byte 0) a Buds2's bits exist from.
+    pub const BUDS2_FROM_REVISION: u8 = 10;
+    pub const BUDS4_PRO_AT: usize = 42;
+}
+
 /// The Model the OS-reported identity points to, before Attaching. Only these
 /// Devices are Attached, and so sent the handshake (ADR-0003).
 pub fn candidate_model(name: &str) -> Option<Model> {
@@ -186,11 +195,12 @@ impl Session {
                     }
                 }
                 let charging = match self.model {
-                    // A Buds2 reports its charging bits at byte 36, and only
-                    // from revision 10 (byte 0); before that they're unknown
-                    // and placement alone docks a bud (GalaxyBudsClient).
-                    Some(Model::GalaxyBuds2) => p.get(36).filter(|_| p[0] >= 10),
-                    _ => p.get(42),
+                    // Before a Buds2's charging bits exist they're unknown,
+                    // and placement alone docks a bud.
+                    Some(Model::GalaxyBuds2) => p
+                        .get(charging::BUDS2_AT)
+                        .filter(|_| p[0] >= charging::BUDS2_FROM_REVISION),
+                    _ => p.get(charging::BUDS4_PRO_AT),
                 }
                 .copied()
                 .unwrap_or(0);
