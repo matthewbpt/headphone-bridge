@@ -1,8 +1,8 @@
 //! The Samsung Galaxy Buds protocol (pure, no I/O), for the Galaxy Buds4 Pro
 //! and Galaxy Buds2. Ported from omarchy-buds (MIT) and checked against its
 //! Buds4 Pro captures (firmware revision 4). The Buds2 uses the same messages
-//! at the same offsets, after GalaxyBudsClient's Buds2 definitions; no real
-//! Buds2 capture exists yet.
+//! at the same offsets, after GalaxyBudsClient's Buds2 definitions, checked
+//! against a real Buds2 frame log (revision 11, 2026-10-17).
 
 pub(crate) mod frame;
 
@@ -90,8 +90,9 @@ impl Session {
 
     /// The frames to send when the link opens: the `MANAGER_INFO` handshake,
     /// introducing the app the way Samsung's own app does. The Device answers
-    /// with an extended status, which identifies the Model. That a Buds2
-    /// answers it too is a hypothesis until a real one is captured.
+    /// with an extended status, which identifies the Model. A Buds2 sends an
+    /// extended status only for the Attach's; it answers a later one with a
+    /// bare `88 00` (real-noise-control).
     pub fn handshake() -> Vec<u8> {
         encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
     }
@@ -100,9 +101,9 @@ impl Session {
     /// Buds4 Pro confirms with an ACK carrying the applied mode
     /// (real-noise-control). In capture-2 it sent no ACK, and confirmed with
     /// a `NOISE_CONTROLS_UPDATE` only after the next `MANAGER_INFO`, so a set
-    /// is followed by one as a poll. That a Buds2's ACKs also carry the
-    /// applied value is a hypothesis; if not, the poll's extended status
-    /// confirms the set.
+    /// is followed by one as a poll. A Buds2's ACK also carries the applied
+    /// mode, and is its only confirmation: it answers the poll with no
+    /// extended status (galaxy-buds2/real-noise-control).
     pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) -> Vec<Vec<u8>> {
         self.pending_mode = Some(mode);
         vec![
@@ -114,8 +115,9 @@ impl Session {
     /// The frames that ask the Device to set the Ambient Level, in the
     /// Model's own steps. A Buds4 Pro confirms with an ACK carrying the
     /// applied level, one per set even when sets arrive in quick succession
-    /// (frame log, 2026-10-11). Like a mode set it is followed by
-    /// `MANAGER_INFO`, whose extended status also reports the level.
+    /// (frame log, 2026-10-11), as does a Buds2 (real-ambient-level). Like a
+    /// mode set it is followed by `MANAGER_INFO`, whose extended status, if
+    /// any, also reports the level.
     pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
         self.pending_ambient_level = Some(level);
         vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
@@ -252,9 +254,16 @@ impl Session {
                 // gesture, which chooses a mode. Other causes are placement
                 // changes, whose mode is only the Effective Mode, unless it is
                 // the one the app asked for: the Device confirms a set with
-                // such a cause too. Older Models send only the mode.
-                let gesture = p.len() < 7 || p[6] == 0x01;
+                // such a cause too. A Buds2 sends no cause byte, and pauses
+                // the mode with a bud out (`00 12 01 66 02` in
+                // galaxy-buds2/real-noise-control), so its update is taken
+                // as a gesture only with both buds in. No Buds2 gesture has
+                // been captured yet.
                 let placement = p.get(1).copied().unwrap_or(0x11);
+                let gesture = match p.get(6) {
+                    Some(&cause) => cause == 0x01,
+                    None => both_worn(placement),
+                };
                 return vec![self.mode_update(mode, placement, gesture)];
             }
             // Older firmware sends 7 bytes, without the charging byte.

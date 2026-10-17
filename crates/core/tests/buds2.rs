@@ -473,6 +473,55 @@ fn sets_in(records: &[FrameRecord], id: u8) -> Vec<usize> {
 }
 
 #[tokio::test]
+async fn real_buds2_mode_sets_are_confirmed_by_their_acks_and_a_bud_out_only_pauses_the_mode() {
+    use NoiseControlMode::*;
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds2()));
+    let mut link = os.next_link().await;
+    // The Device ACKs each set with `78 <applied mode>` and answers the poll
+    // with a bare MANAGER_INFO, so the ACK must confirm it.
+    let records = fixture("galaxy-buds2/real-noise-control");
+    let set_at = sets_in(&records, 0x78);
+    let modes = [NoiseCancelling, Ambient, Off, Ambient];
+    assert_eq!(set_at.len(), modes.len());
+    // The bud-out and bud-in updates follow the last set's replies.
+    let bud_out_at = set_at[3] + 5;
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    wait_for(&core, |list| list.devices[0].chosen_mode == Some(Ambient)).await;
+    for (i, mode) in modes.into_iter().enumerate() {
+        core.command(Command::SetNoiseControlMode(buds2().address, mode))
+            .await
+            .unwrap();
+        let end = set_at.get(i + 1).copied().unwrap_or(bud_out_at);
+        replay(&mut link, &records[set_at[i]..end]).await;
+        wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;
+    }
+
+    // A bud leaves the ear, and the Buds2 pauses Ambient to Off.
+    replay(&mut link, &records[bud_out_at..bud_out_at + 4]).await;
+    let list = wait_for(&core, |list| list.devices[0].effective_mode == Some(Off)).await;
+    let device = &list.devices[0];
+    assert_eq!(device.chosen_mode, Some(Ambient));
+    assert_eq!(
+        device.effective_mode_reason,
+        Some(EffectiveModeReason::BudOutOfEar)
+    );
+    // It goes back in, and Ambient resumes.
+    replay(&mut link, &records[bud_out_at + 4..]).await;
+    let list = wait_for(&core, |list| {
+        list.devices[0].effective_mode == Some(Ambient)
+    })
+    .await;
+    let device = &list.devices[0];
+    assert_eq!(device.chosen_mode, Some(Ambient));
+    assert_eq!(device.effective_mode_reason, None);
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "nothing else written");
+}
+
+#[tokio::test]
 async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
