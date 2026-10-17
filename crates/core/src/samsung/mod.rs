@@ -179,7 +179,15 @@ impl Session {
                         None => return vec![Update::Unsupported],
                     }
                 }
-                let charging = p.get(42).copied().unwrap_or(0);
+                let charging = match self.model {
+                    // A Buds2 reports its charging bits at byte 36, and only
+                    // from revision 10 (byte 0); before that they're unknown
+                    // and placement alone docks a bud (GalaxyBudsClient).
+                    Some(Model::GalaxyBuds2) => p.get(36).filter(|_| p[0] >= 10),
+                    _ => p.get(42),
+                }
+                .copied()
+                .unwrap_or(0);
                 self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
                 // Byte 12 is the mode the Device is applying: Off while it has
                 // paused the Chosen Mode because a bud is out (capture-1c).
@@ -233,8 +241,10 @@ impl Session {
                 let placement = p.get(1).copied().unwrap_or(0x11);
                 return vec![self.mode_update(mode, placement, gesture)];
             }
-            id::STATUS_UPDATED if p.len() >= 8 => {
-                self.buds.apply(p[5], p[7], [p[1], p[2], p[6]]);
+            // Older firmware sends 7 bytes, without the charging byte.
+            id::STATUS_UPDATED if p.len() >= 7 => {
+                let charging = p.get(7).copied().unwrap_or(0);
+                self.buds.apply(p[5], charging, [p[1], p[2], p[6]]);
             }
             _ => return Vec::new(),
         }

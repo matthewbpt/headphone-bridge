@@ -6,8 +6,8 @@ mod support;
 use headphone_bridge_core::frame_log::FrameRecord;
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    Capabilities, Command, CommandError, Core, DeviceState, EffectiveModeReason, LevelRange, Model,
-    NoiseControlMode, NotAttachedReason,
+    Battery, Capabilities, Command, CommandError, Core, DeviceState, EffectiveModeReason,
+    LevelRange, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
     buds2, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
@@ -302,6 +302,111 @@ async fn a_short_noise_controls_update_is_a_gesture_that_sets_the_chosen_mode() 
     link.send.send(samsung_frame(0x77, &[0x00, 0x11])).unwrap();
     wait_for(&core, |list| {
         list.devices[0].chosen_mode == Some(NoiseControlMode::Off)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_charging_bit_in_a_revision_10_status_docks_that_bud_and_shows_the_case_level() {
+    let (core, _os, link) = attached_buds2().await;
+
+    // Both buds out of the ear (0x22), so the case level (51 %) is stale.
+    link.send
+        .send(buds2_extended_status(|status| status[6] = 0x22))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(100),
+                right: Some(100),
+                case: None,
+            })
+    })
+    .await;
+    // The right bud's charging bit (0x04 at byte 36) is set before its
+    // placement says it is in the case: the case level is live.
+    link.send
+        .send(buds2_extended_status(|status| {
+            status[6] = 0x22;
+            status[36] = 0x04;
+        }))
+        .unwrap();
+
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(100),
+                right: Some(100),
+                case: Some(51),
+            })
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_status_before_revision_10_updates_battery_from_placement_alone() {
+    let (core, _os, link) = attached_buds2().await;
+
+    // Before revision 10, byte 36 isn't the charging bits: a right bud out of
+    // the ear (0x22) stays out, and the case level stays unknown.
+    link.send
+        .send(buds2_extended_status(|status| {
+            status[0] = 9;
+            status[2] = 80;
+            status[6] = 0x22;
+            status[36] = 0x04;
+        }))
+        .unwrap();
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(80),
+                right: Some(100),
+                case: None,
+            })
+    })
+    .await;
+    // Once its placement puts the right bud in the case (0x23), the case level
+    // is live.
+    link.send
+        .send(buds2_extended_status(|status| {
+            status[0] = 9;
+            status[2] = 80;
+            status[6] = 0x23;
+        }))
+        .unwrap();
+
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(80),
+                right: Some(100),
+                case: Some(51),
+            })
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_seven_byte_status_update_from_older_firmware_updates_battery() {
+    let (core, _os, link) = attached_buds2().await;
+
+    // No charging byte: L 80 %, R 70 %, the right bud in the case (0x13) by
+    // placement, case 64 %.
+    link.send
+        .send(samsung_frame(
+            0x60,
+            &[0x01, 0x50, 0x46, 0x01, 0x01, 0x13, 0x40],
+        ))
+        .unwrap();
+
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(80),
+                right: Some(70),
+                case: Some(64),
+            })
     })
     .await;
 }
