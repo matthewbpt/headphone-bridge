@@ -6,6 +6,7 @@ import {
   BUDS_ADDRESS,
   NO_DEVICES,
   XM5_ADDRESS,
+  buds2,
   buds4Pro,
   notAttached,
   only,
@@ -40,6 +41,12 @@ describe("Noise Control Mode", () => {
 
   it("lists only the modes the XM5 supports, in the same order", async () => {
     renderWindow(new FakeCore(only(xm5())));
+
+    expect(await modeNames()).toEqual(["Off", "Ambient", "Noise Cancelling"]);
+  });
+
+  it("lists only the Buds2's three modes, in the same order", async () => {
+    renderWindow(new FakeCore(only(buds2())));
 
     expect(await modeNames()).toEqual(["Off", "Ambient", "Noise Cancelling"]);
   });
@@ -261,6 +268,19 @@ describe("Ambient Level", () => {
     expect(screen.getByRole("button", { name: "More" })).toBeEnabled();
 
     core.emit(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 4 })));
+    expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Less" })).toBeEnabled();
+    expect(core.sent()).toEqual([]);
+  });
+
+  it("stops the Buds2's − and + at 0 and 2", async () => {
+    const core = new FakeCore(only(buds2({ ambientLevel: 0 })));
+    renderWindow(core);
+
+    expect(await screen.findByRole("button", { name: "Less" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "More" })).toBeEnabled();
+
+    core.emit(only(buds2({ ambientLevel: 2 })));
     expect(screen.getByRole("button", { name: "More" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Less" })).toBeEnabled();
     expect(core.sent()).toEqual([]);
@@ -709,6 +729,11 @@ describe("the Device picture", () => {
   it("shows the Galaxy Buds4 Pro for a Buds4 Pro", async () => {
     renderWindow(new FakeCore(only(buds4Pro())));
     expect(await picture()).toHaveAccessibleName("Galaxy Buds4 Pro");
+  });
+
+  it("shows the Galaxy Buds2 for a Buds2", async () => {
+    renderWindow(new FakeCore(only(buds2())));
+    expect(await picture()).toHaveAccessibleName("Galaxy Buds2");
   });
 
   it("shows the WH-1000XM5 for an XM5", async () => {

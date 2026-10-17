@@ -217,7 +217,11 @@ export const LABELS: Labels = {
     ambient: "Ambient",
     adaptive: "Adaptive",
   },
-  models: { galaxyBuds4Pro: "Galaxy Buds4 Pro", wh1000xm5: "WH-1000XM5" },
+  models: {
+    galaxyBuds4Pro: "Galaxy Buds4 Pro",
+    galaxyBuds2: "Galaxy Buds2",
+    wh1000xm5: "WH-1000XM5",
+  },
   hints: { budOutOfEar: "Paused: an earbud is out of the ear", unknown: "Paused by the Device" },
   reasons: [
     { reason: { kind: "unsupportedModel" }, text: "Unsupported Model" },
