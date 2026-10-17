@@ -52,8 +52,8 @@ impl Model {
                     NoiseControlMode::NoiseCancelling,
                     NoiseControlMode::Ambient,
                 ],
-                // A hypothesis until a real Buds2 confirms it: that the
-                // lowest step is 0, as GalaxyBudsClient's Buds2 spec has it.
+                // The lowest step is 0: a real Buds2 ACKs a set to 0
+                // (galaxy-buds2/real-ambient-level).
                 ambient_level: Some(LevelRange { min: 0, max: 2 }),
                 noise_cancelling_level: None,
                 power_off: false,

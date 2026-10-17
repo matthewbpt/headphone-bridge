@@ -57,13 +57,24 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
-- `galaxy-buds2/`: synthesised until real captures exist from the frame log.
-  No Galaxy Buds2 capture exists yet.
-  - `attach`: the app's `MANAGER_INFO`, answered by the real revision-10
-    extended status in GalaxyBudsClient's tests
+- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314,
+  from the frame log on macOS, on 2026-10-17. One link session, cut into the
+  `real-*` files.
+  - `real-attach`: the Attach, answered with an extended status, then the
+    Device's own traffic.
+  - `real-noise-control`: Attach, then four mode sets, each confirmed only
+    by an ACK carrying the applied mode: the set's `MANAGER_INFO` gets only
+    a bare `88 00`, never an extended status. Then a bud leaves the ear and goes
+    back in: a 5-byte `NOISE_CONTROLS_UPDATE` with no cause byte pauses
+    Ambient to Off, then resumes it.
+  - `real-ambient-level`: Attach, then six Ambient Level sets down to 0,
+    each confirmed only by an ACK carrying the applied level.
+  - `attach`: synthesised. The app's `MANAGER_INFO`, answered by the real
+    revision-10 extended status in GalaxyBudsClient's tests
     (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,
     timschneeb/GalaxyBudsClient at 754b6fd), wire bytes verbatim. Device id
     316 (Green), Noise Cancelling, Ambient Level 1.
+  No Buds2 gesture has been captured yet.
 - `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
   mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
   exist from the frame log. No WH-1000XM5 capture exists yet.

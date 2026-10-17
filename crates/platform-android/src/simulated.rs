@@ -202,9 +202,9 @@ impl Simulated for Buds {
             };
             let Some(value) = value else { continue };
             self.status[setting] = value;
-            // A Buds4 Pro confirms a set with an ACK carrying the applied
-            // value (real-noise-control, real-nc-level-set); a Buds2 is
-            // assumed to do the same until a real one is captured.
+            // A Buds4 Pro and a Buds2 confirm a set with an ACK carrying the
+            // applied value (real-noise-control, real-nc-level-set, and
+            // galaxy-buds2's real-noise-control and real-ambient-level).
             replies.push(samsung::encode(samsung_id::ACK, &[frame.id, value]));
         }
         replies

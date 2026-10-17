@@ -1,5 +1,5 @@
-//! The Galaxy Buds2, from synthesised fixtures until a real frame log exists
-//! (see `fixtures/galaxy-buds2/attach.frames`).
+//! The Galaxy Buds2, from a synthesised Attach (`fixtures/galaxy-buds2/
+//! attach.frames`) and the `real-*` fixtures from a frame log.
 
 mod support;
 
@@ -195,8 +195,8 @@ async fn a_mode_set_sends_noise_controls_then_manager_info_and_an_ack_confirms_i
 
     assert_eq!(link.written.recv().await.unwrap(), SET_AMBIENT);
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
-    // A hypothesis until a real Buds2 confirms it: that its ACK echoes the
-    // applied mode, as a Buds4 Pro's does.
+    // Its ACK echoes the applied mode, as a Buds4 Pro's does
+    // (real-noise-control).
     link.send.send(samsung_frame(0x42, &[0x78, 0x02])).unwrap();
     wait_for(&core, |list| {
         list.devices[0].chosen_mode == Some(NoiseControlMode::Ambient)
@@ -291,7 +291,8 @@ async fn a_short_noise_controls_update_is_a_gesture_that_sets_the_chosen_mode() 
     let (core, _os, link) = attached_buds2().await;
 
     // The Buds2 sends no cause byte: one byte (the mode) or two (with the
-    // placement), as GalaxyBudsClient decodes them.
+    // placement, both buds in), as GalaxyBudsClient decodes them. No real
+    // Buds2 gesture has been captured yet.
     link.send.send(samsung_frame(0x77, &[0x02])).unwrap();
     wait_for(&core, |list| {
         list.devices[0].chosen_mode == Some(NoiseControlMode::Ambient)
