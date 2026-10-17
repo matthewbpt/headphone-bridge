@@ -1,5 +1,8 @@
 package dev.matthewbpt.headphonebridge.bluetooth
 
+import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
 import java.io.File
 
 /** The cache subdirectory [SharedFileProvider] serves, as `res/xml/shared_files.xml` names it. */
@@ -12,3 +15,7 @@ const val SHARED_DIR = "shared"
  */
 fun copyForSharing(file: File, cacheDir: File): File =
   file.copyTo(File(File(cacheDir, SHARED_DIR), file.name), overwrite = true)
+
+/** The `content://` URI [SharedFileProvider] serves [copy] at, a copy made by [copyForSharing]. */
+fun uriForSharing(context: Context, copy: File): Uri =
+  FileProvider.getUriForFile(context, "${context.packageName}.shared", copy)
