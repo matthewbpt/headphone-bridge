@@ -3,6 +3,8 @@
 
 mod support;
 
+use std::time::Duration;
+
 use headphone_bridge_core::frame_log::FrameRecord;
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
@@ -96,7 +98,7 @@ async fn a_buds2_named_device_reporting_another_models_device_id_is_unsupported(
     }
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_galaxy_buds2_pro_is_listed_as_unsupported_and_sent_nothing() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);
@@ -107,21 +109,17 @@ async fn a_galaxy_buds2_pro_is_listed_as_unsupported_and_sent_nothing() {
     };
 
     os.observe(Observation::DeviceConnected(buds2pro));
-    // A later Device that is Attached proves the first was handled without a link.
-    os.observe(Observation::DeviceConnected(buds2()));
 
-    assert_eq!(os.next_link().await.address, buds2().address);
-    let list = wait_for(&core, |list| list.devices.len() == 2).await;
-    let device = list
-        .devices
-        .iter()
-        .find(|d| d.name.starts_with("Galaxy Buds2 Pro"))
-        .unwrap();
+    let list = wait_for(&core, |list| list.devices.len() == 1).await;
     assert_eq!(
-        device.state,
+        list.devices[0].state,
         DeviceState::NotAttached {
             reason: NotAttachedReason::UnsupportedModel
         }
+    );
+    assert!(
+        !os.attempts_within(Duration::from_secs(600)).await,
+        "no control link is opened, so nothing is written"
     );
 }
 
