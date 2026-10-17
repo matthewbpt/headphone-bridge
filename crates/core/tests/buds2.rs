@@ -5,14 +5,14 @@ mod support;
 
 use std::time::Duration;
 
-use headphone_bridge_core::frame_log::FrameRecord;
+use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
     Battery, Capabilities, Command, CommandError, Core, DeviceState, EffectiveModeReason,
     LevelRange, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds2, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds2, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
     SAMSUNG_SERVICE,
 };
 
@@ -430,4 +430,71 @@ async fn frame_logs_label_the_buds2s_frames_galaxy_buds2() {
     let log = FrameRecord::parse_all(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let models: Vec<&str> = log.iter().map(|record| record.model.as_str()).collect();
     assert_eq!(models, ["samsung", "galaxy-buds2"]);
+}
+
+#[tokio::test]
+async fn a_real_buds2_attach_reports_its_mode_level_and_battery() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds2()));
+    let mut link = os.next_link().await;
+
+    replay(&mut link, &fixture("galaxy-buds2/real-attach")).await;
+
+    let list = wait_for(&core, |list| list.devices[0].battery.is_some()).await;
+    let device = &list.devices[0];
+    assert_eq!(device.state, DeviceState::Attached);
+    assert_eq!(device.model, Some(Model::GalaxyBuds2));
+    assert_eq!(device.chosen_mode, Some(NoiseControlMode::Ambient));
+    assert_eq!(device.effective_mode, Some(NoiseControlMode::Ambient));
+    assert_eq!(device.effective_mode_reason, None);
+    assert_eq!(device.ambient_level, Some(1));
+    assert_eq!(device.noise_cancelling_level, None);
+    assert_eq!(
+        device.battery,
+        Some(Battery::Buds {
+            left: Some(99),
+            right: Some(99),
+            case: None,
+        })
+    );
+    drop(core);
+    assert_eq!(link.written.recv().await, None, "only MANAGER_INFO written");
+}
+
+/// The indices of the sets the app sent with message `id` in `records`.
+fn sets_in(records: &[FrameRecord], id: u8) -> Vec<usize> {
+    records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(3) == Some(&id))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+#[tokio::test]
+async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds2()));
+    let mut link = os.next_link().await;
+    // The Device ACKs each set with `84 <applied level>` and answers the poll
+    // with a bare MANAGER_INFO, so the ACK must confirm it.
+    let records = fixture("galaxy-buds2/real-ambient-level");
+    let set_at = sets_in(&records, 0x84);
+    let levels = [2, 1, 0, 1, 2, 1];
+    assert_eq!(set_at.len(), levels.len());
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    wait_for(&core, |list| list.devices[0].ambient_level == Some(1)).await;
+    for (i, level) in levels.into_iter().enumerate() {
+        core.command(Command::SetAmbientLevel(buds2().address, level))
+            .await
+            .unwrap();
+        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[set_at[i]..end]).await;
+        wait_for(&core, |list| list.devices[0].ambient_level == Some(level)).await;
+    }
+    let list = core.device_list();
+    assert_eq!(list.devices[0].chosen_mode, Some(NoiseControlMode::Ambient));
 }
