@@ -341,7 +341,8 @@ enum SessionCommand {
 
 #[derive(Debug, Clone, Copy)]
 enum Vendor {
-    Samsung,
+    /// With the Model its OS name points to, if any (ADR-0003).
+    Samsung(Option<Model>),
     Sony,
 }
 
@@ -410,7 +411,7 @@ impl<P: Platform> State<P> {
     fn connected(&mut self, identity: DeviceIdentity) {
         let has_service = |service| identity.service_uuids.contains(&service);
         let vendor = if has_service(samsung::SERVICE) {
-            Vendor::Samsung
+            Vendor::Samsung(samsung::candidate_model(&identity.name))
         } else if has_service(sony::SERVICE) {
             Vendor::Sony
         } else {
@@ -420,7 +421,7 @@ impl<P: Platform> State<P> {
         // is Attached to identify it. A Samsung Device needs a write first, so
         // only those whose name points at the allowlist are (ADR-0003).
         let attach = match vendor {
-            Vendor::Samsung => samsung::candidate_model(&identity.name).is_some(),
+            Vendor::Samsung(candidate) => candidate.is_some(),
             Vendor::Sony => true,
         };
         let state = if !attach {
@@ -483,7 +484,7 @@ impl<P: Platform> State<P> {
                 send(LinkEventKind::Attaching);
             }
             let service = match vendor {
-                Vendor::Samsung => samsung::SERVICE,
+                Vendor::Samsung(_) => samsung::SERVICE,
                 Vendor::Sony => sony::SERVICE,
             };
             let identified = AtomicBool::new(false);
@@ -497,8 +498,15 @@ impl<P: Platform> State<P> {
                 Ok(link) => {
                     let session = async {
                         match vendor {
-                            Vendor::Samsung => {
-                                run_samsung_session(link, commands_rx, frame_log, on_update).await
+                            Vendor::Samsung(candidate) => {
+                                run_samsung_session(
+                                    link,
+                                    candidate,
+                                    commands_rx,
+                                    frame_log,
+                                    on_update,
+                                )
+                                .await
                             }
                             Vendor::Sony => {
                                 run_sony_session(link, commands_rx, frame_log, on_update).await
@@ -801,9 +809,10 @@ impl<P: Platform> State<P> {
 }
 
 /// Runs a Samsung control link session until the link closes, or until the
-/// Device turns out to be an unsupported Model. Returns why it ended.
+/// Device turns out not to be its `candidate` Model. Returns why it ended.
 async fn run_samsung_session(
     mut link: ControlLink,
+    candidate: Option<Model>,
     mut commands: mpsc::UnboundedReceiver<SessionCommand>,
     frame_log: FrameLog,
     mut on_update: impl FnMut(Update),
@@ -818,7 +827,7 @@ async fn run_samsung_session(
     if !send(slug, samsung::Session::handshake()) {
         return NotAttachedReason::LinkDropped;
     }
-    let mut session = samsung::Session::default();
+    let mut session = samsung::Session::new(candidate);
     loop {
         tokio::select! {
             bytes = link.incoming.recv() => {

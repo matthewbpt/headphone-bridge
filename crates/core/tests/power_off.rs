@@ -319,12 +319,12 @@ async fn an_xm5_that_is_not_attached_refuses_power_off() {
 async fn an_unsupported_model_refuses_power_off() {
     let (platform, os) = fake_platform();
     let core = Core::start(platform);
-    let buds2 = DeviceIdentity {
+    let buds2pro = DeviceIdentity {
         address: DeviceAddress("A1:B2:C3:00:00:02".into()),
-        name: "Galaxy Buds2 (0002)".into(),
+        name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
-    os.observe(Observation::DeviceConnected(buds2.clone()));
+    os.observe(Observation::DeviceConnected(buds2pro.clone()));
     let unsupported = DeviceState::NotAttached {
         reason: NotAttachedReason::UnsupportedModel,
     };
@@ -334,7 +334,7 @@ async fn an_unsupported_model_refuses_power_off() {
     .await;
 
     assert_eq!(
-        core.command(Command::PowerOff(buds2.address)).await,
+        core.command(Command::PowerOff(buds2pro.address)).await,
         Err(CommandError::UnsupportedModel)
     );
 }

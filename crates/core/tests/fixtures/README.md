@@ -18,7 +18,7 @@ record, a comment or blank:
 The fields of a record are separated by single spaces:
 
 1. **Timestamp**: RFC 3339, UTC, millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`).
-2. **Device Model**: its slug (`galaxy-buds4-pro`, `wh-1000xm5`). If the Model
+2. **Device Model**: its slug (`galaxy-buds4-pro`, `galaxy-buds2`, `wh-1000xm5`). If the Model
    isn't identified yet, the vendor's slug (`samsung`, `sony`).
 3. **Direction**: `>>` for a frame the app sent to the Device, `<<` for a frame
    received from it.
@@ -57,6 +57,13 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
+- `galaxy-buds2/`: synthesised until real captures exist from the frame log.
+  No Galaxy Buds2 capture exists yet.
+  - `attach`: the app's `MANAGER_INFO`, answered by the real revision-10
+    extended status in GalaxyBudsClient's tests
+    (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,
+    timschneeb/GalaxyBudsClient at 754b6fd), wire bytes verbatim. Device id
+    316 (Green), Noise Cancelling, Ambient Level 1.
 - `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
   mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
   exist from the frame log. No WH-1000XM5 capture exists yet.

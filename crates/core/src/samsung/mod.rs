@@ -1,6 +1,8 @@
-//! The Samsung Galaxy Buds protocol (pure, no I/O), starting with the
-//! Galaxy Buds4 Pro. Ported from omarchy-buds (MIT) and checked against its
-//! Buds4 Pro captures (firmware revision 4).
+//! The Samsung Galaxy Buds protocol (pure, no I/O), for the Galaxy Buds4 Pro
+//! and Galaxy Buds2. Ported from omarchy-buds (MIT) and checked against its
+//! Buds4 Pro captures (firmware revision 4). The Buds2 uses the same messages
+//! at the same offsets, after GalaxyBudsClient's Buds2 definitions; no real
+//! Buds2 capture exists yet.
 
 pub(crate) mod frame;
 
@@ -30,15 +32,23 @@ mod id {
 /// The Model the OS-reported identity points to, before Attaching. Only these
 /// Devices are Attached, and so sent the handshake (ADR-0003).
 pub fn candidate_model(name: &str) -> Option<Model> {
-    name.to_lowercase()
-        .contains("buds4 pro")
-        .then_some(Model::GalaxyBuds4Pro)
+    let name = name.to_lowercase();
+    if name.contains("buds4 pro") {
+        Some(Model::GalaxyBuds4Pro)
+    } else if name.contains("buds2") && !name.contains("buds2 pro") {
+        Some(Model::GalaxyBuds2)
+    } else {
+        None
+    }
 }
 
 /// One control link session with a Samsung Device.
 #[derive(Debug, Default)]
 pub struct Session {
     deframer: Deframer,
+    /// The Model the Device's name points to: the only one its device id
+    /// may confirm.
+    candidate: Option<Model>,
     /// `None` until the extended status identifies the Model.
     model: Option<Model>,
     buds: Buds,
@@ -55,9 +65,18 @@ pub struct Session {
 }
 
 impl Session {
+    /// A session with a Device whose name points to `candidate`.
+    pub fn new(candidate: Option<Model>) -> Session {
+        Session {
+            candidate,
+            ..Session::default()
+        }
+    }
+
     /// The frames to send when the link opens: the `MANAGER_INFO` handshake,
     /// introducing the app the way Samsung's own app does. The Device answers
-    /// with an extended status, which identifies the Model.
+    /// with an extended status, which identifies the Model. That a Buds2
+    /// answers it too is a hypothesis until a real one is captured.
     pub fn handshake() -> Vec<u8> {
         encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
     }
@@ -66,7 +85,9 @@ impl Session {
     /// Buds4 Pro confirms with an ACK carrying the applied mode
     /// (real-noise-control). In capture-2 it sent no ACK, and confirmed with
     /// a `NOISE_CONTROLS_UPDATE` only after the next `MANAGER_INFO`, so a set
-    /// is followed by one as a poll.
+    /// is followed by one as a poll. That a Buds2's ACKs also carry the
+    /// applied value is a hypothesis; if not, the poll's extended status
+    /// confirms the set.
     pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) -> Vec<Vec<u8>> {
         self.pending_mode = Some(mode);
         vec![
@@ -144,9 +165,12 @@ impl Session {
             id::EXTENDED_STATUS_UPDATED if p.len() > 17 => {
                 if self.model.is_none() {
                     let device_id = |at: usize| u16::from_le_bytes([p[at], p[at + 1]]);
+                    // The device id, not the name, decides the Model, and it
+                    // must be the one the name pointed to (ADR-0003).
                     match [device_id(14), device_id(16)]
                         .into_iter()
                         .find_map(model_for_device_id)
+                        .filter(|model| Some(*model) == self.candidate)
                     {
                         Some(model) => {
                             self.model = Some(model);
@@ -241,11 +265,15 @@ fn noise_control_value(mode: NoiseControlMode) -> u8 {
     }
 }
 
-/// Device ids are per colour: 359 Black, 360 White, 361 Apricot.
+/// Device ids are per colour. Buds4 Pro: 359 Black, 360 White, 361 Apricot.
+/// Buds2: 313 White to 321 Grey, as GalaxyBudsClient lists them; its 14337,
+/// an unknown Buds2, isn't accepted until a real Device reports it.
 fn model_for_device_id(device_id: u16) -> Option<Model> {
-    (359..=361)
-        .contains(&device_id)
-        .then_some(Model::GalaxyBuds4Pro)
+    match device_id {
+        359..=361 => Some(Model::GalaxyBuds4Pro),
+        313..=321 => Some(Model::GalaxyBuds2),
+        _ => None,
+    }
 }
 
 /// Whether placement nibbles (L high, R low) put both buds in the ear.

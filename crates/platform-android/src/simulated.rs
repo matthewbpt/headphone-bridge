@@ -1,4 +1,4 @@
-//! The Simulated Device, in debug builds only: a Buds4 Pro or an XM5 that
+//! The Simulated Device, in debug builds only: a Buds4 Pro, a Buds2 or an XM5 that
 //! answers the core in-process, for the emulator, which can't reach real
 //! headphones. It starts from the frames the core's tests replay, and
 //! confirms mode and Level changes the way the real Device does.
@@ -18,6 +18,7 @@ fn address(model: Model) -> DeviceAddress {
         match model {
             Model::GalaxyBuds4Pro => "02:00:5E:00:00:01",
             Model::Wh1000Xm5 => "02:00:5E:00:00:02",
+            Model::GalaxyBuds2 => "02:00:5E:00:00:03",
         }
         .into(),
     )
@@ -33,7 +34,8 @@ pub(crate) struct SimulatedDevice {
 impl SimulatedDevice {
     pub(crate) fn new(model: Model) -> SimulatedDevice {
         let device: Box<dyn Simulated> = match model {
-            Model::GalaxyBuds4Pro => Box::new(Buds::new()),
+            Model::GalaxyBuds4Pro => Box::new(Buds::buds4pro()),
+            Model::GalaxyBuds2 => Box::new(Buds::buds2()),
             Model::Wh1000Xm5 => Box::new(Headphones::new()),
         };
         SimulatedDevice {
@@ -49,7 +51,7 @@ impl SimulatedDevice {
     /// What the OS would report for it once Connected.
     pub(crate) fn identity(&self) -> DeviceIdentity {
         let service = match self.model {
-            Model::GalaxyBuds4Pro => samsung::SERVICE,
+            Model::GalaxyBuds4Pro | Model::GalaxyBuds2 => samsung::SERVICE,
             Model::Wh1000Xm5 => sony::SERVICE,
         };
         DeviceIdentity {
@@ -116,7 +118,7 @@ fn received<F>(fixture: &str, mut deframe: impl FnMut(&[u8]) -> Vec<F>) -> Vec<F
         .collect()
 }
 
-/// A Galaxy Buds4 Pro, both buds in the ear.
+/// A Galaxy Buds4 Pro or Buds2, both buds in the ear.
 struct Buds {
     deframer: samsung::Deframer,
     /// The extended status payload it answers the handshake with, kept up to
@@ -142,17 +144,31 @@ mod samsung_status {
 }
 
 impl Buds {
-    fn new() -> Buds {
-        // capture-3's first extended status: L 100 %, R 97 %, Ambient.
+    /// A Buds4 Pro from capture-3's first extended status: L 100 %, R 97 %,
+    /// Ambient.
+    fn buds4pro() -> Buds {
+        Buds::new(include_str!(
+            "../../core/tests/fixtures/galaxy-buds4-pro/capture-3.frames"
+        ))
+    }
+
+    /// A Buds2 from the extended status in GalaxyBudsClient's tests: device
+    /// id 316, L and R 100 %, Noise Cancelling, Ambient Level 1. A Buds2's
+    /// sets reach the same bytes as a Buds4 Pro's.
+    fn buds2() -> Buds {
+        Buds::new(include_str!(
+            "../../core/tests/fixtures/galaxy-buds2/attach.frames"
+        ))
+    }
+
+    /// Starts from the first extended status the Device sent in `fixture`.
+    fn new(fixture: &str) -> Buds {
         let mut deframer = samsung::Deframer::default();
-        let mut status = received(
-            include_str!("../../core/tests/fixtures/galaxy-buds4-pro/capture-3.frames"),
-            |bytes| deframer.push(bytes),
-        )
-        .into_iter()
-        .find(|frame| frame.id == samsung_id::EXTENDED_STATUS_UPDATED)
-        .expect("capture-3 has an extended status")
-        .payload;
+        let mut status = received(fixture, |bytes| deframer.push(bytes))
+            .into_iter()
+            .find(|frame| frame.id == samsung_id::EXTENDED_STATUS_UPDATED)
+            .expect("the fixture has an extended status")
+            .payload;
         // Both buds in the ear, so the Effective Mode is the Chosen Mode.
         status[samsung_status::PLACEMENT] = 0x11;
         Buds {
@@ -187,7 +203,8 @@ impl Simulated for Buds {
             let Some(value) = value else { continue };
             self.status[setting] = value;
             // A Buds4 Pro confirms a set with an ACK carrying the applied
-            // value (real-noise-control, real-nc-level-set).
+            // value (real-noise-control, real-nc-level-set); a Buds2 is
+            // assumed to do the same until a real one is captured.
             replies.push(samsung::encode(samsung_id::ACK, &[frame.id, value]));
         }
         replies

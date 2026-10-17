@@ -16,4 +16,6 @@ both under the MIT licence:
   Samsung Galaxy Buds protocol and Buds4 Pro captures.
 
 GalaxyBudsClient (GPL-3.0) and Gadgetbridge (AGPL-3.0) were consulted only to
-cross-check protocol facts. No code was copied from them.
+cross-check protocol facts. No code was copied from them. One test fixture,
+crates/core/tests/fixtures/galaxy-buds2/attach.frames, replays a single frame
+a Galaxy Buds2 sent, as recorded in GalaxyBudsClient's test data.
