@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Features
+
+* support the Galaxy Buds2 ([#91](https://github.com/matthewbpt/headphone-bridge/issues/91)) ([df36c2b](https://github.com/matthewbpt/headphone-bridge/commit/df36c2bd462cb8aa568aebb5753437e25f7ac345))
+
+
+### Bug Fixes
+
+* share the frame log on Android through the provider's meta-data ([#92](https://github.com/matthewbpt/headphone-bridge/issues/92)) ([d5765d4](https://github.com/matthewbpt/headphone-bridge/commit/d5765d45f36365d3629e8a026c49d32b4e5d1f3e))
+
 ## [0.2.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.1.0...v0.2.0) (2026-10-15)
 
 
