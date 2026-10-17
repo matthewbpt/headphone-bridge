@@ -11,7 +11,6 @@ import android.provider.Settings
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -94,7 +93,7 @@ class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
     val args = invoke.parseArgs(ShareFileArgs::class.java)
     try {
       val copy = copyForSharing(File(args.path), activity.cacheDir)
-      val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.shared", copy)
+      val uri = uriForSharing(activity, copy)
       val send =
         Intent(Intent.ACTION_SEND)
           .setType("text/plain")
