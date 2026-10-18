@@ -293,7 +293,7 @@ async fn a_command_the_core_refuses_or_cannot_read_says_why() {
 }
 
 #[tokio::test]
-async fn an_open_kotlin_never_got_fails_instead_of_waiting_for_ever() {
+async fn an_open_kotlin_never_got_fails_as_bluetooth_unavailable_instead_of_waiting_for_ever() {
     // Kotlin hasn't connected: nothing reaches it, but the test still sees it.
     let (sink, messages) = mpsc::unbounded_channel();
     let host = Host::start(move |message| {
@@ -305,12 +305,10 @@ async fn an_open_kotlin_never_got_fails_instead_of_waiting_for_ever() {
     host.event(r#"{"type":"holdAll"}"#).unwrap();
     kotlin
         .device_list(|list| {
-            matches!(
-                state_of(list, XM5),
-                Some(DeviceState::NotAttached {
-                    reason: NotAttachedReason::LinkFailed(LinkFailure::Other(_))
+            state_of(list, XM5)
+                == Some(DeviceState::NotAttached {
+                    reason: NotAttachedReason::LinkFailed(LinkFailure::BluetoothUnavailable),
                 })
-            )
         })
         .await;
 }

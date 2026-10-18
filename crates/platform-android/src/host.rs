@@ -336,11 +336,13 @@ impl Platform for KotlinBluetooth {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .remove(&request);
-            return Err(LinkFailure::Other("Bluetooth isn't ready yet".into()));
+            // Kotlin hasn't connected yet.
+            return Err(LinkFailure::BluetoothUnavailable);
         }
-        let (link, incoming) = opened
-            .await
-            .map_err(|_| LinkFailure::Other("the open was abandoned".into()))??;
+        let (link, incoming) = opened.await.map_err(|_| {
+            log(&format!("the open of {address} was abandoned"));
+            LinkFailure::BluetoothHandlingStopped
+        })??;
         let (outgoing, mut outgoing_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let shared = shared.clone();
         tokio::spawn(async move {
@@ -357,4 +359,12 @@ impl Platform for KotlinBluetooth {
         });
         Ok(ControlLink { incoming, outgoing })
     }
+}
+
+/// Logs to logcat on Android, and to stderr where the host is tested.
+fn log(message: &str) {
+    #[cfg(target_os = "android")]
+    crate::android::log(message);
+    #[cfg(not(target_os = "android"))]
+    eprintln!("{message}");
 }
