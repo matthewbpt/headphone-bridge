@@ -94,8 +94,7 @@ impl Simulator {
     /// the Model already on does nothing. If `model` can't start, the one on
     /// stays on.
     pub fn simulate(&self, model: Option<Model>) -> Result<(), StartError> {
-        self.shared
-            .simulate(model, |_| true, Some(&self.observations))
+        self.shared.switch(model, Some(&self.observations))
     }
 
     /// The Simulated Device's Model while it's switched on.
@@ -119,33 +118,55 @@ struct Shared {
 }
 
 impl Shared {
-    /// Switches the Simulated Device to `model` if `from` approves of the
-    /// one on now, reporting the change to `observations` if given.
-    fn simulate(
+    /// Switches the Simulated Device to `model`, reporting the change to
+    /// `observations` if given. Switching to the Model already on does
+    /// nothing; if `model` can't start, the one on stays on.
+    fn switch(
         &self,
         model: Option<Model>,
-        from: impl FnOnce(Option<Model>) -> bool,
         observations: Option<&mpsc::UnboundedSender<Observation>>,
     ) -> Result<(), StartError> {
         let mut device = self.device.lock().unwrap_or_else(PoisonError::into_inner);
-        let now = device.as_ref().map(SimulatedDevice::model);
-        if now == model || !from(now) {
+        if device.as_ref().map(SimulatedDevice::model) == model {
             return Ok(());
         }
         let next = model.map(SimulatedDevice::new).transpose()?;
-        let report = |observation| {
-            if let Some(observations) = observations {
-                let _ = observations.send(observation);
-            }
-        };
-        if let Some(previous) = device.take() {
-            report(Observation::DeviceDisconnected(previous.identity().address));
-        }
-        if let Some(next) = next {
-            report(Observation::DeviceConnected(next.identity()));
-            *device = Some(next);
-        }
+        replace(&mut device, next, observations);
         Ok(())
+    }
+
+    /// Switches the Simulated Device off if it's still `model`, as its Power
+    /// Off does, reporting the change to `observations` if given.
+    fn switch_off_if(
+        &self,
+        model: Model,
+        observations: Option<&mpsc::UnboundedSender<Observation>>,
+    ) {
+        let mut device = self.device.lock().unwrap_or_else(PoisonError::into_inner);
+        if device.as_ref().map(SimulatedDevice::model) == Some(model) {
+            replace(&mut device, None, observations);
+        }
+    }
+}
+
+/// Puts `next` in place of `device`, Disconnecting the one before and
+/// Connecting `next`, as reported to `observations` if given.
+fn replace(
+    device: &mut Option<SimulatedDevice>,
+    next: Option<SimulatedDevice>,
+    observations: Option<&mpsc::UnboundedSender<Observation>>,
+) {
+    let report = |observation| {
+        if let Some(observations) = observations {
+            let _ = observations.send(observation);
+        }
+    };
+    if let Some(previous) = device.take() {
+        report(Observation::DeviceDisconnected(previous.identity().address));
+    }
+    if let Some(next) = next {
+        report(Observation::DeviceConnected(next.identity()));
+        *device = Some(next);
     }
 }
 
@@ -171,8 +192,7 @@ impl<P: Platform> Platform for WithSimulated<P> {
                     let shared = self.shared.clone();
                     device.open(move || {
                         let observations = shared.observations.upgrade();
-                        let _ =
-                            shared.simulate(None, |now| now == Some(model), observations.as_ref());
+                        shared.switch_off_if(model, observations.as_ref());
                     })
                 })
         };
