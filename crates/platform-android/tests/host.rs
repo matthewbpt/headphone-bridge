@@ -86,10 +86,9 @@ async fn a_connected_device_stays_detached_until_something_holds_it() {
     assert!(!kotlin.asked_to_open());
 }
 
-/// The XM5's Attach, from the core's fixtures.
+/// The XM5's Attach, from the fixtures crate.
 fn xm5_attach() -> Vec<FrameRecord> {
-    let text = include_str!("../../core/tests/fixtures/wh-1000xm5/attach.frames");
-    FrameRecord::parse_all(text).unwrap()
+    FrameRecord::parse_all(headphone_bridge_fixtures::XM5_ATTACH).unwrap()
 }
 
 impl Kotlin {

@@ -175,12 +175,9 @@ pub fn xm5() -> DeviceIdentity {
     }
 }
 
-/// Loads `tests/fixtures/<name>.frames`.
+/// Loads `<name>.frames` from the fixtures crate.
 pub fn fixture(name: &str) -> Vec<FrameRecord> {
-    let path = format!(
-        "{}/tests/fixtures/{name}.frames",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let path = format!("{}/{name}.frames", headphone_bridge_fixtures::DIR);
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
     FrameRecord::parse_all(&text).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
@@ -322,7 +319,7 @@ pub fn samsung_frame(id: u8, payload: &[u8]) -> Vec<u8> {
 }
 
 /// Encodes a Sony MDR v2 Table 1 (`0x0C`) frame the way a Device would. Only
-/// for frames no fixture has; see `tests/fixtures/wh-1000xm5/gen.py`.
+/// for frames no fixture has; see `crates/fixtures/wh-1000xm5/gen.py`.
 pub fn sony_frame(seq: u8, data: &[u8]) -> Vec<u8> {
     sony_encode(0x0c, seq, data)
 }

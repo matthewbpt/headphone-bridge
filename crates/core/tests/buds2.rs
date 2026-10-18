@@ -1,5 +1,5 @@
-//! The Galaxy Buds2, from a synthesised Attach (`fixtures/galaxy-buds2/
-//! attach.frames`) and the `real-*` fixtures from a frame log.
+//! The Galaxy Buds2, from a synthesised Attach (`crates/fixtures/
+//! galaxy-buds2/attach.frames`) and the `real-*` fixtures from a frame log.
 
 #![cfg(test)]
 

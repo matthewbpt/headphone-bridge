@@ -14,10 +14,11 @@
         { "type": "json", "path": "app/package-lock.json", "jsonpath": "$.packages[''].version" },
         { "type": "toml", "path": "app/src-tauri/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/core/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/fixtures/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/platform-macos/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/platform-linux/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/platform-android/Cargo.toml", "jsonpath": "$.package.version" },
-        { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(@.name.value == 'headphone-bridge' || @.name.value == 'headphone-bridge-core' || @.name.value == 'headphone-bridge-platform-android' || @.name.value == 'headphone-bridge-platform-linux' || @.name.value == 'headphone-bridge-platform-macos')].version" }
+        { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(@.name.value == 'headphone-bridge' || @.name.value == 'headphone-bridge-core' || @.name.value == 'headphone-bridge-fixtures' || @.name.value == 'headphone-bridge-platform-android' || @.name.value == 'headphone-bridge-platform-linux' || @.name.value == 'headphone-bridge-platform-macos')].version" }
       ]
     }
   }
