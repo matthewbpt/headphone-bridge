@@ -174,9 +174,6 @@ mod tests {
     const BUDS2_ATTACH: &str = include_str!("../tests/fixtures/galaxy-buds2/attach.frames");
     const XM5_ATTACH: &str = include_str!("../tests/fixtures/wh-1000xm5/attach.frames");
 
-    /// `MANAGER_INFO`, the Samsung handshake.
-    const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
-
     /// The WH-1000XM5 Attach up to the model name reply and what the app
     /// writes in answer to it.
     const XM5_IDENTIFYING: usize = 9;
@@ -373,10 +370,12 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn a_samsung_frame_revealing_an_unsupported_model_reports_it_alone_and_writes_nothing_more(
+    async fn a_samsung_frame_revealing_an_unsupported_model_ends_the_session_with_nothing_more_written(
     ) {
-        // A Device named as a Buds4 Pro that reports a Buds2's device id,
-        // along with its battery and Noise Control Mode.
+        // A Device named as a Buds4 Pro that reports a Buds2's device id.
+        // Samsung's session already reports such a frame as Unsupported
+        // alone, so only the Sony test pins that the runner reports it
+        // alone; this one pins that the session ends on it.
         let records = fixture(BUDS2_ATTACH);
         let device = Device::start(
             samsung::Session::new(Model::GalaxyBuds4Pro),
@@ -387,10 +386,12 @@ mod tests {
 
         assert_eq!(
             device.session.is_finished().then(|| device.events()),
-            Some(vec![
-                Event::Written(MANAGER_INFO.to_vec()),
-                Event::Reported(Update::Unsupported),
-            ])
+            Some(
+                written(&records)
+                    .into_iter()
+                    .chain([Event::Reported(Update::Unsupported)])
+                    .collect()
+            )
         );
     }
 
