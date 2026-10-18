@@ -59,6 +59,8 @@ enum WireEvent {
         request: u64,
         link: i32,
     },
+    /// `{request, reason, detail?}`: `reason` is the link failure's serde
+    /// name, and only `other` carries a `detail`.
     OpenFailed {
         request: u64,
         #[serde(flatten)]

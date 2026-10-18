@@ -66,9 +66,8 @@ pub struct ControlLink {
 }
 
 /// Why a control link couldn't be opened. Its `Display` is for logs; the
-/// shell words it for the listener. An adapter whose OS side reports it in
-/// JSON reads it as `{reason, detail?}`, with `detail` only for
-/// [`LinkFailure::Other`].
+/// shell words it for the listener. Its serde names are the ones the UI is
+/// sent in `NotAttachedReason`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Deserialize)]
 #[serde(tag = "reason", content = "detail", rename_all = "camelCase")]
 pub enum LinkFailure {
