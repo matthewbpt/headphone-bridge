@@ -33,13 +33,15 @@ pub fn hint(reason: EffectiveModeReason) -> &'static str {
     }
 }
 
-/// Where the listener grants the app Bluetooth, on Android the Nearby
-/// devices permission the widget and tile can't ask for themselves.
-#[cfg(not(target_os = "android"))]
-const PERMISSION_DENIED: &str =
-    "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth";
-#[cfg(target_os = "android")]
-const PERMISSION_DENIED: &str = "Open the app to allow Nearby devices";
+/// Where the listener grants the app Bluetooth: on Android the Nearby
+/// devices permission, worded for the App Screen and the widget alike.
+fn permission_denied(android: bool) -> &'static str {
+    if android {
+        "Allow Nearby devices for Headphone Bridge in Android settings"
+    } else {
+        "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+    }
+}
 
 /// Why a Device isn't Attached. A link failure without a cause has one
 /// label; the window shows its detail beneath it.
@@ -50,7 +52,9 @@ pub fn reason(reason: &NotAttachedReason) -> &'static str {
         NotAttachedReason::NoResponse => "The Device didn't respond",
         NotAttachedReason::LinkFailed(failure) => match failure {
             LinkFailure::InUseByAnotherProcess => "In use by another app",
-            LinkFailure::BluetoothPermissionDenied => PERMISSION_DENIED,
+            LinkFailure::BluetoothPermissionDenied => {
+                permission_denied(cfg!(target_os = "android"))
+            }
             LinkFailure::ServiceNotFound => "Control service not found",
             LinkFailure::DeviceNotConnected => "Not Connected",
             LinkFailure::BluetoothUnavailable => "Bluetooth is off or unavailable",
@@ -209,6 +213,22 @@ mod tests {
                 label
             );
         }
+    }
+
+    #[test]
+    fn tells_the_listener_on_android_where_to_allow_nearby_devices() {
+        assert_eq!(
+            permission_denied(true),
+            "Allow Nearby devices for Headphone Bridge in Android settings"
+        );
+    }
+
+    #[test]
+    fn tells_the_listener_on_the_desktop_where_to_allow_bluetooth() {
+        assert_eq!(
+            permission_denied(false),
+            "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+        );
     }
 
     #[test]
