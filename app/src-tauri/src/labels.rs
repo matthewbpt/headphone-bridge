@@ -1,6 +1,7 @@
 //! Every label the tray and the window show for a Device's state and
-//! settings. The window gets them from the `labels` command, so the two
-//! can't drift apart.
+//! settings. The window gets them from the `labels` command, and the
+//! Android widget and tile from `NativeCore.labels`, so they can't drift
+//! apart.
 
 use std::collections::HashMap;
 
@@ -32,6 +33,17 @@ pub fn hint(reason: EffectiveModeReason) -> &'static str {
     }
 }
 
+/// Where the listener grants the app Bluetooth: on Android the Nearby
+/// devices permission, worded to read right on the App Screen and in the
+/// widget and tile, which show this label too.
+fn permission_denied(android: bool) -> &'static str {
+    if android {
+        "Allow Nearby devices for Headphone Bridge in Android settings"
+    } else {
+        "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+    }
+}
+
 /// Why a Device isn't Attached. A link failure without a cause has one
 /// label; the window shows its detail beneath it.
 pub fn reason(reason: &NotAttachedReason) -> &'static str {
@@ -42,7 +54,7 @@ pub fn reason(reason: &NotAttachedReason) -> &'static str {
         NotAttachedReason::LinkFailed(failure) => match failure {
             LinkFailure::InUseByAnotherProcess => "In use by another app",
             LinkFailure::BluetoothPermissionDenied => {
-                "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+                permission_denied(cfg!(target_os = "android"))
             }
             LinkFailure::ServiceNotFound => "Control service not found",
             LinkFailure::DeviceNotConnected => "Not Connected",
@@ -202,6 +214,22 @@ mod tests {
                 label
             );
         }
+    }
+
+    #[test]
+    fn tells_the_listener_on_android_where_to_allow_nearby_devices() {
+        assert_eq!(
+            permission_denied(true),
+            "Allow Nearby devices for Headphone Bridge in Android settings"
+        );
+    }
+
+    #[test]
+    fn tells_the_listener_on_the_desktop_where_to_allow_bluetooth() {
+        assert_eq!(
+            permission_denied(false),
+            "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+        );
     }
 
     #[test]

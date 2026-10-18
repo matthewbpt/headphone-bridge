@@ -67,7 +67,7 @@ class TileLookTest {
   @Test
   fun theSubtitleSaysWhatAnActionIsDoingOrWhyItFailed() {
     assertEquals("Setting Ambient…", tileLook(shown("ambient", note = "Setting Ambient…")).subtitle)
-    assertEquals(LINK_DROPPED, tileLook(shown("off", note = LINK_DROPPED)).subtitle)
+    assertEquals("The link dropped", tileLook(shown("off", note = "The link dropped")).subtitle)
   }
 
   @Test

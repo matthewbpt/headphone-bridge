@@ -28,6 +28,15 @@ internal object NativeCoreLink : CoreLink {
 
   override fun endHoldPrimary() = sendToCore(coreEvent("endHoldPrimary"))
 
+  @Volatile private var fetchedLabels: JSONObject? = null
+
+  /** Fetched once they can be; until then empty, so a reason shows by its name. */
+  override val labels: JSONObject
+    get() =
+      fetchedLabels
+        ?: NativeCore.labels()?.let { JSONObject(it) }?.also { fetchedLabels = it }
+        ?: JSONObject()
+
   // ---- the Device list ----
 
   private val listLock = Object()

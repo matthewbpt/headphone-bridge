@@ -1,9 +1,10 @@
 package dev.matthewbpt.headphonebridge.bluetooth
 
 import androidx.annotation.DrawableRes
+import org.json.JSONArray
 import org.json.JSONObject
 
-// The widget's and tile's copies of the shell's labels, in
+// The widget's and tile's copies of the shell's mode labels, in
 // app/src-tauri/src/labels.rs, of the App Screen's mode icons, in
 // app/src/deviceArt.tsx, and of its mode order, in app/src/App.tsx. Keep
 // them in step, and the widget picker's preview labels in
@@ -35,38 +36,51 @@ fun modeIcon(mode: String): Int? =
     else -> null
   }
 
-/** Why an action couldn't Attach the Primary Device in time, from the latest Device list. */
-fun notAttachedText(list: JSONObject?): String {
+/**
+ * Why an action couldn't Attach the Primary Device in time, from the latest
+ * Device list, in the words of the shell's [labels], as `NativeCore.labels`
+ * hands them across.
+ */
+fun notAttachedText(
+  list: JSONObject?,
+  labels: JSONObject,
+): String {
   val state = list?.let { primaryDevice(it) }?.getJSONObject("state")
   return when {
-    state == null -> NO_DEVICE_CONNECTED
-    state.getString("kind") != "notAttached" -> LINK_DROPPED
-    else -> notAttachedReasonText(state.getJSONObject("reason"))
+    state == null -> {
+      NO_DEVICE_CONNECTED
+    }
+
+    state.getString("kind") != "notAttached" -> {
+      reasonText("linkDropped", labels)
+    }
+
+    else -> {
+      val reason = state.getJSONObject("reason")
+      reasonText(reason.getString("kind"), labels, reason.optString("detail"))
+    }
   }
 }
 
-/** Why the Device is Not Attached, from the core's reason. */
-private fun notAttachedReasonText(reason: JSONObject): String =
-  when (reason.getString("kind")) {
-    "unsupportedModel" -> "Unsupported Model"
-    "inUseByAnotherProcess" -> "In use by another app"
-    "bluetoothPermissionDenied" -> ALLOW_NEARBY_DEVICES
-    "serviceNotFound" -> "Control service not found"
-    "deviceNotConnected" -> "Not Connected"
-    "bluetoothUnavailable" -> "Bluetooth is off or unavailable"
-    "timedOut" -> "The Device didn't answer in time"
-    "busy" -> "Bluetooth is busy with the Device"
-    "bluetoothHandlingStopped" -> "Something went wrong: restart the app"
-    "noResponse" -> "The Device didn't respond"
-    "other" -> listOf(LINK_FAILED, reason.optString("detail")).filter { it.isNotEmpty() }.joinToString("\n")
-    else -> LINK_DROPPED
-  }
+/**
+ * Why the Device is Not Attached, labelled as the shell labels it, with the
+ * detail of a link failure without a cause beneath. A reason the shell has
+ * no label for is shown by its name, as the window shows it.
+ */
+private fun reasonText(
+  kind: String,
+  labels: JSONObject,
+  detail: String = "",
+): String {
+  val table = labels.optJSONArray("reasons") ?: JSONArray()
+  val label =
+    (0 until table.length())
+      .map { table.getJSONObject(it) }
+      .firstOrNull { it.getJSONObject("reason").getString("kind") == kind }
+      ?.getString("text") ?: kind
+  return listOf(label, detail).filter { it.isNotEmpty() }.joinToString("\n")
+}
 
-/** The shell's label for a dropped link, and the widget's for one it can't get. */
-const val LINK_DROPPED = "Another app or device may be using it"
-
-/** The shell's label for a link failure without a cause, above its detail. */
-const val LINK_FAILED = "Couldn't open the control link"
 const val NO_DEVICE_CONNECTED = "No Device Connected"
 const val ALLOW_NEARBY_DEVICES = "Open the app to allow Nearby devices"
 const val TAP_TO_REFRESH = "Tap to refresh"
