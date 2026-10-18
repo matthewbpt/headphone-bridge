@@ -24,11 +24,52 @@
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use serde::{Serialize, Serializer};
+
+/// Why the frame log couldn't be switched on: the file at `path` couldn't be
+/// opened or written to. Its source is the I/O error, so a missing directory,
+/// a refused permission and a full disk stay apart. It's shared, so
+/// [`crate::CommandError`] stays cloneable; two are equal when the path and
+/// the I/O error's kind are. On the wire it's the I/O error's text, which the
+/// window shows.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("couldn't open the frame log at {}", path.display())]
+pub struct FrameLogError {
+    path: PathBuf,
+    source: Arc<io::Error>,
+}
+
+impl PartialEq for FrameLogError {
+    fn eq(&self, other: &FrameLogError) -> bool {
+        self.path == other.path && self.source.kind() == other.source.kind()
+    }
+}
+
+impl Eq for FrameLogError {}
+
+impl Serialize for FrameLogError {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.source)
+    }
+}
+
+impl FrameLogError {
+    /// The file the frame log was to append to.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Why the file couldn't be opened or written to.
+    pub fn io_error(&self) -> &io::Error {
+        &self.source
+    }
+}
 
 /// The frame log setting. Clones share it, so switching it on or off reaches
 /// every session, including ones already running.
@@ -46,7 +87,14 @@ struct Writer {
 impl FrameLog {
     /// Switches the log on, appending to `path`, or switches it to `path` if
     /// it was on already.
-    pub(crate) fn start(&self, path: &Path) -> io::Result<()> {
+    pub(crate) fn start(&self, path: &Path) -> Result<(), FrameLogError> {
+        self.open(path).map_err(|source| FrameLogError {
+            path: path.to_owned(),
+            source: Arc::new(source),
+        })
+    }
+
+    fn open(&self, path: &Path) -> io::Result<()> {
         self.stop();
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
         writeln!(file, "# Headphone Bridge frame log")?;

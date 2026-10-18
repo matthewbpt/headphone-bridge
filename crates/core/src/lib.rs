@@ -25,7 +25,7 @@ pub use command::{Command, CommandError, Equalizer, NoiseControlMode};
 pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
-use frame_log::FrameLog;
+use frame_log::{FrameLog, FrameLogError};
 pub use model::{
     Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, PresetId, StepRange, Steps,
 };
@@ -64,7 +64,40 @@ impl Drop for Hold {
     }
 }
 
+/// Starts a [`Core`]: Attaching every Connected Device with the frame log off,
+/// unless told otherwise.
+#[derive(Default)]
+pub struct CoreBuilder {
+    policy: AttachPolicy,
+    frame_log: FrameLog,
+}
+
+impl CoreBuilder {
+    /// Attaches the Devices `policy` asks for.
+    pub fn attach_policy(mut self, policy: AttachPolicy) -> CoreBuilder {
+        self.policy = policy;
+        self
+    }
+
+    /// Switches the frame log on now, appending to `path`, so Devices Attached
+    /// at startup are logged too. If the file can't be opened, the frame log
+    /// stays off and the core still starts.
+    pub fn frame_log(&mut self, path: &Path) -> Result<(), FrameLogError> {
+        self.frame_log.start(path)
+    }
+
+    /// Starts the core on the current Tokio runtime.
+    pub fn start(self, platform: impl Platform) -> Core {
+        Core::start_logging(platform, self.policy, self.frame_log)
+    }
+}
+
 impl Core {
+    /// A builder for a core: [`CoreBuilder::start`] starts it.
+    pub fn builder() -> CoreBuilder {
+        CoreBuilder::default()
+    }
+
     /// Starts the core on the current Tokio runtime, Attaching every
     /// Connected Device.
     pub fn start(platform: impl Platform) -> Core {
@@ -96,7 +129,7 @@ impl Core {
         let frame_log = FrameLog::default();
         let started = frame_log
             .start(path)
-            .map_err(CommandError::frame_log_unavailable);
+            .map_err(CommandError::FrameLogUnavailable);
         (Core::start_logging(platform, policy, frame_log), started)
     }
 
@@ -159,9 +192,10 @@ impl Core {
 }
 
 /// When the core Attaches a Connected Device.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AttachPolicy {
     /// For as long as it's Connected.
+    #[default]
     Always,
     /// Only while a hold asks for it; otherwise it stays Detached, so another
     /// app or device can have its Control Link.

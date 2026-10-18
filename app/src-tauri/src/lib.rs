@@ -33,11 +33,31 @@ struct FrameLog(Mutex<Option<PathBuf>>);
 /// Set (to anything) to start with the frame log on, whatever the setting.
 const FRAME_LOG_ENV: &str = "HEADPHONE_BRIDGE_FRAME_LOG";
 
+/// Why the frame log wasn't switched on or off, as the UI names it. A log
+/// directory failure goes under the same name as the core's frame log
+/// failure, since the window can't tell them apart.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+enum SetFrameLogError {
+    /// The app's log directory couldn't be found or made.
+    #[serde(rename = "frameLogUnavailable")]
+    LogDirectory(String),
+    /// The core rejected the command.
+    #[serde(untagged)]
+    Core(CommandError),
+}
+
+impl From<CommandError> for SetFrameLogError {
+    fn from(error: CommandError) -> SetFrameLogError {
+        SetFrameLogError::Core(error)
+    }
+}
+
 /// The frame log file, in the app's log directory, which is created if needed.
 /// Kotlin's `frameLogIfOn` finds it on Android too.
-fn frame_log_path(app: &AppHandle) -> Result<PathBuf, CommandError> {
+fn frame_log_path(app: &AppHandle) -> Result<PathBuf, SetFrameLogError> {
     let unavailable =
-        |error: &dyn std::fmt::Display| CommandError::FrameLogUnavailable(error.to_string());
+        |error: &dyn std::fmt::Display| SetFrameLogError::LogDirectory(error.to_string());
     let dir = app.path().app_log_dir().map_err(|e| unavailable(&e))?;
     std::fs::create_dir_all(&dir).map_err(|e| unavailable(&e))?;
     Ok(dir.join("frame-log.frames"))
@@ -232,7 +252,7 @@ async fn set_frame_log(
     core: State<'_, &'static Core>,
     frame_log: State<'_, FrameLog>,
     enabled: bool,
-) -> Result<Option<PathBuf>, CommandError> {
+) -> Result<Option<PathBuf>, SetFrameLogError> {
     let path = if enabled {
         Some(frame_log_path(&app)?)
     } else {
@@ -467,4 +487,24 @@ pub fn run() {
             }
             let _ = (app, event);
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_a_log_directory_failure_as_the_ui_names_the_frame_log_unavailable() {
+        let json = |error| serde_json::to_string(&error).unwrap();
+        assert_eq!(
+            json(SetFrameLogError::LogDirectory(
+                "Permission denied (os error 13)".into()
+            )),
+            r#"{"frameLogUnavailable":"Permission denied (os error 13)"}"#
+        );
+        assert_eq!(
+            json(SetFrameLogError::Core(CommandError::CoreStopped)),
+            r#""coreStopped""#
+        );
+    }
 }

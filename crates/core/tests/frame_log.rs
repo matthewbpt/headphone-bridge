@@ -2,6 +2,7 @@
 
 mod support;
 
+use std::error::Error;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -204,16 +205,36 @@ async fn frames_after_the_log_is_switched_off_are_not_logged() {
 }
 
 #[tokio::test]
+async fn a_core_whose_frame_log_cannot_be_opened_starts_and_reports_the_path_and_why() {
+    let (platform, _os) = fake_platform();
+    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-dir/startup.frames");
+
+    let mut builder = Core::builder();
+    let error = builder.frame_log(&path).unwrap_err();
+    let core = builder.start(platform);
+
+    assert_eq!(error.path(), path);
+    assert_eq!(error.io_error().kind(), std::io::ErrorKind::NotFound);
+    assert!(error.source().is_some());
+    core.command(Command::SetFrameLog(None)).await.unwrap();
+}
+
+#[tokio::test]
 async fn a_frame_log_that_cannot_be_opened_is_reported() {
     let (platform, _os) = fake_platform();
     let core = Core::start(platform);
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-dir/log.frames");
 
-    let result = core.command(Command::SetFrameLog(Some(path))).await;
+    let result = core.command(Command::SetFrameLog(Some(path.clone()))).await;
 
-    assert!(
-        matches!(result, Err(CommandError::FrameLogUnavailable(_))),
-        "{result:?}"
+    let Err(CommandError::FrameLogUnavailable(error)) = result else {
+        panic!("{result:?}");
+    };
+    assert_eq!(error.path(), path);
+    assert_eq!(error.io_error().kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(
+        serde_json::to_value(CommandError::FrameLogUnavailable(error)).unwrap(),
+        serde_json::json!({ "frameLogUnavailable": "No such file or directory (os error 2)" })
     );
 }
 

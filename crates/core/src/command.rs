@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::frame_log::FrameLogError;
 use crate::model::PresetId;
 use crate::platform::DeviceAddress;
 
@@ -69,17 +70,11 @@ pub enum CommandError {
     #[error("the Device is Equalizer Unavailable")]
     EqualizerUnavailable,
     /// The frame log file couldn't be opened.
-    #[error("couldn't open the frame log: {0}")]
-    FrameLogUnavailable(String),
+    #[error(transparent)]
+    FrameLogUnavailable(FrameLogError),
     /// The core has stopped, so it takes no more commands.
     #[error("the core has stopped")]
     CoreStopped,
-}
-
-impl CommandError {
-    pub(crate) fn frame_log_unavailable(error: std::io::Error) -> CommandError {
-        CommandError::FrameLogUnavailable(error.to_string())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
