@@ -1642,6 +1642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "headphone-bridge-simulated"
+version = "1.0.0"
+dependencies = [
+ "headphone-bridge-core",
+ "headphone-bridge-fixtures",
+ "thiserror 2.0.21",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
