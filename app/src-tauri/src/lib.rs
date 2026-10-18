@@ -107,22 +107,25 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
 /// wanted. Devices stay Detached until the App Screen holds them, so no
 /// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
-fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
-    let core = headphone_bridge_platform_android::android::core();
+fn android_core(
+    app: &AppHandle,
+) -> Result<(&'static Core, Option<PathBuf>), headphone_bridge_platform_android::android::StartError>
+{
+    let core = headphone_bridge_platform_android::android::core()?;
     if !frame_log_wanted(app) {
-        return (core, None);
+        return Ok((core, None));
     }
     let started = frame_log_path(app).and_then(|path| {
         tauri::async_runtime::block_on(core.command(Command::SetFrameLog(Some(path.clone()))))?;
         Ok(path)
     });
     match started {
-        Ok(path) => (core, Some(path)),
+        Ok(path) => Ok((core, Some(path))),
         Err(error) => {
             headphone_bridge_platform_android::android::log(&format!(
                 "couldn't open the frame log: {error:?}"
             ));
-            (core, None)
+            Ok((core, None))
         }
     }
 }
@@ -297,7 +300,9 @@ fn report_nearby_devices_permission(app: &AppHandle) {
 #[tauri::command]
 async fn open_app_settings(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "android")]
-    return headphone_bridge_platform_android::android::open_app_settings(&app).await;
+    return headphone_bridge_platform_android::android::open_app_settings(&app)
+        .await
+        .map_err(|error| error.to_string());
     #[cfg(not(target_os = "android"))]
     {
         let _ = app;
@@ -321,7 +326,7 @@ async fn share_frame_log(
     #[cfg(target_os = "android")]
     return headphone_bridge_platform_android::android::share_file(&app, file, "Share frame log")
         .await
-        .map_err(share::ShareError::ShareFailed);
+        .map_err(|error| share::ShareError::ShareFailed(error.to_string()));
     #[cfg(not(target_os = "android"))]
     {
         let _ = (app, file);
@@ -380,7 +385,7 @@ pub fn run() {
                 (core, frame_log)
             };
             #[cfg(target_os = "android")]
-            let (core, frame_log) = android_core(app.handle());
+            let (core, frame_log) = android_core(app.handle())?;
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

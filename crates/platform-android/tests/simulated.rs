@@ -112,7 +112,7 @@ impl Kotlin {
         let result = tokio::time::timeout(Duration::from_secs(5), wait)
             .await
             .expect("timed out waiting for the command's result");
-        assert_eq!(result, Ok(()), "command {request}");
+        assert!(result.is_ok(), "command {request}: {result:?}");
     }
 }
 

@@ -168,6 +168,19 @@ fn an_event_the_core_does_not_know_is_refused() {
 }
 
 #[test]
+fn a_bad_message_keeps_the_json_error_as_its_source() {
+    for bad in [
+        parse_event("not json").unwrap_err(),
+        parse_command(r#"{"kind":"powerOff"}"#).unwrap_err(),
+    ] {
+        let source = std::error::Error::source(&bad).expect("a source");
+        assert!(source.is::<serde_json::Error>(), "{source:?}");
+        // The source isn't repeated, so a log of the chain shows it once.
+        assert_eq!(bad.to_string(), "bad message");
+    }
+}
+
+#[test]
 fn every_device_command_can_be_sent() {
     let device = || address("AA:BB:CC:DD:EE:FF");
     let cases = [
@@ -263,11 +276,12 @@ fn a_command_result_is_null_or_why_it_failed() {
     assert_eq!(
         sent(Message::CommandResult {
             request: 7,
-            result: Err(CommandFailure::BadRequest(BadMessage(
-                "missing field".into()
-            )))
+            result: Err(CommandFailure::BadRequest(
+                parse_command(r#"{"kind":"powerOff"}"#).unwrap_err()
+            ))
         }),
         json!({"type": "commandResult", "request": 7,
-               "error": {"kind": "badRequest", "message": "missing field"}})
+               "error": {"kind": "badRequest",
+                         "message": "missing field `address`"}})
     );
 }
