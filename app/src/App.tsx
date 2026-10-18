@@ -42,14 +42,26 @@ export function App() {
  * page in its settings.
  */
 function NearbyDevicesBanner() {
+  const [error, setError] = useState<string | null>(null);
   return (
     <section className="card banner" aria-label="Nearby devices permission">
       <p className="banner__text">
         Headphone Bridge needs the Nearby devices permission to see and control your Devices.
       </p>
-      <button className="button" onClick={() => void openAppSettings()}>
+      <button
+        className="button"
+        onClick={() => {
+          setError(null);
+          openAppSettings().catch((e) => setError(`Couldn't open app settings: ${whyRejected(e)}`));
+        }}
+      >
         Open app settings
       </button>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

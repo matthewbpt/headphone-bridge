@@ -6,21 +6,19 @@ use uuid::Uuid;
 
 /// The platform adapter for this OS.
 #[cfg(target_os = "macos")]
-pub fn start() -> headphone_bridge_platform_macos::MacBluetooth {
-    headphone_bridge_platform_macos::MacBluetooth::start().unwrap_or_else(|error| {
-        eprintln!("Headphone Bridge couldn't start Bluetooth: {error}");
-        std::process::exit(1)
-    })
+pub fn start() -> anyhow::Result<headphone_bridge_platform_macos::MacBluetooth> {
+    use anyhow::Context;
+    headphone_bridge_platform_macos::MacBluetooth::start().context("couldn't start Bluetooth")
 }
 
 #[cfg(target_os = "linux")]
-pub fn start() -> headphone_bridge_platform_linux::LinuxBluetooth {
-    headphone_bridge_platform_linux::LinuxBluetooth::start()
+pub fn start() -> anyhow::Result<headphone_bridge_platform_linux::LinuxBluetooth> {
+    Ok(headphone_bridge_platform_linux::LinuxBluetooth::start())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub fn start() -> NoBluetooth {
-    NoBluetooth
+pub fn start() -> anyhow::Result<NoBluetooth> {
+    Ok(NoBluetooth)
 }
 
 /// Stands in for an OS Bluetooth adapter where none exists yet: it never

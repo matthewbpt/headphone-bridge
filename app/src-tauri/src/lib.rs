@@ -103,10 +103,10 @@ fn frame_log_wanted(app: &AppHandle) -> bool {
 /// Starts the core, with the frame log on if wanted. Returns the log file
 /// while it's on.
 #[cfg(not(target_os = "android"))]
-fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
+fn start_core(app: &AppHandle) -> anyhow::Result<(Core, Option<PathBuf>)> {
     let mut core = Core::builder();
     let path = start_frame_log(app, &mut core);
-    (core.start(platform::start()), path)
+    Ok((core.start(platform::start()?), path))
 }
 
 /// Switches the frame log on for the core `core` starts, if wanted. Returns
@@ -131,11 +131,10 @@ fn start_frame_log(app: &AppHandle, core: &mut CoreBuilder) -> Option<PathBuf> {
 /// wanted. Devices stay Detached until the App Screen holds them, so no
 /// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
-fn android_core(
-    app: &AppHandle,
-) -> Result<(&'static Core, Option<PathBuf>), headphone_bridge_platform_android::android::StartError>
-{
-    let core = headphone_bridge_platform_android::android::core()?;
+fn android_core(app: &AppHandle) -> anyhow::Result<(&'static Core, Option<PathBuf>)> {
+    use anyhow::Context;
+    let core =
+        headphone_bridge_platform_android::android::core().context("couldn't start the core")?;
     if !frame_log_wanted(app) {
         return Ok((core, None));
     }
@@ -319,18 +318,37 @@ fn report_nearby_devices_permission(app: &AppHandle) {
     });
 }
 
+/// Why the app's settings page wasn't opened, as the UI names it.
+#[derive(Debug, serde::Serialize)]
+enum AppSettingsError {
+    /// Only Android has an app settings page.
+    #[serde(rename = "appSettingsUnsupported")]
+    #[cfg_attr(
+        all(target_os = "android", not(test)),
+        expect(dead_code, reason = "Android has app settings")
+    )]
+    Unsupported,
+    /// Android couldn't open it.
+    #[serde(rename = "appSettingsFailed")]
+    #[cfg_attr(
+        all(not(target_os = "android"), not(test)),
+        expect(dead_code, reason = "only Android opens app settings")
+    )]
+    Failed(String),
+}
+
 /// Opens the app's page in Android's settings, where the listener can grant
 /// the Nearby devices permission.
 #[tauri::command]
-async fn open_app_settings(app: AppHandle) -> Result<(), String> {
+async fn open_app_settings(app: AppHandle) -> Result<(), AppSettingsError> {
     #[cfg(target_os = "android")]
     return headphone_bridge_platform_android::android::open_app_settings(&app)
         .await
-        .map_err(|error| error.to_string());
+        .map_err(|error| AppSettingsError::Failed(error.to_string()));
     #[cfg(not(target_os = "android"))]
     {
         let _ = app;
-        Err("only Android has app settings".into())
+        Err(AppSettingsError::Unsupported)
     }
 }
 
@@ -358,6 +376,20 @@ async fn share_frame_log(
             "sharing is only on Android".into(),
         ))
     }
+}
+
+/// `error` for the setup hook to return. Tauri keeps only the Display of
+/// what the hook returns, so the context chain goes into it here.
+fn setup_hook_error(error: &anyhow::Error) -> Box<dyn std::error::Error> {
+    format!("{error:#}").into()
+}
+
+/// The one message a startup failure prints, with its context chain.
+fn startup_failure(error: tauri::Error) -> String {
+    format!(
+        "{:#}",
+        anyhow::Error::from(error).context("Headphone Bridge couldn't start")
+    )
 }
 
 /// Passed by "Launch at login", so the app starts in the tray.
@@ -397,19 +429,17 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             #[cfg(desktop)]
             tray::install(app.handle())?;
+            // The setup hook runs once, so this is the only core started.
             #[cfg(not(target_os = "android"))]
             let (core, frame_log) = {
-                let mut frame_log = None;
-                let core = CORE.get_or_init(|| {
-                    let (core, log) =
-                        tauri::async_runtime::block_on(async { start_core(app.handle()) });
-                    frame_log = log;
-                    core
-                });
-                (core, frame_log)
+                let (core, frame_log) =
+                    tauri::async_runtime::block_on(async { start_core(app.handle()) })
+                        .map_err(|error| setup_hook_error(&error))?;
+                (CORE.get_or_init(|| core), frame_log)
             };
             #[cfg(target_os = "android")]
-            let (core, frame_log) = android_core(app.handle())?;
+            let (core, frame_log) =
+                android_core(app.handle()).map_err(|error| setup_hook_error(&error))?;
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -476,7 +506,11 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
-            eprintln!("Headphone Bridge couldn't start: {error}");
+            let message = startup_failure(error);
+            // Android drops stderr, so the failure goes to logcat there.
+            #[cfg(target_os = "android")]
+            headphone_bridge_platform_android::android::log(&message);
+            eprintln!("{message}");
             std::process::exit(1)
         })
         .run(|app, event| {
@@ -509,6 +543,30 @@ mod tests {
         assert_eq!(
             json(SetFrameLogError::Core(CommandError::CoreStopped)),
             r#""coreStopped""#
+        );
+    }
+
+    #[test]
+    fn names_each_app_settings_failure_as_the_ui_does() {
+        let json = |error| serde_json::to_string(&error).unwrap();
+        assert_eq!(
+            json(AppSettingsError::Unsupported),
+            r#""appSettingsUnsupported""#
+        );
+        assert_eq!(
+            json(AppSettingsError::Failed("no settings app".into())),
+            r#"{"appSettingsFailed":"no settings app"}"#
+        );
+    }
+
+    #[test]
+    fn reports_a_startup_failure_in_one_message_with_its_context_chain() {
+        let failure = anyhow::anyhow!("Bluetooth is off").context("couldn't start Bluetooth");
+        let error = tauri::Error::Setup(setup_hook_error(&failure).into());
+        assert_eq!(
+            startup_failure(error),
+            "Headphone Bridge couldn't start: error encountered during setup hook: \
+             couldn't start Bluetooth: Bluetooth is off"
         );
     }
 }
