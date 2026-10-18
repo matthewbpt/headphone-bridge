@@ -11,7 +11,8 @@ use uuid::{uuid, Uuid};
 use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::{Battery, EffectiveModeReason};
 use crate::model::{Model, PresetId};
-pub use crate::update::Update;
+use crate::session::{SessionCommand, VendorSession};
+use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, Deframer};
 
@@ -95,11 +96,6 @@ impl Session {
         };
         session.handshake();
         session
-    }
-
-    /// Takes the frames to write to the Device, in order.
-    pub fn outgoing(&mut self) -> Vec<Vec<u8>> {
-        std::mem::take(&mut self.outgoing)
     }
 
     /// Queues the `MANAGER_INFO` handshake, introducing the app the way
@@ -198,15 +194,23 @@ impl Session {
             .contains(level)
             .then_some(Update::NoiseCancellingLevel(level))
     }
+}
 
-    /// Feeds bytes received from the Device, in chunks of any size, and
-    /// returns the whole frames they complete.
-    pub fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
+/// Samsung has no ACKs to wait for, so nothing is ever resent.
+impl VendorSession for Session {
+    type Frame = Frame;
+
+    const VENDOR: &'static str = "samsung";
+
+    fn raw(frame: &Frame) -> &[u8] {
+        &frame.raw
+    }
+
+    fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
         self.deframer.push(bytes)
     }
 
-    /// Handles a frame received from the Device.
-    pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
+    fn receive(&mut self, frame: &Frame) -> Vec<Update> {
         let p = &frame.payload;
         let mut updates = Vec::new();
         match frame.id {
@@ -318,6 +322,23 @@ impl Session {
             updates.push(Update::Battery(self.buds.battery()));
         }
         updates
+    }
+
+    fn apply(&mut self, command: SessionCommand) {
+        match command {
+            SessionCommand::SetNoiseControlMode(mode) => self.set_noise_control_mode(mode),
+            SessionCommand::SetAmbientLevel(level) => self.set_ambient_level(level),
+            SessionCommand::SetNoiseCancellingLevel(level) => {
+                self.set_noise_cancelling_level(level)
+            }
+            SessionCommand::SetEqualizer(equalizer) => self.set_equalizer_preset(equalizer.preset),
+            // No Samsung Model can Power Off.
+            SessionCommand::PowerOff => {}
+        }
+    }
+
+    fn outgoing(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.outgoing)
     }
 }
 

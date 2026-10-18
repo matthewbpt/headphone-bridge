@@ -2,7 +2,6 @@
 //! as the Attach Policy and holds ask, and publishes the Device list.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -14,7 +13,7 @@ use crate::command::{Command, CommandError};
 use crate::device_list::{Device, DeviceList, DeviceState, NotAttachedReason};
 use crate::frame_log::FrameLog;
 use crate::platform::{DeviceAddress, DeviceIdentity, Observation, Platform};
-use crate::session::{run_samsung_session, run_sony_session, SessionCommand};
+use crate::session::{run_session, SessionCommand};
 use crate::update::Update;
 use crate::{samsung, sony, AttachPolicy, Model};
 
@@ -124,9 +123,6 @@ fn now_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |since| since.as_millis() as u64)
 }
-
-/// How long a Device has to identify itself once its control link is open.
-const IDENTIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a Device that acknowledged a Power Off, or closed its control
 /// link first, has to stop being Connected before Powering Off ends and the Power Off is reported as failed.
@@ -326,46 +322,18 @@ impl<P: Platform> State<P> {
                 Vendor::Samsung(_) => samsung::SERVICE,
                 Vendor::Sony => sony::SERVICE,
             };
-            let identified = AtomicBool::new(false);
-            let on_update = |update| {
-                if let Update::Identified(_) = update {
-                    identified.store(true, Ordering::Relaxed);
-                }
-                send(LinkEventKind::Update(update));
-            };
+            let on_update = |update| send(LinkEventKind::Update(update));
             let reason = match platform.open_control_link(&address, service).await {
-                Ok(link) => {
-                    let session = async {
-                        match vendor {
-                            Vendor::Samsung(candidate) => {
-                                run_samsung_session(
-                                    link,
-                                    candidate,
-                                    commands_rx,
-                                    frame_log,
-                                    on_update,
-                                )
-                                .await
-                            }
-                            Vendor::Sony => {
-                                run_sony_session(link, commands_rx, frame_log, on_update).await
-                            }
-                        }
-                    };
-                    // A Device that never identifies itself, e.g. one that
-                    // ACKs but never replies, would otherwise be left
-                    // Attaching for good.
-                    let unidentified = async {
-                        tokio::time::sleep(IDENTIFY_TIMEOUT).await;
-                        if identified.load(Ordering::Relaxed) {
-                            std::future::pending().await
-                        }
-                    };
-                    tokio::select! {
-                        reason = session => reason,
-                        () = unidentified => NotAttachedReason::NoResponse,
+                Ok(link) => match vendor {
+                    Vendor::Samsung(candidate) => {
+                        let session = samsung::Session::new(candidate);
+                        run_session(session, link, commands_rx, frame_log, on_update).await
                     }
-                }
+                    Vendor::Sony => {
+                        let session = sony::Session::new();
+                        run_session(session, link, commands_rx, frame_log, on_update).await
+                    }
+                },
                 Err(failure) => failure.into(),
             };
             send(LinkEventKind::Ended(reason));
