@@ -511,6 +511,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
             let message = startup_failure(error);
+            // Android drops stderr, so the failure goes to logcat there.
+            #[cfg(target_os = "android")]
+            headphone_bridge_platform_android::android::log(&message);
             eprintln!("{message}");
             std::process::exit(1)
         })
