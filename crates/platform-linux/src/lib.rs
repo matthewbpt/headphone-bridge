@@ -8,7 +8,7 @@
 mod failure;
 mod sink;
 
-pub use failure::{connect_profile_failure, ConnectProfileFailure};
+pub use failure::connect_profile_failure;
 pub use sink::{sink_device, Sink};
 
 #[cfg(target_os = "linux")]
