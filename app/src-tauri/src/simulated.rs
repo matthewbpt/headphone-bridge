@@ -8,14 +8,19 @@ use tauri::State;
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SimulateError {
-    /// The Model couldn't start from its fixtures, with the developer text
-    /// why.
-    SimulatedDeviceUnavailable(String),
+    /// The Model couldn't start from its fixtures. The developer text why
+    /// goes to the log.
+    SimulatedDeviceUnavailable,
 }
 
 impl From<StartError> for SimulateError {
     fn from(error: StartError) -> SimulateError {
-        SimulateError::SimulatedDeviceUnavailable(error.to_string())
+        let message = format!("couldn't start the Simulated Device: {error}");
+        #[cfg(target_os = "android")]
+        headphone_bridge_platform_android::android::log(&message);
+        #[cfg(not(target_os = "android"))]
+        eprintln!("{message}");
+        SimulateError::SimulatedDeviceUnavailable
     }
 }
 
@@ -41,11 +46,8 @@ mod tests {
     #[test]
     fn names_a_simulated_device_that_cant_start_as_the_ui_does() {
         assert_eq!(
-            serde_json::to_string(&SimulateError::SimulatedDeviceUnavailable(
-                "the Galaxy Buds fixture has no extended status".into()
-            ))
-            .unwrap(),
-            r#"{"simulatedDeviceUnavailable":"the Galaxy Buds fixture has no extended status"}"#
+            serde_json::to_string(&SimulateError::SimulatedDeviceUnavailable).unwrap(),
+            r#""simulatedDeviceUnavailable""#
         );
     }
 }

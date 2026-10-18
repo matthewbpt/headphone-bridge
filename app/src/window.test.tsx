@@ -1982,7 +1982,7 @@ describe("Settings", () => {
   it("shows why the Simulated Device couldn't be switched", async () => {
     const core = new FakeCore(only(buds4Pro()), { simulatedDevice: true });
     core.answer("set_simulated_device", {
-      reject: { simulatedDeviceUnavailable: "the Galaxy Buds fixture has no extended status" },
+      reject: "simulatedDeviceUnavailable",
     });
     renderWindow(core);
 
@@ -1993,7 +1993,7 @@ describe("Settings", () => {
 
     expect(
       await screen.findByText(
-        "Couldn't switch the Simulated Device: the Galaxy Buds fixture has no extended status",
+        "Couldn't switch the Simulated Device: the Simulated Device couldn't start",
       ),
     ).toBeVisible();
     expect(core.simulatedDevice()).toBeNull();

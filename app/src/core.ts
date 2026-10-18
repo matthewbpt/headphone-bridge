@@ -81,8 +81,8 @@ export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string
 /** Why the shell couldn't open the app's page in Android's settings. */
 export type AppSettingsError = "appSettingsUnsupported" | { appSettingsFailed: string };
 
-/** Why the shell couldn't switch the Simulated Device: the developer text why. */
-export type SimulateError = { simulatedDeviceUnavailable: string };
+/** Why the shell couldn't switch the Simulated Device. */
+export type SimulateError = "simulatedDeviceUnavailable";
 
 /** Why a command was rejected, by the core or the shell. */
 type Rejection = CommandError | ShareError | AppSettingsError | SimulateError;
@@ -117,7 +117,7 @@ const WORDS: {
   shareFailed: (message) => message,
   appSettingsUnsupported: "only Android has app settings",
   appSettingsFailed: (message) => message,
-  simulatedDeviceUnavailable: (message) => message,
+  simulatedDeviceUnavailable: "the Simulated Device couldn't start",
 };
 
 /**
