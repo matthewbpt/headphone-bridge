@@ -139,19 +139,13 @@ fn backoff(retries: u32) -> Duration {
 }
 
 impl NotAttachedReason {
-    /// Whether trying again by itself might Attach the Device. Not when only
-    /// the listener can fix the cause, e.g. by quitting the app holding the
-    /// link, and never for an unsupported Model.
+    /// Whether trying again by itself might Attach the Device: never for an
+    /// unsupported Model, and for a link failure as the failure says.
     fn is_transient(&self) -> bool {
         match self {
-            NotAttachedReason::UnsupportedModel
-            | NotAttachedReason::InUseByAnotherProcess
-            | NotAttachedReason::BluetoothPermissionDenied => false,
-            NotAttachedReason::ServiceNotFound
-            | NotAttachedReason::DeviceNotConnected
-            | NotAttachedReason::LinkDropped
-            | NotAttachedReason::NoResponse
-            | NotAttachedReason::Other(_) => true,
+            NotAttachedReason::UnsupportedModel => false,
+            NotAttachedReason::LinkDropped | NotAttachedReason::NoResponse => true,
+            NotAttachedReason::LinkFailed(failure) => failure.is_transient(),
         }
     }
 }
@@ -334,7 +328,7 @@ impl<P: Platform> State<P> {
                         run_session(session, link, commands_rx, frame_log, on_update).await
                     }
                 },
-                Err(failure) => failure.into(),
+                Err(failure) => NotAttachedReason::LinkFailed(failure),
             };
             send(LinkEventKind::Ended(reason));
         });

@@ -37,7 +37,12 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
     wait_for(&core, |list| {
-        is(list, not_attached(NotAttachedReason::InUseByAnotherProcess))
+        is(
+            list,
+            not_attached(NotAttachedReason::LinkFailed(
+                LinkFailure::InUseByAnotherProcess,
+            )),
+        )
     })
     .await;
 
@@ -128,7 +133,7 @@ async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button(
     assert_eq!(attempts, [1, 3, 7, 15, 31, 61]);
     assert!(is(
         &core.device_list(),
-        not_attached(NotAttachedReason::ServiceNotFound)
+        not_attached(NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound))
     ));
     os.allow_links(&buds4pro().address);
     core.command(Command::RetryAttach(buds4pro().address))

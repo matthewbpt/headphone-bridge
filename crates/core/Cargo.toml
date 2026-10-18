@@ -8,10 +8,12 @@ repository.workspace = true
 
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, features = ["time"] }
 uuid.workspace = true
 
 [dev-dependencies]
+serde_json = "1"
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

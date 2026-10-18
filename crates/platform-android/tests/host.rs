@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
+use headphone_bridge_core::platform::LinkFailure;
 use headphone_bridge_core::{Command, CommandError, DeviceList, DeviceState, NotAttachedReason};
 use headphone_bridge_platform_android::messages::{CommandFailure, Message};
 use headphone_bridge_platform_android::Host;
@@ -211,7 +212,7 @@ async fn without_the_nearby_devices_permission_a_device_is_not_attached_for_want
         .device_list(|list| {
             state_of(list, XM5)
                 == Some(DeviceState::NotAttached {
-                    reason: NotAttachedReason::BluetoothPermissionDenied,
+                    reason: NotAttachedReason::LinkFailed(LinkFailure::BluetoothPermissionDenied),
                 })
         })
         .await;
@@ -307,7 +308,7 @@ async fn an_open_kotlin_never_got_fails_instead_of_waiting_for_ever() {
             matches!(
                 state_of(list, XM5),
                 Some(DeviceState::NotAttached {
-                    reason: NotAttachedReason::Other(_)
+                    reason: NotAttachedReason::LinkFailed(LinkFailure::Other(_))
                 })
             )
         })
