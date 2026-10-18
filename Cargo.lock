@@ -1570,6 +1570,7 @@ dependencies = [
  "headphone-bridge-platform-android",
  "headphone-bridge-platform-linux",
  "headphone-bridge-platform-macos",
+ "headphone-bridge-simulated",
  "jni",
  "serde",
  "serde_json",
@@ -1585,6 +1586,7 @@ dependencies = [
 name = "headphone-bridge-core"
 version = "1.0.0"
 dependencies = [
+ "headphone-bridge-fixtures",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -1593,10 +1595,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "headphone-bridge-fixtures"
+version = "1.0.0"
+
+[[package]]
 name = "headphone-bridge-platform-android"
 version = "1.0.0"
 dependencies = [
  "headphone-bridge-core",
+ "headphone-bridge-fixtures",
+ "headphone-bridge-simulated",
  "jni",
  "serde",
  "serde_json",
@@ -1631,6 +1639,17 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-io-bluetooth",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "headphone-bridge-simulated"
+version = "1.0.0"
+dependencies = [
+ "headphone-bridge-core",
+ "headphone-bridge-fixtures",
+ "thiserror 2.0.21",
  "tokio",
  "uuid",
 ]

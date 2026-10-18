@@ -1,7 +1,7 @@
-//! The Simulated Device, in debug builds only: a Buds4 Pro, a Buds2 or an XM5 that
-//! answers the core in-process, for the emulator, which can't reach real
-//! headphones. It starts from the frames the core's tests replay, and
-//! confirms mode, Level and Equalizer changes the way the real Device does.
+//! The Device's end of the Simulated Device: a Buds4 Pro, a Buds2 or an XM5
+//! that answers the core in-process. It starts from the frames the core's
+//! tests replay, and confirms mode, Level and Equalizer changes the way the
+//! real Device does.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -9,7 +9,10 @@ use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{ControlLink, DeviceAddress, DeviceIdentity};
 use headphone_bridge_core::wire::{samsung, sony};
 use headphone_bridge_core::Model;
+use headphone_bridge_fixtures as fixtures;
 use tokio::sync::mpsc;
+
+use crate::StartError;
 
 /// Where each Model is simulated: locally administered addresses, so never a
 /// real Device's.
@@ -33,14 +36,15 @@ pub(crate) struct SimulatedDevice {
 }
 
 impl SimulatedDevice {
-    /// `None` if the Model's fixture doesn't decode, which its tests rule out.
-    pub(crate) fn new(model: Model) -> Option<SimulatedDevice> {
+    /// Starts `model` from its fixtures, failing only if they don't give it
+    /// a starting state, which its tests rule out.
+    pub(crate) fn new(model: Model) -> Result<SimulatedDevice, StartError> {
         let device: Box<dyn Simulated> = match model {
             Model::GalaxyBuds4Pro => Box::new(Buds::buds4pro()?),
             Model::GalaxyBuds2 => Box::new(Buds::buds2()?),
             Model::Wh1000Xm5 => Box::new(Headphones::new()?),
         };
-        Some(SimulatedDevice {
+        Ok(SimulatedDevice {
             model,
             device: Arc::new(Mutex::new(device)),
         })
@@ -113,17 +117,17 @@ trait Simulated: Send {
     }
 }
 
-/// The frames a Device sent in a fixture, deframed with `deframe`, or `None`
-/// if the fixture doesn't parse.
-fn received<F>(fixture: &str, mut deframe: impl FnMut(&[u8]) -> Vec<F>) -> Option<Vec<F>> {
-    let records = FrameRecord::parse_all(fixture).ok()?;
-    Some(
-        records
-            .iter()
-            .filter(|record| record.direction == Direction::Received)
-            .flat_map(|record| deframe(&record.bytes))
-            .collect(),
-    )
+/// The frames a Device sent in a fixture, deframed with `deframe`.
+fn received<F>(
+    fixture: &str,
+    mut deframe: impl FnMut(&[u8]) -> Vec<F>,
+) -> Result<Vec<F>, StartError> {
+    let records = FrameRecord::parse_all(fixture)?;
+    Ok(records
+        .iter()
+        .filter(|record| record.direction == Direction::Received)
+        .flat_map(|record| deframe(&record.bytes))
+        .collect())
 }
 
 /// A Galaxy Buds4 Pro or Buds2, both buds in the ear.
@@ -134,43 +138,33 @@ struct Buds {
     status: Vec<u8>,
 }
 
-/// Where the extended status reports each setting.
-mod samsung_status {
-    pub const PLACEMENT: usize = 6;
-    pub const EQUALIZER: usize = 9;
-    pub const MODE: usize = 12;
-    pub const AMBIENT_LEVEL: usize = 23;
-    pub const NOISE_CANCELLING_LEVEL: usize = 24;
-}
-
 impl Buds {
     /// A Buds4 Pro from capture-3's first extended status: L 100 %, R 97 %,
     /// Ambient.
-    fn buds4pro() -> Option<Buds> {
-        Buds::new(include_str!(
-            "../../core/tests/fixtures/galaxy-buds4-pro/capture-3.frames"
-        ))
+    fn buds4pro() -> Result<Buds, StartError> {
+        Buds::new(fixtures::BUDS4PRO_CAPTURE)
     }
 
     /// A Buds2 from the extended status in GalaxyBudsClient's tests: device
     /// id 316, L and R 100 %, Noise Cancelling, Ambient Level 1. A Buds2's
     /// sets reach the same bytes as a Buds4 Pro's.
-    fn buds2() -> Option<Buds> {
-        Buds::new(include_str!(
-            "../../core/tests/fixtures/galaxy-buds2/attach.frames"
-        ))
+    fn buds2() -> Result<Buds, StartError> {
+        Buds::new(fixtures::BUDS2_ATTACH)
     }
 
     /// Starts from the first extended status the Device sent in `fixture`.
-    fn new(fixture: &str) -> Option<Buds> {
+    fn new(fixture: &str) -> Result<Buds, StartError> {
         let mut deframer = samsung::Deframer::default();
         let mut status = received(fixture, |bytes| deframer.push(bytes))?
             .into_iter()
-            .find(|frame| frame.id == samsung::id::EXTENDED_STATUS_UPDATED)?
+            .find(|frame| frame.id == samsung::id::EXTENDED_STATUS_UPDATED)
+            .ok_or(StartError::NoExtendedStatus)?
             .payload;
         // Both buds in the ear, so the Effective Mode is the Chosen Mode.
-        *status.get_mut(samsung_status::PLACEMENT)? = 0x11;
-        Some(Buds {
+        *status
+            .get_mut(samsung::extended_status::PLACEMENT)
+            .ok_or(StartError::NoExtendedStatus)? = samsung::BOTH_WORN;
+        Ok(Buds {
             deframer: samsung::Deframer::default(),
             status,
         })
@@ -194,10 +188,12 @@ impl Simulated for Buds {
                     ));
                     continue;
                 }
-                samsung::id::NOISE_CONTROLS => samsung_status::MODE,
-                samsung::id::AMBIENT_VOLUME => samsung_status::AMBIENT_LEVEL,
-                samsung::id::NOISE_REDUCTION_LEVEL => samsung_status::NOISE_CANCELLING_LEVEL,
-                samsung::id::EQUALIZER => samsung_status::EQUALIZER,
+                samsung::id::NOISE_CONTROLS => samsung::extended_status::NOISE_CONTROL_MODE,
+                samsung::id::AMBIENT_VOLUME => samsung::extended_status::AMBIENT_LEVEL,
+                samsung::id::NOISE_REDUCTION_LEVEL => {
+                    samsung::extended_status::NOISE_CANCELLING_LEVEL
+                }
+                samsung::id::EQUALIZER => samsung::extended_status::EQUALIZER,
                 _ => continue,
             };
             let Some(value) = value else { continue };
@@ -220,7 +216,7 @@ impl Simulated for Buds {
 struct Headphones {
     deframer: sony::Deframer,
     /// The sequence number of its next data frame.
-    seq: u8,
+    seq: sony::Sequence,
     /// attach.frames' answer to each request the core sends to Attach, by
     /// command id.
     answers: Vec<(u8, Vec<u8>)>,
@@ -236,12 +232,9 @@ struct Headphones {
 }
 
 impl Headphones {
-    fn new() -> Option<Headphones> {
+    fn new() -> Result<Headphones, StartError> {
         let mut deframer = sony::Deframer::default();
-        let records = FrameRecord::parse_all(include_str!(
-            "../../core/tests/fixtures/wh-1000xm5/attach.frames"
-        ))
-        .ok()?;
+        let records = FrameRecord::parse_all(fixtures::XM5_ATTACH)?;
         // Each of the core's requests, paired with the Device's next message.
         let mut answers = Vec::new();
         let mut asked = None;
@@ -263,26 +256,28 @@ impl Headphones {
         let noise_control = answers
             .iter()
             .find(|(command, _)| *command == sony::command::NCASM_GET_PARAM)
-            .and_then(|(_, answer)| answer.get(1..))?
+            .and_then(|(_, answer)| answer.get(1..))
+            .ok_or(StartError::NoNoiseControl)?
             .to_vec();
         let reported = answers
             .iter()
             .find(|(command, _)| *command == sony::command::EQEBB_GET_PARAM)
-            .map(|(_, answer)| answer)?;
-        let preset = *reported.get(2)?;
+            .map(|(_, answer)| answer)
+            .ok_or(StartError::NoEqualizer)?;
+        let preset = *reported.get(2).ok_or(StartError::NoEqualizer)?;
         let mut deframer = sony::Deframer::default();
-        let mut curves: Vec<(u8, Vec<u8>)> = received(
-            include_str!("../../core/tests/fixtures/wh-1000xm5/real-equalizer-presets.frames"),
-            |bytes| deframer.push(bytes),
-        )?
+        let mut curves: Vec<(u8, Vec<u8>)> = received(fixtures::XM5_EQUALIZER_PRESETS, |bytes| {
+            deframer.push(bytes)
+        })?
         .into_iter()
         .filter(|frame| frame.data.first() == Some(&sony::command::EQEBB_NTFY_PARAM))
         .filter_map(|frame| Some((*frame.data.get(2)?, frame.data.get(3..)?.to_vec())))
         .collect();
-        curves.insert(0, (preset, reported.get(3..)?.to_vec()));
-        Some(Headphones {
+        let curve = reported.get(3..).ok_or(StartError::NoEqualizer)?;
+        curves.insert(0, (preset, curve.to_vec()));
+        Ok(Headphones {
             deframer: sony::Deframer::default(),
-            seq: 0,
+            seq: sony::Sequence::FIRST,
             answers,
             noise_control,
             preset,
@@ -293,7 +288,7 @@ impl Headphones {
 
     fn message(&mut self, data: &[u8]) -> Vec<u8> {
         let frame = sony::encode(sony::DataType::Mdr, self.seq, data);
-        self.seq = 1 - self.seq;
+        self.seq = self.seq.flipped();
         frame
     }
 
@@ -305,12 +300,11 @@ impl Headphones {
     /// The Equalizer params after `id`: the Preset and its curve, flat for a
     /// Preset with none yet.
     fn equalizer(&self, id: u8) -> Vec<u8> {
-        let flat = [6, 10, 10, 10, 10, 10, 10];
         let curve = self
             .curves
             .iter()
             .find(|(preset, _)| *preset == self.preset)
-            .map_or(&flat[..], |(_, curve)| curve);
+            .map_or(&sony::FLAT_CURVE[..], |(_, curve)| curve);
         [&[id, sony::PRESET_EQ, self.preset][..], curve].concat()
     }
 }
@@ -318,7 +312,7 @@ impl Headphones {
 impl Simulated for Headphones {
     fn link_opened(&mut self) {
         self.deframer = sony::Deframer::default();
-        self.seq = 0;
+        self.seq = sony::Sequence::FIRST;
     }
 
     fn receive(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
@@ -327,13 +321,16 @@ impl Simulated for Headphones {
             if frame.data_type != sony::DataType::Mdr {
                 continue;
             }
-            replies.push(sony::encode(sony::DataType::Ack, 1 - (frame.seq & 1), &[]));
+            let ack = sony::Sequence::from_byte(frame.seq).ack();
+            replies.push(sony::encode(sony::DataType::Ack, ack, &[]));
             let answer = match frame.data.first().copied() {
                 Some(sony::command::NCASM_GET_PARAM) => {
                     self.noise_control(sony::command::NCASM_RET_PARAM)
                 }
                 // Type, status, effect, mode, Focus on Voice and level.
-                Some(sony::command::NCASM_SET_PARAM) if frame.data.len() == 7 => {
+                Some(sony::command::NCASM_SET_PARAM)
+                    if frame.data.len() == sony::NOISE_CONTROL_SET_LEN =>
+                {
                     self.noise_control = frame.data[1..].to_vec();
                     self.noise_control(sony::command::NCASM_NTFY_PARAM)
                 }
@@ -355,8 +352,8 @@ impl Simulated for Headphones {
                     }
                     self.equalizer(sony::command::EQEBB_NTFY_PARAM)
                 }
-                // `POWER_OFF`, `ON`: only acknowledged, then it switches off.
-                Some(sony::command::POWER_SET_STATUS) if frame.data[1..] == [0x03, 0x01] => {
+                // Only acknowledged, then it switches off.
+                Some(sony::command::POWER_SET_STATUS) if frame.data == sony::POWER_OFF => {
                     self.powered_off = true;
                     continue;
                 }

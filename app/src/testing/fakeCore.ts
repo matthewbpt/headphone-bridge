@@ -28,7 +28,7 @@ export class FakeCore {
    * A core in the desktop app, unless `platform` says otherwise, with the
    * Nearby devices permission granted unless `nearbyDevices` says otherwise,
    * whose shell has a Simulated Device only if `simulatedDevice` says so, as
-   * a debug Android build's does.
+   * a debug build's does.
    */
   constructor(
     deviceList: DeviceList,
@@ -81,8 +81,8 @@ export class FakeCore {
    * How the core answers every later call of `command`, or of a device
    * `command` of that `kind`: accept it at once (the default), reject it with
    * an error, or hold it until `release`. Turning the frame log on or off,
-   * and opening the app's settings, are answered at once: accepted or
-   * rejected.
+   * opening the app's settings and switching the Simulated Device are
+   * answered at once: accepted or rejected.
    */
   answer<C extends AnsweredCommand>(
     command: C,
@@ -146,6 +146,8 @@ export class FakeCore {
     set_simulated_device: ({ model }) => {
       if (this.simulated === undefined)
         return Promise.reject("command set_simulated_device not found");
+      const refusal = this.refusal("set_simulated_device");
+      if (refusal) return refusal;
       this.simulated = model;
       return Promise.resolve();
     },
@@ -197,7 +199,11 @@ export class FakeCore {
 export type RecordedCommand = DeviceCommand["kind"] | "share_frame_log";
 
 /** The commands a test can tell the fake core how to answer. */
-type AnsweredCommand = RecordedCommand | "set_frame_log" | "open_app_settings";
+type AnsweredCommand =
+  | RecordedCommand
+  | "set_frame_log"
+  | "open_app_settings"
+  | "set_simulated_device";
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };

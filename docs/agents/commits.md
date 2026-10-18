@@ -54,6 +54,9 @@ A scope names the one area the commit touches. When a commit spans several areas
 | `sony`     | `crates/core/src/sony`: the WH-1000XM5 protocol                    |
 | `macos`    | `crates/platform-macos`: the IOBluetooth and audio output adapter  |
 | `linux`    | `crates/platform-linux`: the BlueZ and default sink adapter        |
+| `android`  | `crates/platform-android`: the core's host and its Kotlin side     |
+| `simulated` | `crates/simulated`: the Simulated Device                          |
+| `fixtures` | `crates/fixtures`: the recorded frames the core's tests and the Simulated Device share |
 | `shell`    | `app/src-tauri`: the Tauri shell and tray                          |
 | `ui`       | `app/src`: the React UI                                            |
 | `ci`       | `.github/workflows` (with a type other than `ci`, e.g. `fix(ci)`)  |
