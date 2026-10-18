@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::command::NoiseControlMode;
+use crate::command::{CommandError, Equalizer, NoiseControlMode};
 
 /// A Model the app supports. Anything else is unsupported and never written to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -152,6 +152,80 @@ pub struct Capabilities {
     pub equalizer: Option<EqualizerCapability>,
 }
 
+impl Capabilities {
+    /// Rejects `level` unless a Device with these Capabilities has that
+    /// Ambient Level.
+    pub(crate) fn check_ambient_level(&self, level: u8) -> Result<(), CommandError> {
+        check_level(self.ambient_level, level)
+    }
+
+    /// Rejects `level` unless a Device with these Capabilities has that
+    /// Noise Cancelling Level.
+    pub(crate) fn check_noise_cancelling_level(&self, level: u8) -> Result<(), CommandError> {
+        check_level(self.noise_cancelling_level, level)
+    }
+
+    /// Rejects `equalizer` unless a Device with these Capabilities can be set
+    /// to it.
+    pub(crate) fn check_equalizer(&self, equalizer: &Equalizer) -> Result<(), CommandError> {
+        let capability = self
+            .equalizer
+            .as_ref()
+            .ok_or(CommandError::MissingCapability)?;
+        let preset = capability
+            .preset(equalizer.preset)
+            .filter(|preset| preset.selectable)
+            .ok_or(CommandError::UnavailablePreset)?;
+        if let Some(bands) = &equalizer.bands {
+            let shape = capability
+                .bands
+                .as_ref()
+                .ok_or(CommandError::MissingCapability)?;
+            if bands.len() != shape.frequencies.len() {
+                return Err(CommandError::OutOfRange);
+            }
+            check_steps(Some(shape.range), preset, bands)?;
+        }
+        if let Some(clear_bass) = equalizer.clear_bass {
+            check_steps(capability.clear_bass, preset, &[clear_bass])?;
+        }
+        // A Model with both takes them together.
+        if capability.bands.is_some()
+            && capability.clear_bass.is_some()
+            && equalizer.bands.is_some() != equalizer.clear_bass.is_some()
+        {
+            return Err(CommandError::IncompleteEqualizer);
+        }
+        Ok(())
+    }
+}
+
+/// Rejects `level` unless a Device with the level Capability `range` has it.
+fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !range.contains(level) {
+        return Err(CommandError::OutOfRange);
+    }
+    Ok(())
+}
+
+/// Rejects `steps` unless a Device with the step Capability `range` can set
+/// them on `preset`.
+fn check_steps(
+    range: Option<StepRange>,
+    preset: &Preset,
+    steps: &[i8],
+) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !preset.editable {
+        return Err(CommandError::FixedPreset);
+    }
+    if !steps.iter().all(|&step| range.contains(step)) {
+        return Err(CommandError::OutOfRange);
+    }
+    Ok(())
+}
+
 /// What a Model's Equalizer offers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,3 +312,23 @@ pub type LevelRange = Steps<u8>;
 
 /// A signed setting's steps, such as a Band's or Clear Bass.
 pub type StepRange = Steps<i8>;
+
+// Every Model on the allowlist has an Equalizer, so a Device can't be asked
+// for one without it; the rule is checked here instead.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_equalizer_for_a_model_without_the_capability_is_rejected() {
+        let preset = Equalizer {
+            preset: PresetId(0),
+            bands: None,
+            clear_bass: None,
+        };
+        assert_eq!(
+            Capabilities::default().check_equalizer(&preset),
+            Err(CommandError::MissingCapability)
+        );
+    }
+}
