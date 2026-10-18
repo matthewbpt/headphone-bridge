@@ -284,9 +284,8 @@ impl Watcher {
     }
 }
 
-/// bluer prints addresses in the port's form, `AC:80:0A:11:22:33`.
 fn port_address(address: Address) -> DeviceAddress {
-    DeviceAddress(address.to_string())
+    DeviceAddress::from_octets(address.0)
 }
 
 impl Bluez {
@@ -296,11 +295,7 @@ impl Bluez {
         address: &DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        // The core only passes addresses the OS reported, so this is a bug.
-        let address: Address = address.0.parse().map_err(|_| {
-            eprintln!("can't open a control link: not a Bluetooth address: {address}");
-            LinkFailure::BluetoothHandlingStopped
-        })?;
+        let address = Address::new(address.octets());
         let device = self.adapter.device(address).map_err(failure)?;
         // ConnectProfile would connect a disconnected Device, and the app
         // never connects Devices.
@@ -503,9 +498,9 @@ mod tests {
         watcher.stopped();
         assert_eq!(
             core.try_recv(),
-            Ok(Observation::DeviceDisconnected(DeviceAddress(
-                "AC:80:0A:11:22:33".into()
-            )))
+            Ok(Observation::DeviceDisconnected(
+                DeviceAddress::parse("AC:80:0A:11:22:33").unwrap()
+            ))
         );
         assert!(core.try_recv().is_err());
     }

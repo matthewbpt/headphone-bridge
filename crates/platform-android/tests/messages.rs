@@ -8,7 +8,7 @@ use headphone_bridge_platform_android::messages::{
 use serde_json::{json, Value};
 
 fn address(text: &str) -> DeviceAddress {
-    DeviceAddress(text.into())
+    DeviceAddress::parse(text).unwrap()
 }
 
 #[test]
@@ -168,6 +168,17 @@ fn an_event_the_core_does_not_know_is_refused() {
 }
 
 #[test]
+fn an_event_with_a_malformed_address_is_a_bad_message() {
+    for json in [
+        r#"{"type":"connected","address":"AA:BB:CC:DD:EE","name":"Galaxy Buds4 Pro","uuids":[]}"#,
+        r#"{"type":"disconnected","address":"not an address"}"#,
+        r#"{"type":"audioOutput","address":"AA_BB_CC_DD_EE_FF"}"#,
+    ] {
+        assert!(matches!(parse_event(json), Err(BadMessage(_))), "{json}");
+    }
+}
+
+#[test]
 fn a_bad_message_keeps_the_json_error_as_its_source() {
     for bad in [
         parse_event("not json").unwrap_err(),
@@ -217,6 +228,16 @@ fn a_command_the_core_does_not_know_is_refused() {
         r#"{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE:FF","mode":"loud"}"#
     )
     .is_err());
+}
+
+#[test]
+fn a_command_with_a_malformed_address_is_refused() {
+    for json in [
+        r#"{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE","mode":"ambient"}"#,
+        r#"{"kind":"powerOff","address":"AA:BB:CC:DD:EE:GG"}"#,
+    ] {
+        assert!(matches!(parse_command(json), Err(BadMessage(_))), "{json}");
+    }
 }
 
 fn sent(message: Message) -> Value {

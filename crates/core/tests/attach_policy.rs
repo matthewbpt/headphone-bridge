@@ -165,15 +165,14 @@ async fn commands_to_a_detached_device_are_refused() {
     let address = buds4pro().address;
     assert_eq!(
         core.command(Command::SetNoiseControlMode(
-            address.clone(),
+            address,
             NoiseControlMode::Ambient
         ))
         .await,
         Err(CommandError::NotAttached)
     );
     assert_eq!(
-        core.command(Command::SetAmbientLevel(address.clone(), 1))
-            .await,
+        core.command(Command::SetAmbientLevel(address, 1)).await,
         Err(CommandError::NotAttached)
     );
 }

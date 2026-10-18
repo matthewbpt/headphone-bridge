@@ -262,7 +262,7 @@ impl<P: Platform> State<P> {
             DeviceState::Detached
         };
         let state_is_attaching = state == DeviceState::Attaching;
-        let address = identity.address.clone();
+        let address = identity.address;
         self.next_recency += 1;
         let tracked = Tracked {
             device: Device::unidentified(identity.address, identity.name, state),
@@ -273,7 +273,7 @@ impl<P: Platform> State<P> {
             last_report: None,
             power_off_deadline: None,
         };
-        self.devices.insert(address.clone(), tracked);
+        self.devices.insert(address, tracked);
         if state_is_attaching {
             self.reattach(&address, Duration::ZERO);
         }
@@ -299,11 +299,11 @@ impl<P: Platform> State<P> {
         let platform = self.platform.clone();
         let events = self.link_events.clone();
         let frame_log = self.frame_log.clone();
-        let address = address.clone();
+        let address = *address;
         let task = tokio::spawn(async move {
             let send = |kind| {
                 let _ = events.send(LinkEvent {
-                    address: address.clone(),
+                    address,
                     attempt,
                     kind,
                 });
@@ -516,7 +516,7 @@ impl<P: Platform> State<P> {
                 DeviceState::Detached if wanted => {
                     tracked.device.state = DeviceState::Attaching;
                     tracked.retries = 0;
-                    to_attach.push(address.clone());
+                    to_attach.push(*address);
                 }
                 // A Device Powering Off is left to finish, or to fail and
                 // be Detached then.
@@ -550,7 +550,7 @@ impl<P: Platform> State<P> {
             .devices
             .iter()
             .filter(|(_, tracked)| tracked.power_off_deadline.is_some_and(|d| d <= now))
-            .map(|(address, _)| address.clone())
+            .map(|(address, _)| *address)
             .collect();
         for address in timed_out {
             let wanted = self.wants_attached(&address);
@@ -613,7 +613,7 @@ impl<P: Platform> State<P> {
             .find(|tracked| Some(&tracked.device.address) == self.audio_output.as_ref());
         playing
             .or_else(|| candidates().max_by_key(|tracked| tracked.recency))
-            .map(|tracked| tracked.device.address.clone())
+            .map(|tracked| tracked.device.address)
     }
 
     fn publish(&self) {

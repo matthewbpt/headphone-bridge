@@ -220,23 +220,19 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     let address = xm5().address;
     // Each set as the capture made it, and what the Device then reported.
     let sets = [
-        (Command::SetNoiseControlMode(address.clone(), Off), Off, 10),
+        (Command::SetNoiseControlMode(address, Off), Off, 10),
         (
-            Command::SetNoiseControlMode(address.clone(), NoiseCancelling),
+            Command::SetNoiseControlMode(address, NoiseCancelling),
             NoiseCancelling,
             10,
         ),
+        (Command::SetNoiseControlMode(address, Ambient), Ambient, 10),
+        (Command::SetAmbientLevel(address, 15), Ambient, 15),
+        (Command::SetAmbientLevel(address, 20), Ambient, 20),
+        (Command::SetAmbientLevel(address, 1), Ambient, 1),
+        (Command::SetAmbientLevel(address, 10), Ambient, 10),
         (
-            Command::SetNoiseControlMode(address.clone(), Ambient),
-            Ambient,
-            10,
-        ),
-        (Command::SetAmbientLevel(address.clone(), 15), Ambient, 15),
-        (Command::SetAmbientLevel(address.clone(), 20), Ambient, 20),
-        (Command::SetAmbientLevel(address.clone(), 1), Ambient, 1),
-        (Command::SetAmbientLevel(address.clone(), 10), Ambient, 10),
-        (
-            Command::SetNoiseControlMode(address.clone(), NoiseCancelling),
+            Command::SetNoiseControlMode(address, NoiseCancelling),
             NoiseCancelling,
             10,
         ),

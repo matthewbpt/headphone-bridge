@@ -205,7 +205,7 @@ async fn a_device_without_a_supported_vendor_service_is_ignored() {
     let core = Core::builder().start(platform);
 
     os.observe(Observation::DeviceConnected(DeviceIdentity {
-        address: DeviceAddress("11:22:33:44:55:66".into()),
+        address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
         name: "Magic Keyboard".into(),
         service_uuids: vec![],
     }));
@@ -221,7 +221,7 @@ async fn a_samsung_device_whose_name_is_not_on_the_allowlist_is_never_attached()
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds3pro = DeviceIdentity {
-        address: DeviceAddress("10:20:30:40:50:60".into()),
+        address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds3 Pro (9F3C)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };

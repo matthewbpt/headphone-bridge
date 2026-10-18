@@ -110,7 +110,7 @@ async fn a_galaxy_buds2_pro_is_listed_as_unsupported_and_sent_nothing() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("10:20:30:40:50:60".into()),
+        address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds2 Pro (9F3C)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };

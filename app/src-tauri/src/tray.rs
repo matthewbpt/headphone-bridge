@@ -273,7 +273,7 @@ impl TrayMenu {
                 .effective_mode_reason
                 .map(|reason| labels::hint(reason).into()),
             status: None,
-            device: Some(device.address.clone()),
+            device: Some(device.address),
             modes: device
                 .capabilities
                 .noise_control_modes
@@ -360,7 +360,7 @@ impl TrayMenu {
             QUIT => return Some(Click::Quit),
             _ => {}
         }
-        let address = self.device.clone()?;
+        let address = self.device?;
         if id == POWER_OFF {
             return self
                 .power_off
@@ -410,7 +410,7 @@ mod tests {
 
     fn buds(state: DeviceState) -> Device {
         Device {
-            address: DeviceAddress("AA:BB:CC:DD:EE:FF".into()),
+            address: DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap(),
             name: "Matt's Buds4 Pro".into(),
             model: Some(Model::GalaxyBuds4Pro),
             state,
@@ -445,7 +445,7 @@ mod tests {
     fn shows_the_attached_device_with_its_chosen_mode_checked() {
         let list = DeviceList {
             devices: vec![buds(DeviceState::Attached)],
-            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+            primary: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -454,7 +454,7 @@ mod tests {
                 battery: Some("Battery: L 80% · R 75% · Case –".into()),
                 hint: None,
                 status: None,
-                device: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+                device: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
                     mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", false),
@@ -527,7 +527,7 @@ mod tests {
     fn offers_only_the_modes_in_the_headphones_capabilities() {
         let list = DeviceList {
             devices: vec![Device {
-                address: DeviceAddress("11:22:33:44:55:66".into()),
+                address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
                 name: "WH-1000XM5".into(),
                 model: Some(Model::Wh1000Xm5),
                 state: DeviceState::Attached,
@@ -543,7 +543,7 @@ mod tests {
                 power_off_failed: false,
                 reported_at: None,
             }],
-            primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
+            primary: Some(DeviceAddress::parse("11:22:33:44:55:66").unwrap()),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -552,7 +552,7 @@ mod tests {
                 battery: Some("Battery: 70%".into()),
                 hint: None,
                 status: None,
-                device: Some(DeviceAddress("11:22:33:44:55:66".into())),
+                device: Some(DeviceAddress::parse("11:22:33:44:55:66").unwrap()),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
                     mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", true),
@@ -574,7 +574,7 @@ mod tests {
                 effective_mode_reason: Some(EffectiveModeReason::BudOutOfEar),
                 ..buds(DeviceState::Attached)
             }],
-            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+            primary: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
         };
         let menu = TrayMenu::new(&list);
         assert_eq!(
@@ -589,7 +589,7 @@ mod tests {
 
     fn xm5() -> Device {
         Device {
-            address: DeviceAddress("11:22:33:44:55:66".into()),
+            address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
             name: "WH-1000XM5".into(),
             model: Some(Model::Wh1000Xm5),
             state: DeviceState::Attached,
@@ -616,7 +616,7 @@ mod tests {
         assert_eq!(TrayMenu::new(&list).title, "WH-1000XM5");
         assert_eq!(TrayMenu::new(&list).device, Some(xm5().address));
 
-        list.primary = Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into()));
+        list.primary = Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap());
         assert_eq!(TrayMenu::new(&list).title, "Matt's Buds4 Pro");
     }
 

@@ -306,7 +306,7 @@ impl Platform for KotlinBluetooth {
             .insert(request, opened_tx);
         let asked = shared.send(Message::Open {
             request,
-            address: address.clone(),
+            address: *address,
             service,
         });
         if !asked {

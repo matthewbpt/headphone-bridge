@@ -6,7 +6,7 @@ use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_platform_linux::{sink_device, Sink};
 
 fn address(s: &str) -> Option<DeviceAddress> {
-    Some(DeviceAddress(s.into()))
+    Some(DeviceAddress::parse(s).unwrap())
 }
 
 #[test]

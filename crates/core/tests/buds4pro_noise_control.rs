@@ -205,7 +205,7 @@ async fn a_mode_is_never_sent_to_an_unsupported_model() {
     let (platform, os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds3pro = DeviceIdentity {
-        address: DeviceAddress("10:20:30:40:50:60".into()),
+        address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds3 Pro (9F3C)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };

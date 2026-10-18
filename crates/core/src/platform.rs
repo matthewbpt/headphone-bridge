@@ -6,6 +6,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -46,15 +47,77 @@ pub struct DeviceIdentity {
     pub service_uuids: Vec<Uuid>,
 }
 
-/// A Bluetooth device address, in the form `AA:BB:CC:DD:EE:FF`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
-pub struct DeviceAddress(pub String);
+/// A Bluetooth device address. It holds only a well-formed address, and
+/// shows as `AA:BB:CC:DD:EE:FF`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(try_from = "String")]
+pub struct DeviceAddress([u8; 6]);
+
+impl DeviceAddress {
+    /// The address with these octets, most significant first.
+    pub const fn from_octets(octets: [u8; 6]) -> DeviceAddress {
+        DeviceAddress(octets)
+    }
+
+    /// Its octets, most significant first.
+    pub const fn octets(self) -> [u8; 6] {
+        self.0
+    }
+
+    /// Parses six two-digit hex octets in either case, all separated by `:`
+    /// or all by `-`.
+    pub fn parse(text: &str) -> Result<DeviceAddress, AddressError> {
+        let malformed = || AddressError(text.to_owned());
+        let separator = if text.contains('-') { '-' } else { ':' };
+        let mut parts = text.split(separator);
+        let mut octets = [0; 6];
+        for octet in &mut octets {
+            let part = parts.next().ok_or_else(malformed)?;
+            if part.len() != 2 || !part.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(malformed());
+            }
+            *octet = u8::from_str_radix(part, 16).map_err(|_| malformed())?;
+        }
+        if parts.next().is_some() {
+            return Err(malformed());
+        }
+        Ok(DeviceAddress(octets))
+    }
+}
+
+impl FromStr for DeviceAddress {
+    type Err = AddressError;
+
+    fn from_str(text: &str) -> Result<DeviceAddress, AddressError> {
+        DeviceAddress::parse(text)
+    }
+}
+
+impl TryFrom<String> for DeviceAddress {
+    type Error = AddressError;
+
+    fn try_from(text: String) -> Result<DeviceAddress, AddressError> {
+        DeviceAddress::parse(&text)
+    }
+}
 
 impl fmt::Display for DeviceAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        let [a, b, c, d, e, g] = self.0;
+        write!(f, "{a:02X}:{b:02X}:{c:02X}:{d:02X}:{e:02X}:{g:02X}")
     }
 }
+
+impl Serialize for DeviceAddress {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+/// Text that isn't a Bluetooth device address, carrying the text.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("not a Bluetooth address: {0:?}")]
+pub struct AddressError(pub String);
 
 /// An open, bidirectional control link. Chunks in `incoming` are not aligned
 /// to frames. The link has dropped when `incoming` yields `None` or a send on

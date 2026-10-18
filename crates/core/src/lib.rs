@@ -129,14 +129,14 @@ impl Core {
     /// returned [`Hold`] is dropped, and only that Device, even if another
     /// becomes Primary meanwhile. `None` if there is no Primary Device.
     pub fn hold_primary(&self) -> Option<Hold> {
-        let primary = self.device_list.borrow().primary.clone()?;
+        let primary = self.device_list.borrow().primary?;
         Some(self.hold(Some(primary)))
     }
 
     fn hold(&self, device: Option<DeviceAddress>) -> Hold {
         let id = self.next_hold.fetch_add(1, Ordering::Relaxed);
         // A stopped core holds nothing.
-        let _ = self.requests.send(Request::Hold(id, device.clone()));
+        let _ = self.requests.send(Request::Hold(id, device));
         Hold {
             id,
             device,

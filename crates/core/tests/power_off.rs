@@ -50,11 +50,11 @@ async fn a_device_that_is_powering_off_refuses_every_command() {
 
     let address = xm5().address;
     for command in [
-        Command::PowerOff(address.clone()),
-        Command::SetNoiseControlMode(address.clone(), NoiseControlMode::NoiseCancelling),
-        Command::SetAmbientLevel(address.clone(), 15),
-        Command::SetNoiseCancellingLevel(address.clone(), 2),
-        Command::RetryAttach(address.clone()),
+        Command::PowerOff(address),
+        Command::SetNoiseControlMode(address, NoiseControlMode::NoiseCancelling),
+        Command::SetAmbientLevel(address, 15),
+        Command::SetNoiseCancellingLevel(address, 2),
+        Command::RetryAttach(address),
     ] {
         assert_eq!(
             core.command(command.clone()).await,
@@ -322,7 +322,7 @@ async fn an_unsupported_model_refuses_power_off() {
     let (platform, os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("A1:B2:C3:00:00:02".into()),
+        address: DeviceAddress::parse("A1:B2:C3:00:00:02").unwrap(),
         name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };

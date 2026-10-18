@@ -74,7 +74,7 @@ async fn an_unsupported_model_is_never_primary() {
         .attach_policy(AttachPolicy::OnRequest)
         .start(platform);
     let buds3pro = DeviceIdentity {
-        address: DeviceAddress("AA:BB:CC:DD:EE:03".into()),
+        address: DeviceAddress::parse("AA:BB:CC:DD:EE:03").unwrap(),
         name: "Galaxy Buds3 Pro (A1B2)".into(),
         ..buds4pro()
     };

@@ -47,9 +47,7 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     .await;
 
     os.allow_links(&address);
-    core.command(Command::RetryAttach(address.clone()))
-        .await
-        .unwrap();
+    core.command(Command::RetryAttach(address)).await.unwrap();
 
     let link = os.next_link().await;
     identify_buds4pro(&link);
@@ -61,7 +59,7 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("A1:B2:C3:00:00:02".into()),
+        address: DeviceAddress::parse("A1:B2:C3:00:00:02").unwrap(),
         name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
@@ -72,13 +70,12 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     .await;
 
     assert_eq!(
-        core.command(Command::RetryAttach(buds2pro.address.clone()))
-            .await,
+        core.command(Command::RetryAttach(buds2pro.address)).await,
         Err(CommandError::UnsupportedModel)
     );
     assert_eq!(
         core.command(Command::SetNoiseControlMode(
-            buds2pro.address.clone(),
+            buds2pro.address,
             NoiseControlMode::Off
         ))
         .await,
@@ -197,7 +194,7 @@ async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straigh
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
 
-    os.observe(Observation::DeviceDisconnected(address.clone()));
+    os.observe(Observation::DeviceDisconnected(address));
     wait_for(&core, |list| list.devices.is_empty()).await;
     assert!(!os.attempts_within(Duration::from_secs(600)).await);
 
@@ -214,7 +211,7 @@ async fn another_sony_model_is_not_retried() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let wh1000xm6 = DeviceIdentity {
-        address: DeviceAddress("AC:80:0A:44:55:66".into()),
+        address: DeviceAddress::parse("AC:80:0A:44:55:66").unwrap(),
         name: "WH-1000XM6".into(),
         service_uuids: vec![support::SONY_SERVICE],
     };

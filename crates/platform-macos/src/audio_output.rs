@@ -137,13 +137,7 @@ fn get_string(object: AudioObjectID, selector: AudioObjectPropertySelector) -> O
 /// The Device address at the start of a Classic Bluetooth device's UID, e.g.
 /// `AC-80-0A-11-22-33:output`. Other UIDs, such as LE Audio's, give `None`.
 fn address_from_uid(uid: &str) -> Option<DeviceAddress> {
-    let prefix = uid.get(..17)?;
-    let octets: Vec<&str> = prefix.split(['-', ':']).collect();
-    let valid = octets.len() == 6
-        && octets
-            .iter()
-            .all(|octet| octet.len() == 2 && octet.chars().all(|c| c.is_ascii_hexdigit()));
-    valid.then(|| DeviceAddress(octets.join(":").to_ascii_uppercase()))
+    uid.get(..17)?.parse().ok()
 }
 
 #[cfg(test)]
@@ -154,7 +148,7 @@ mod tests {
     fn reads_the_address_from_a_classic_bluetooth_uid() {
         assert_eq!(
             address_from_uid("ac-80-0A-11-22-33:output"),
-            Some(DeviceAddress("AC:80:0A:11:22:33".into()))
+            Some(DeviceAddress::parse("AC:80:0A:11:22:33").unwrap())
         );
     }
 

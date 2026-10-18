@@ -20,7 +20,6 @@ use uuid::Uuid;
 
 use crate::audio_output;
 use crate::delegates::{DeviceEvent, DeviceEvents, DeviceWatcher, RfcommDelegate};
-use crate::port_address;
 
 pub type LinkId = u64;
 
@@ -120,6 +119,8 @@ struct BluetoothThread {
 }
 
 struct ConnectedDevice {
+    /// Its address, as the core knows it.
+    address: DeviceAddress,
     /// The object IOBluetooth reported. One from `deviceWithAddressString:`
     /// can claim the Device isn't connected while it is.
     device: Retained<IOBluetoothDevice>,
@@ -252,6 +253,10 @@ impl BluetoothThread {
     }
 
     fn report_connected(&mut self, device: &IOBluetoothDevice, address: String) {
+        let Ok(port_address) = DeviceAddress::parse(&address) else {
+            eprintln!("can't report a Device Connected: {address:?} isn't an address");
+            return;
+        };
         let Some(notification) = (unsafe {
             device.registerForDisconnectNotification_selector(
                 Some(&self.watcher),
@@ -261,8 +266,9 @@ impl BluetoothThread {
             return;
         };
         self.connected.insert(
-            address.clone(),
+            address,
             ConnectedDevice {
+                address: port_address,
                 device: device.retain(),
                 disconnect_notification: notification,
                 connected_at: Instant::now(),
@@ -271,7 +277,7 @@ impl BluetoothThread {
         let _ = self
             .observations
             .send(Observation::DeviceConnected(DeviceIdentity {
-                address: port_address(&address),
+                address: port_address,
                 name: unsafe { device.name() }.to_string(),
                 service_uuids: service_uuids(device),
             }));
@@ -288,7 +294,7 @@ impl BluetoothThread {
             unsafe { connected.disconnect_notification.unregister() };
             let _ = self
                 .observations
-                .send(Observation::DeviceDisconnected(port_address(&address)));
+                .send(Observation::DeviceDisconnected(connected.address));
             self.check_audio_output();
         }
     }
@@ -300,13 +306,13 @@ impl BluetoothThread {
             output.address.or_else(|| {
                 let name = output.name?;
                 self.connected
-                    .iter()
-                    .find(|(_, connected)| unsafe { connected.device.name() }.to_string() == name)
-                    .map(|(address, _)| port_address(address))
+                    .values()
+                    .find(|connected| unsafe { connected.device.name() }.to_string() == name)
+                    .map(|connected| connected.address)
             })
         });
         if output != self.audio_output {
-            self.audio_output = output.clone();
+            self.audio_output = output;
             let _ = self
                 .observations
                 .send(Observation::AudioOutputChanged(output));
@@ -323,7 +329,7 @@ impl BluetoothThread {
         // Only Devices the OS reported Connected are opened, so this never
         // connects one. `isConnected` isn't checked: on a Connected Buds4 Pro
         // it returned false while the OS listed it as connected.
-        let iobluetooth_address = address.0.replace(':', "-").to_ascii_lowercase();
+        let iobluetooth_address = iobluetooth_address(*address);
         let (device, connected_at) = self
             .connected
             .get(&iobluetooth_address)
@@ -525,6 +531,12 @@ fn paired_devices() -> Vec<Retained<IOBluetoothDevice>> {
         .into_iter()
         .filter_map(|device| device.downcast::<IOBluetoothDevice>().ok())
         .collect()
+}
+
+/// `address` in IOBluetooth's form, `ac-80-0a-11-22-33`.
+fn iobluetooth_address(address: DeviceAddress) -> String {
+    let [a, b, c, d, e, f] = address.octets();
+    format!("{a:02x}-{b:02x}-{c:02x}-{d:02x}-{e:02x}-{f:02x}")
 }
 
 fn address_of(device: &IOBluetoothDevice) -> Option<String> {

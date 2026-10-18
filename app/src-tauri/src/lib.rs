@@ -185,56 +185,56 @@ fn device_list(core: State<&'static Core>) -> DeviceList {
 #[tauri::command]
 async fn set_noise_control_mode(
     core: State<'_, &'static Core>,
-    address: String,
+    address: DeviceAddress,
     mode: NoiseControlMode,
 ) -> Result<(), CommandError> {
-    core.command(Command::SetNoiseControlMode(DeviceAddress(address), mode))
+    core.command(Command::SetNoiseControlMode(address, mode))
         .await
 }
 
 #[tauri::command]
 async fn set_ambient_level(
     core: State<'_, &'static Core>,
-    address: String,
+    address: DeviceAddress,
     level: u8,
 ) -> Result<(), CommandError> {
-    core.command(Command::SetAmbientLevel(DeviceAddress(address), level))
-        .await
+    core.command(Command::SetAmbientLevel(address, level)).await
 }
 
 #[tauri::command]
 async fn set_noise_cancelling_level(
     core: State<'_, &'static Core>,
-    address: String,
+    address: DeviceAddress,
     level: u8,
 ) -> Result<(), CommandError> {
-    core.command(Command::SetNoiseCancellingLevel(
-        DeviceAddress(address),
-        level,
-    ))
-    .await
+    core.command(Command::SetNoiseCancellingLevel(address, level))
+        .await
 }
 
 #[tauri::command]
 async fn set_equalizer(
     core: State<'_, &'static Core>,
-    address: String,
+    address: DeviceAddress,
     equalizer: Equalizer,
 ) -> Result<(), CommandError> {
-    core.command(Command::SetEqualizer(DeviceAddress(address), equalizer))
+    core.command(Command::SetEqualizer(address, equalizer))
         .await
 }
 
 #[tauri::command]
-async fn retry_attach(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
-    core.command(Command::RetryAttach(DeviceAddress(address)))
-        .await
+async fn retry_attach(
+    core: State<'_, &'static Core>,
+    address: DeviceAddress,
+) -> Result<(), CommandError> {
+    core.command(Command::RetryAttach(address)).await
 }
 
 #[tauri::command]
-async fn power_off(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
-    core.command(Command::PowerOff(DeviceAddress(address)))
-        .await
+async fn power_off(
+    core: State<'_, &'static Core>,
+    address: DeviceAddress,
+) -> Result<(), CommandError> {
+    core.command(Command::PowerOff(address)).await
 }
 
 /// The frame log file, or `None` while the frame log is off.

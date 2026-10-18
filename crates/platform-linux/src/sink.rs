@@ -17,29 +17,17 @@ pub struct Sink<'a> {
 
 /// The Bluetooth Device `sink` plays to, or `None` for any other sink.
 pub fn sink_device(sink: &Sink) -> Option<DeviceAddress> {
+    if let Some(address) = sink.bluez5_address {
+        return address.parse().ok();
+    }
     let from_name = || {
         let rest = sink
             .name
             .strip_prefix("bluez_output.")
             .or_else(|| sink.name.strip_prefix("bluez_sink."))?;
-        Some(rest.get(..17)?.replace('_', ":"))
+        rest.get(..17)?.replace('_', ":").parse().ok()
     };
-    let address = sink
-        .bluez5_address
-        .map(str::to_string)
-        .or_else(|| {
-            sink.device_string
-                .filter(|s| is_address(s))
-                .map(str::to_string)
-        })
-        .or_else(from_name)?;
-    is_address(&address).then(|| DeviceAddress(address.to_ascii_uppercase()))
-}
-
-/// Whether `s` has the form `AA:BB:CC:DD:EE:FF`.
-fn is_address(s: &str) -> bool {
-    s.len() == 17
-        && s.split(':').count() == 6
-        && s.split(':')
-            .all(|octet| octet.len() == 2 && octet.chars().all(|c| c.is_ascii_hexdigit()))
+    sink.device_string
+        .and_then(|s| s.parse().ok())
+        .or_else(from_name)
 }

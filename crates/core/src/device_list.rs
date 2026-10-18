@@ -97,7 +97,7 @@ impl Device {
         Device {
             model: self.model,
             capabilities: self.capabilities.clone(),
-            ..Device::unidentified(self.address.clone(), self.name.clone(), state)
+            ..Device::unidentified(self.address, self.name.clone(), state)
         }
     }
 

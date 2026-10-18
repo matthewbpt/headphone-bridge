@@ -73,10 +73,7 @@ impl FakeOs {
     /// Every attempt to open a control link to `address` fails with `failure`
     /// until [`FakeOs::allow_links`] is called.
     pub fn fail_links(&self, address: &DeviceAddress, failure: LinkFailure) {
-        self.failures
-            .lock()
-            .unwrap()
-            .insert(address.clone(), failure);
+        self.failures.lock().unwrap().insert(*address, failure);
     }
 
     pub fn allow_links(&self, address: &DeviceAddress) {
@@ -122,14 +119,14 @@ impl Platform for FakePlatform {
         address: &DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let _ = self.attempted.send(address.clone());
+        let _ = self.attempted.send(*address);
         if let Some(failure) = self.failures.lock().unwrap().get(address) {
             return Err(failure.clone());
         }
         let (to_core, from_device) = mpsc::unbounded_channel();
         let (to_device, from_core) = mpsc::unbounded_channel();
         let _ = self.opened.send(DeviceLink {
-            address: address.clone(),
+            address: *address,
             service,
             written: from_core,
             send: to_core,
@@ -155,7 +152,7 @@ pub const SONY_SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
 /// A Galaxy Buds4 Pro as the OS reports it.
 pub fn buds4pro() -> DeviceIdentity {
     DeviceIdentity {
-        address: DeviceAddress("A1:B2:C3:D4:E5:F6".into()),
+        address: DeviceAddress::parse("A1:B2:C3:D4:E5:F6").unwrap(),
         name: "Galaxy Buds4 Pro (A1B2)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     }
@@ -164,7 +161,7 @@ pub fn buds4pro() -> DeviceIdentity {
 /// A Galaxy Buds2 as the OS reports it: the owner's, as macOS names it.
 pub fn buds2() -> DeviceIdentity {
     DeviceIdentity {
-        address: DeviceAddress("B1:BD:C3:D4:E5:F6".into()),
+        address: DeviceAddress::parse("B1:BD:C3:D4:E5:F6").unwrap(),
         name: "Galaxy Buds2 (B1BD)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     }
@@ -173,7 +170,7 @@ pub fn buds2() -> DeviceIdentity {
 /// A WH-1000XM5 as the OS reports it.
 pub fn xm5() -> DeviceIdentity {
     DeviceIdentity {
-        address: DeviceAddress("AC:80:0A:11:22:33".into()),
+        address: DeviceAddress::parse("AC:80:0A:11:22:33").unwrap(),
         name: "WH-1000XM5".into(),
         service_uuids: vec![SONY_SERVICE],
     }
@@ -265,7 +262,7 @@ pub async fn real_preset_picks_are_confirmed_by_their_acks(
     .await;
     let mut confirmed = attached_on;
     for (i, &pick) in picks.iter().enumerate() {
-        core.command(Command::SetEqualizer(device.address.clone(), preset(pick)))
+        core.command(Command::SetEqualizer(device.address, preset(pick)))
             .await
             .unwrap();
         assert_eq!(
