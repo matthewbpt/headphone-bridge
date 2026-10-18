@@ -31,6 +31,20 @@ pub mod id {
     pub const MANAGER_INFO: u8 = 136;
 }
 
+/// Where the extended status reports each setting, by byte.
+pub mod extended_status {
+    /// Each bud's placement, a nibble each.
+    pub const PLACEMENT: usize = 6;
+    pub const EQUALIZER: usize = 9;
+    /// The Noise Control Mode the Device is applying.
+    pub const NOISE_CONTROL_MODE: usize = 12;
+    pub const AMBIENT_LEVEL: usize = 23;
+    pub const NOISE_CANCELLING_LEVEL: usize = 24;
+}
+
+/// The placement byte for both buds in the ear.
+pub const BOTH_WORN: u8 = 0x11;
+
 /// Where each Model reports its charging bits in the extended status.
 mod charging {
     /// A Buds2's byte (GalaxyBudsClient).
@@ -241,22 +255,24 @@ impl VendorSession for Session {
                 }
                 .copied()
                 .unwrap_or(0);
-                self.buds.apply(p[6], charging, [p[2], p[3], p[7]]);
-                // Byte 12 is the mode the Device is applying: Off while it has
+                let placement = p[extended_status::PLACEMENT];
+                self.buds.apply(placement, charging, [p[2], p[3], p[7]]);
+                // The mode byte is the mode the Device is applying: Off while it has
                 // paused the Chosen Mode because a bud is out (capture-1c).
                 // Any other mode, or Off with both buds in, is the Chosen
                 // Mode, as is the first one reported, for want of a better
                 // guess.
-                if let Some(mode) = noise_control_mode(p[12]) {
+                if let Some(mode) = noise_control_mode(p[extended_status::NOISE_CONTROL_MODE]) {
                     let chosen =
-                        !self.chosen_known || mode != NoiseControlMode::Off || both_worn(p[6]);
-                    updates.push(self.mode_update(mode, p[6], chosen));
+                        !self.chosen_known || mode != NoiseControlMode::Off || both_worn(placement);
+                    updates.push(self.mode_update(mode, placement, chosen));
                 }
-                // Byte 9 is the Preset.
-                updates.extend(self.preset(p[9]));
-                updates.extend(self.ambient_level(p.get(23)));
-                // Byte 24, whatever the mode (real-nc-level-0 to 4).
-                updates.extend(self.noise_cancelling_level(p.get(24)));
+                updates.extend(self.preset(p[extended_status::EQUALIZER]));
+                updates.extend(self.ambient_level(p.get(extended_status::AMBIENT_LEVEL)));
+                // Whatever the mode (real-nc-level-0 to 4).
+                updates.extend(
+                    self.noise_cancelling_level(p.get(extended_status::NOISE_CANCELLING_LEVEL)),
+                );
             }
             id::AMBIENT_VOLUME => return self.ambient_level(p.first()).into_iter().collect(),
             // An ACK is `<id of the message> <value>`. It confirms a set only
@@ -266,7 +282,7 @@ impl VendorSession for Session {
                 return match p[0] {
                     id::NOISE_CONTROLS => match noise_control_mode(p[1]) {
                         Some(mode) if self.pending_mode == Some(mode) => {
-                            vec![self.mode_update(mode, 0x11, true)]
+                            vec![self.mode_update(mode, BOTH_WORN, true)]
                         }
                         _ => Vec::new(),
                     },
@@ -300,7 +316,7 @@ impl VendorSession for Session {
                 // galaxy-buds2/real-gesture, `00 12 01 66 02` for a bud out
                 // in galaxy-buds2/real-noise-control. An update too short to
                 // carry one is taken as a gesture only with both buds in.
-                let placement = p.get(1).copied().unwrap_or(0x11);
+                let placement = p.get(1).copied().unwrap_or(BOTH_WORN);
                 let cause_at = match self.model {
                     Some(Model::GalaxyBuds2) => 4,
                     _ => 6,
@@ -472,6 +488,11 @@ mod tests {
 
     /// `MANAGER_INFO`, as a Buds4 Pro is sent it (capture-3).
     const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
+
+    #[test]
+    fn the_both_worn_placement_has_both_buds_in_the_ear() {
+        assert!(both_worn(BOTH_WORN));
+    }
 
     #[test]
     fn a_new_session_queues_the_manager_info_handshake_once() {

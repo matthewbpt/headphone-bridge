@@ -19,7 +19,7 @@ use crate::model::{Model, PresetId, WH_1000XM5_BANDS};
 use crate::session::{SessionCommand, VendorSession};
 use crate::update::Update;
 pub use frame::Frame;
-use frame::{encode, DataType, Deframer};
+use frame::{encode, DataType, Deframer, Sequence};
 
 /// The vendor's v2 RFCOMM service.
 pub const SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
@@ -61,6 +61,11 @@ mod power {
     pub const POWER_OFF: u8 = 0x03;
 }
 
+/// `PowerOffSettingValue::ON`.
+const ON: u8 = 0x01;
+/// The request to Power Off, as libmdr and Gadgetbridge send it.
+pub const POWER_OFF: [u8; 3] = [command::POWER_SET_STATUS, power::POWER_OFF, ON];
+
 /// `FunctionType`s in the support function list.
 mod function {
     pub const BATTERY_LEVEL_INDICATOR: u8 = 0x20;
@@ -86,6 +91,16 @@ const EQUALIZER_STEP_OFFSET: i8 = 10;
 /// How many steps an Equalizer curve has on the wire: Clear Bass, then each
 /// Band.
 const CURVE_STEPS: usize = 1 + WH_1000XM5_BANDS.len();
+/// A flat Equalizer curve as a RET or NTFY carries it after the Preset: the
+/// step count, then every step at 0.
+pub const FLAT_CURVE: [u8; 1 + CURVE_STEPS] = {
+    let mut curve = [EQUALIZER_STEP_OFFSET as u8; 1 + CURVE_STEPS];
+    curve[0] = CURVE_STEPS as u8;
+    curve
+};
+/// The length of an NCASM set: the command id, then the type, the status and
+/// the params.
+pub const NOISE_CONTROL_SET_LEN: usize = 7;
 
 /// NCASM params as the Device reports and takes them, bytes 3–6 of a 0x17
 /// RET, NTFY or SET.
@@ -130,7 +145,7 @@ struct InFlight {
 pub struct Session {
     deframer: Deframer,
     /// The sequence number of the next data frame the app sends.
-    seq: u8,
+    seq: Sequence,
     /// The request sent and not yet acknowledged, if any.
     in_flight: Option<InFlight>,
     /// Data frames sent so far, resends included.
@@ -149,7 +164,7 @@ impl Session {
     pub fn new() -> Session {
         let mut session = Session {
             deframer: Deframer::default(),
-            seq: 0,
+            seq: Sequence::FIRST,
             in_flight: None,
             sends: 0,
             requests: VecDeque::new(),
@@ -214,17 +229,12 @@ impl Session {
 
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
     pub fn power_off(&mut self) {
-        /// `PowerOffSettingValue::ON`.
-        const ON: u8 = 0x01;
-        self.request_as(
-            vec![command::POWER_SET_STATUS, power::POWER_OFF, ON],
-            RequestKind::PowerOff,
-        );
+        self.request_as(POWER_OFF.to_vec(), RequestKind::PowerOff);
     }
 
     fn set_noise_control(&mut self, params: NoiseControl) {
         self.noise_control = Some(params);
-        self.request(vec![
+        let set: [u8; NOISE_CONTROL_SET_LEN] = [
             command::NCASM_SET_PARAM,
             NCASM_TYPE,
             CHANGED,
@@ -232,15 +242,16 @@ impl Session {
             params.mode,
             params.focus_on_voice,
             params.level,
-        ]);
+        ];
+        self.request(set.to_vec());
     }
 
     fn acknowledged(&mut self, ack: &Frame) -> Vec<Update> {
         // A stale ACK, for a frame other than the outstanding one, is ignored.
-        let Some(in_flight) = self.in_flight.take_if(|_| ack.seq == 1 - self.seq) else {
+        let Some(in_flight) = self.in_flight.take_if(|_| ack.seq == self.seq.ack().byte()) else {
             return Vec::new();
         };
-        self.seq = ack.seq;
+        self.seq = self.seq.flipped();
         self.send_next();
         match in_flight.kind {
             RequestKind::PowerOff => vec![Update::PowerOffAcknowledged],
@@ -386,8 +397,11 @@ impl VendorSession for Session {
         match frame.data_type {
             DataType::Ack => return self.acknowledged(frame),
             DataType::Mdr | DataType::MdrNo2 => {
-                self.outgoing
-                    .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
+                self.outgoing.push(encode(
+                    DataType::Ack,
+                    Sequence::from_byte(frame.seq).ack(),
+                    &[],
+                ));
                 if frame.data_type == DataType::Mdr {
                     return self.message(&frame.data);
                 }
