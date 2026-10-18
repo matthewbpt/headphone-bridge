@@ -10,7 +10,8 @@ use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
+    Battery, Command, CommandKind, Core, DeviceCommand, DeviceList, DeviceState, NoiseControlMode,
+    NotAttachedReason,
 };
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -123,7 +124,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         Some(Click::Open) => crate::show_window(app),
         Some(Click::Quit) => app.exit(0),
         Some(Click::Send(command)) => {
-            if let Command::SetNoiseControlMode(..) = command {
+            if let CommandKind::SetNoiseControlMode { .. } = command.kind {
                 // A check item toggles itself when clicked. Put the check
                 // marks back as the Device last confirmed them: the radio
                 // selection moves only once the Device confirms the new mode.
@@ -132,7 +133,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let core = app.state::<&'static Core>();
-                if let Err(error) = core.command(command.clone()).await {
+                if let Err(error) = core.command(Command::Device(command.clone())).await {
                     eprintln!("couldn't send {command:?} from the tray: {error:?}");
                 }
             });
@@ -210,7 +211,7 @@ pub enum Click {
     Open,
     Quit,
     /// Sends a command for the Primary Device to the core.
-    Send(Command),
+    Send(DeviceCommand),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -365,10 +366,16 @@ impl TrayMenu {
             return self
                 .power_off
                 .is_some()
-                .then_some(Click::Send(Command::PowerOff(address)));
+                .then_some(Click::Send(DeviceCommand {
+                    address,
+                    kind: CommandKind::PowerOff,
+                }));
         }
         let mode = id.strip_prefix(MODE).and_then(mode_from_id)?;
-        Some(Click::Send(Command::SetNoiseControlMode(address, mode)))
+        Some(Click::Send(DeviceCommand {
+            address,
+            kind: CommandKind::SetNoiseControlMode { mode },
+        }))
     }
 }
 
@@ -761,7 +768,10 @@ mod tests {
         };
         assert_eq!(
             TrayMenu::new(&list).click("power-off"),
-            Some(Click::Send(Command::PowerOff(xm5().address)))
+            Some(Click::Send(DeviceCommand {
+                address: xm5().address,
+                kind: CommandKind::PowerOff,
+            }))
         );
     }
 
@@ -773,10 +783,12 @@ mod tests {
         };
         assert_eq!(
             TrayMenu::new(&list).click("mode:ambient"),
-            Some(Click::Send(Command::SetNoiseControlMode(
-                xm5().address,
-                NoiseControlMode::Ambient
-            )))
+            Some(Click::Send(DeviceCommand {
+                address: xm5().address,
+                kind: CommandKind::SetNoiseControlMode {
+                    mode: NoiseControlMode::Ambient
+                },
+            }))
         );
     }
 

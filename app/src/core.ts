@@ -16,12 +16,7 @@ export type Commands = {
   labels: { args: Record<string, never>; result: Labels };
   platform: { args: Record<string, never>; result: Platform };
   device_list: { args: Record<string, never>; result: DeviceList };
-  set_noise_control_mode: { args: { address: string; mode: NoiseControlMode }; result: void };
-  set_ambient_level: { args: { address: string; level: number }; result: void };
-  set_noise_cancelling_level: { args: { address: string; level: number }; result: void };
-  set_equalizer: { args: { address: string; equalizer: Equalizer }; result: void };
-  retry_attach: { args: { address: string }; result: void };
-  power_off: { args: { address: string }; result: void };
+  command: { args: { command: DeviceCommand }; result: void };
   frame_log: { args: Record<string, never>; result: string | null };
   set_frame_log: { args: { enabled: boolean }; result: string | null };
   share_frame_log: { args: Record<string, never>; result: void };
@@ -31,6 +26,20 @@ export type Commands = {
   simulated_device: { args: Record<string, never>; result: Model | null };
   set_simulated_device: { args: { model: Model | null }; result: void };
 };
+
+/**
+ * A command for one Device, as the core's `DeviceCommand` reads it: one flat
+ * object tagged by `kind`, with the Device's address beside the tag. Kotlin
+ * sends the same.
+ */
+export type DeviceCommand = { address: string } & (
+  | { kind: "setNoiseControlMode"; mode: NoiseControlMode }
+  | { kind: "setAmbientLevel"; level: number }
+  | { kind: "setNoiseCancellingLevel"; level: number }
+  | { kind: "setEqualizer"; equalizer: Equalizer }
+  | { kind: "powerOff" }
+  | { kind: "retryAttach" }
+);
 
 /**
  * Every event the core sends the window, by name, with its payload. Exported
@@ -154,32 +163,32 @@ function send<C extends keyof Commands>(
 
 /** Asks the Device to switch mode. Resolves once the core accepts the command. */
 export function setNoiseControlMode(address: string, mode: NoiseControlMode): Promise<void> {
-  return send("set_noise_control_mode", { address, mode });
+  return send("command", { command: { kind: "setNoiseControlMode", address, mode } });
 }
 
 /** Asks the Device to set the Ambient Level, in the Model's own steps. */
 export function setAmbientLevel(address: string, level: number): Promise<void> {
-  return send("set_ambient_level", { address, level });
+  return send("command", { command: { kind: "setAmbientLevel", address, level } });
 }
 
 /** Asks the Device to set the Noise Cancelling Level, in the Model's own steps. */
 export function setNoiseCancellingLevel(address: string, level: number): Promise<void> {
-  return send("set_noise_cancelling_level", { address, level });
+  return send("command", { command: { kind: "setNoiseCancellingLevel", address, level } });
 }
 
 /** Asks the Device to set its whole Equalizer. Resolves once the core accepts the command. */
 export function setEqualizer(address: string, equalizer: Equalizer): Promise<void> {
-  return send("set_equalizer", { address, equalizer });
+  return send("command", { command: { kind: "setEqualizer", address, equalizer } });
 }
 
 /** Tries again to Attach a Connected Device that isn't Attached. */
 export function retryAttach(address: string): Promise<void> {
-  return send("retry_attach", { address });
+  return send("command", { command: { kind: "retryAttach", address } });
 }
 
 /** Asks the Device to Power Off. Resolves once the core accepts the command. */
 export function powerOff(address: string): Promise<void> {
-  return send("power_off", { address });
+  return send("command", { command: { kind: "powerOff", address } });
 }
 
 /**

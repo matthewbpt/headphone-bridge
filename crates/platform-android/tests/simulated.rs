@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Core, Device, DeviceList, DeviceState, Equalizer, Model, NoiseControlMode,
-    PresetId,
+    Battery, Command, CommandKind, Core, Device, DeviceCommand, DeviceList, DeviceState, Equalizer,
+    Model, NoiseControlMode, PresetId,
 };
 use headphone_bridge_platform_android::messages::Message;
 use headphone_bridge_platform_android::Host;
@@ -21,6 +21,11 @@ struct Kotlin {
     messages: mpsc::UnboundedReceiver<Message>,
     /// Messages passed over while waiting for another, oldest first.
     skipped: VecDeque<Message>,
+}
+
+/// A command for the Device at `address`.
+fn device_command(address: DeviceAddress, kind: CommandKind) -> Command {
+    Command::Device(DeviceCommand { address, kind })
 }
 
 fn start() -> (Host, Kotlin) {
@@ -346,7 +351,12 @@ async fn the_simulated_buds4_pro_confirms_an_equalizer_preset_like_a_real_one() 
 
     // Soft, set from the App Screen, which reaches the core through Tauri.
     host.core()
-        .command(Command::SetEqualizer(address, preset(2)))
+        .command(device_command(
+            address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(2),
+            },
+        ))
         .await
         .unwrap();
     kotlin
@@ -367,7 +377,12 @@ async fn the_simulated_buds2_confirms_an_equalizer_preset_like_the_buds4_pro() {
 
     // Treble boost, set from the App Screen.
     host.core()
-        .command(Command::SetEqualizer(address, preset(5)))
+        .command(device_command(
+            address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(5),
+            },
+        ))
         .await
         .unwrap();
     kotlin
@@ -393,9 +408,14 @@ async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves
 
     // Bass Boost, with the curve a real XM5 reports for it.
     let core = host.core();
-    core.command(Command::SetEqualizer(address, preset(0x16)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(0x16),
+        },
+    ))
+    .await
+    .unwrap();
     let bass_boost = Equalizer {
         preset: PresetId(0x16),
         bands: Some(vec![0, 0, 0, 0, 0]),
@@ -413,9 +433,14 @@ async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves
             bands: Some(vec![0, 4, 0, 0, 0]),
             clear_bass: Some(clear_bass),
         };
-        core.command(Command::SetEqualizer(address, manual.clone()))
-            .await
-            .unwrap();
+        core.command(device_command(
+            address,
+            CommandKind::SetEqualizer {
+                equalizer: manual.clone(),
+            },
+        ))
+        .await
+        .unwrap();
         kotlin
             .simulated(|device| device.equalizer == Some(manual.clone()))
             .await;

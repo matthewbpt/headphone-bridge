@@ -3,10 +3,10 @@
 mod support;
 
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceList, DeviceState};
+use headphone_bridge_core::{Battery, CommandError, CommandKind, Core, DeviceList, DeviceState};
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, xm5, DeviceLink,
-    FakeOs,
+    buds4pro, device_command, fake_platform, fixture, received, replay, samsung_frame, wait_for,
+    xm5, DeviceLink, FakeOs,
 };
 
 /// real-nc-level-2's extended status, with byte 23 (Ambient Level) and byte
@@ -108,9 +108,12 @@ async fn settle(core: &Core, link: &DeviceLink) -> DeviceList {
 async fn setting_a_level_sends_the_level_set_and_changes_nothing_until_the_device_confirms() {
     let (core, _os, mut link) = attached_buds4pro().await;
 
-    core.command(Command::SetNoiseCancellingLevel(buds4pro().address, 4))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetNoiseCancellingLevel { level: 4 },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(
         link.written.recv().await.unwrap(),
@@ -133,9 +136,12 @@ async fn setting_a_level_sends_the_level_set_and_changes_nothing_until_the_devic
 async fn an_ack_confirms_the_level_only_when_it_carries_the_one_asked_for() {
     let (core, _os, link) = attached_buds4pro().await;
 
-    core.command(Command::SetNoiseCancellingLevel(buds4pro().address, 0))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetNoiseCancellingLevel { level: 0 },
+    ))
+    .await
+    .unwrap();
     // An ACK with any other value, such as one for an earlier set, is only
     // a receipt.
     link.send.send(samsung_frame(0x42, &[0x83, 0x03])).unwrap();
@@ -154,12 +160,18 @@ async fn an_ack_confirms_the_level_only_when_it_carries_the_one_asked_for() {
 async fn overlapping_ambient_and_noise_cancelling_level_sets_each_confirm_only_their_own() {
     let (core, _os, link) = attached_buds4pro().await;
 
-    core.command(Command::SetAmbientLevel(buds4pro().address, 1))
-        .await
-        .unwrap();
-    core.command(Command::SetNoiseCancellingLevel(buds4pro().address, 1))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetAmbientLevel { level: 1 },
+    ))
+    .await
+    .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetNoiseCancellingLevel { level: 1 },
+    ))
+    .await
+    .unwrap();
     // An ACK for one level carrying the value asked for the other confirms
     // neither.
     link.send.send(samsung_frame(0x42, &[0x84, 0x04])).unwrap();
@@ -185,7 +197,10 @@ async fn a_level_past_the_models_range_is_rejected_before_anything_is_sent() {
     let (core, _os, mut link) = attached_buds4pro().await;
 
     let result = core
-        .command(Command::SetNoiseCancellingLevel(buds4pro().address, 5))
+        .command(device_command(
+            buds4pro().address,
+            CommandKind::SetNoiseCancellingLevel { level: 5 },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::OutOfRange));
@@ -204,7 +219,10 @@ async fn a_wh1000xm5_has_no_noise_cancelling_level_to_set() {
     while link.written.try_recv().is_ok() {}
 
     let result = core
-        .command(Command::SetNoiseCancellingLevel(xm5().address, 2))
+        .command(device_command(
+            xm5().address,
+            CommandKind::SetNoiseCancellingLevel { level: 2 },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::MissingCapability));
@@ -259,9 +277,12 @@ async fn real_buds4pro_level_sets_are_confirmed_by_their_acks() {
         let end = set_at.get(i + 1).copied().unwrap_or(records.len());
         match set {
             Set::Level(asked) => {
-                core.command(Command::SetNoiseCancellingLevel(buds4pro().address, asked))
-                    .await
-                    .unwrap();
+                core.command(device_command(
+                    buds4pro().address,
+                    CommandKind::SetNoiseCancellingLevel { level: asked },
+                ))
+                .await
+                .unwrap();
                 assert_eq!(
                     core.device_list().devices[0].noise_cancelling_level,
                     Some(level),
@@ -271,9 +292,12 @@ async fn real_buds4pro_level_sets_are_confirmed_by_their_acks() {
                 level = asked;
             }
             Set::Mode(mode) => {
-                core.command(Command::SetNoiseControlMode(buds4pro().address, mode))
-                    .await
-                    .unwrap();
+                core.command(device_command(
+                    buds4pro().address,
+                    CommandKind::SetNoiseControlMode { mode },
+                ))
+                .await
+                .unwrap();
                 replay(&mut link, &records[set_at[i]..end]).await;
                 wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;
             }

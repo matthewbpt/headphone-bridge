@@ -143,11 +143,18 @@ use std::time::Duration;
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::DeviceIdentity;
 use headphone_bridge_core::wire::samsung::id;
-use headphone_bridge_core::{Command, Core, DeviceList, Equalizer, PresetId};
+use headphone_bridge_core::{
+    Command, CommandKind, Core, DeviceCommand, DeviceList, Equalizer, PresetId,
+};
 use uuid::uuid;
 
 pub const SAMSUNG_SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
 pub const SONY_SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
+
+/// A command for the Device at `address`.
+pub fn device_command(address: DeviceAddress, kind: CommandKind) -> Command {
+    Command::Device(DeviceCommand { address, kind })
+}
 
 /// A Galaxy Buds4 Pro as the OS reports it.
 pub fn buds4pro() -> DeviceIdentity {
@@ -262,9 +269,14 @@ pub async fn real_preset_picks_are_confirmed_by_their_acks(
     .await;
     let mut confirmed = attached_on;
     for (i, &pick) in picks.iter().enumerate() {
-        core.command(Command::SetEqualizer(device.address, preset(pick)))
-            .await
-            .unwrap();
+        core.command(device_command(
+            device.address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(pick),
+            },
+        ))
+        .await
+        .unwrap();
         assert_eq!(
             core.device_list().devices[0].equalizer,
             Some(preset(confirmed)),

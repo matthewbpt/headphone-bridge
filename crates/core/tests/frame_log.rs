@@ -8,8 +8,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState};
-use support::{buds4pro, fake_platform, fixture, received, samsung_frame, wait_for};
+use headphone_bridge_core::{Battery, Command, CommandError, CommandKind, Core, DeviceState};
+use support::{
+    buds4pro, device_command, fake_platform, fixture, received, samsung_frame, wait_for,
+};
 
 const LINE: &str = "2026-09-13T13:26:47.128Z galaxy-buds4-pro >> fd 06 00 88 01 01 22 da 58 dd";
 
@@ -255,9 +257,11 @@ async fn frames_sent_by_a_command_are_logged_under_the_model() {
         .unwrap();
     wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds4pro().address,
-        headphone_bridge_core::NoiseControlMode::Off,
+        CommandKind::SetNoiseControlMode {
+            mode: headphone_bridge_core::NoiseControlMode::Off,
+        },
     ))
     .await
     .unwrap();

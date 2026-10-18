@@ -3,9 +3,10 @@
 mod support;
 
 use headphone_bridge_core::platform::{DeviceIdentity, Observation};
-use headphone_bridge_core::{Command, Core, DeviceState, NoiseControlMode};
+use headphone_bridge_core::{CommandKind, Core, DeviceState, NoiseControlMode};
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, wait_for, xm5, DeviceLink, FakeOs,
+    buds4pro, device_command, fake_platform, fixture, received, replay, wait_for, xm5, DeviceLink,
+    FakeOs,
 };
 
 /// `NOISE_CONTROLS` (0x78) with Noise Cancelling (1).
@@ -186,9 +187,11 @@ async fn a_device_that_is_not_primary_can_still_be_controlled() {
     wait_for(&core, |list| list.primary == Some(xm5().address)).await;
     buds.written.recv().await.expect("MANAGER_INFO");
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds4pro().address,
-        NoiseControlMode::NoiseCancelling,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::NoiseCancelling,
+        },
     ))
     .await
     .unwrap();

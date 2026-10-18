@@ -58,7 +58,10 @@ describe("Noise Control Mode", () => {
     await userEvent.click(await mode("Ambient"));
 
     expect(core.sent()).toEqual([
-      { command: "set_noise_control_mode", args: { address: BUDS_ADDRESS, mode: "ambient" } },
+      {
+        command: "command",
+        args: { command: { kind: "setNoiseControlMode", address: BUDS_ADDRESS, mode: "ambient" } },
+      },
     ]);
     expect(await mode("Ambient")).toHaveAttribute("aria-busy", "true");
     expect(await mode("Ambient")).not.toBeChecked();
@@ -72,13 +75,13 @@ describe("Noise Control Mode", () => {
 
   it("clears a pending mode and shows an error when the core rejects it", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
 
     await userEvent.click(await mode("Ambient"));
     expect(await mode("Ambient")).toHaveAttribute("aria-busy", "true");
 
-    await core.release("set_noise_control_mode", { reject: "notAttached" });
+    await core.release("setNoiseControlMode", { reject: "notAttached" });
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't set Ambient: the Device isn't Attached",
@@ -168,7 +171,7 @@ describe("Ambient Level", () => {
 
   it("appears the moment Ambient is clicked, before the Device confirms", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
 
     await userEvent.click(await mode("Ambient"));
@@ -179,7 +182,7 @@ describe("Ambient Level", () => {
 
   it("disappears the moment another mode is clicked, before the Device confirms", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
     expect(await screen.findByRole("slider", { name: "Ambient Level" })).toBeInTheDocument();
 
@@ -191,13 +194,13 @@ describe("Ambient Level", () => {
 
   it("goes back to the confirmed Chosen Mode when the core rejects the change", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
 
     await userEvent.click(await mode("Noise Cancelling"));
     expect(slider()).not.toBeInTheDocument();
 
-    await core.release("set_noise_control_mode", { reject: "notAttached" });
+    await core.release("setNoiseControlMode", { reject: "notAttached" });
     expect(slider()).toBeInTheDocument();
   });
 
@@ -254,9 +257,18 @@ describe("Ambient Level", () => {
     await userEvent.click(screen.getByRole("button", { name: "Less" }));
 
     expect(core.sent()).toEqual([
-      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 13 } },
-      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 12 } },
-      { command: "set_ambient_level", args: { address: XM5_ADDRESS, level: 11 } },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: XM5_ADDRESS, level: 13 } },
+      },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: XM5_ADDRESS, level: 12 } },
+      },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: XM5_ADDRESS, level: 11 } },
+      },
     ]);
   });
 
@@ -306,8 +318,14 @@ describe("Ambient Level", () => {
     await userEvent.click(await screen.findByRole("button", { name: "More" }));
     await userEvent.click(screen.getByRole("button", { name: "Less" }));
     expect(core.sent()).toEqual([
-      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 2 } },
-      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 1 } },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: BUDS_ADDRESS, level: 2 } },
+      },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: BUDS_ADDRESS, level: 1 } },
+      },
     ]);
     expect(slider()).toHaveValue("1");
     expect(slider()).toHaveAttribute("aria-busy", "true");
@@ -389,11 +407,11 @@ describe("Ambient Level", () => {
 
   it("shows an error when the core rejects a level", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient", ambientLevel: 1 })));
-    core.answer("set_ambient_level", "hold");
+    core.answer("setAmbientLevel", "hold");
     renderWindow(core);
 
     await userEvent.click(await screen.findByRole("button", { name: "Less" }));
-    await core.release("set_ambient_level", { reject: "notAttached" });
+    await core.release("setAmbientLevel", { reject: "notAttached" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't set Ambient Level 0: the Device isn't Attached",
@@ -410,7 +428,10 @@ describe("Ambient Level", () => {
     fireEvent.change(slider, { target: { value: "3" } });
 
     expect(core.sent()).toEqual([
-      { command: "set_ambient_level", args: { address: BUDS_ADDRESS, level: 3 } },
+      {
+        command: "command",
+        args: { command: { kind: "setAmbientLevel", address: BUDS_ADDRESS, level: 3 } },
+      },
     ]);
   });
 });
@@ -431,7 +452,7 @@ describe("Noise Cancelling Level", () => {
 
   it("appears the moment Noise Cancelling is clicked, before the Device confirms", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "ambient" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
 
     await userEvent.click(await mode("Noise Cancelling"));
@@ -442,7 +463,7 @@ describe("Noise Cancelling Level", () => {
 
   it("disappears the moment another mode is clicked, before the Device confirms", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
     expect(
       await screen.findByRole("slider", { name: "Noise Cancelling Level" }),
@@ -456,13 +477,13 @@ describe("Noise Cancelling Level", () => {
 
   it("goes back to the confirmed Chosen Mode when the core rejects the change", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "noiseCancelling" })));
-    core.answer("set_noise_control_mode", "hold");
+    core.answer("setNoiseControlMode", "hold");
     renderWindow(core);
 
     await userEvent.click(await mode("Ambient"));
     expect(slider()).not.toBeInTheDocument();
 
-    await core.release("set_noise_control_mode", { reject: "notAttached" });
+    await core.release("setNoiseControlMode", { reject: "notAttached" });
     expect(slider()).toBeInTheDocument();
   });
 
@@ -548,8 +569,8 @@ describe("Noise Cancelling Level", () => {
       }),
     );
   const set = (level: number) => ({
-    command: "set_noise_cancelling_level",
-    args: { address: BUDS_ADDRESS, level },
+    command: "command",
+    args: { command: { kind: "setNoiseCancellingLevel", address: BUDS_ADDRESS, level } },
   });
 
   it("moves one step on − and +", async () => {
@@ -668,11 +689,11 @@ describe("Noise Cancelling Level", () => {
 
   it("shows an error when the core rejects a level", async () => {
     const core = new FakeCore(at(1));
-    core.answer("set_noise_cancelling_level", "hold");
+    core.answer("setNoiseCancellingLevel", "hold");
     renderWindow(core);
 
     await userEvent.click(await screen.findByRole("button", { name: "Less" }));
-    await core.release("set_noise_cancelling_level", { reject: "notAttached" });
+    await core.release("setNoiseCancellingLevel", { reject: "notAttached" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't set Noise Cancelling Level 0: the Device isn't Attached",
@@ -704,7 +725,10 @@ describe("Noise Cancelling Level", () => {
 
     expect(core.sent()).toEqual([
       set(2),
-      { command: "set_noise_cancelling_level", args: { address: otherAddress, level: 4 } },
+      {
+        command: "command",
+        args: { command: { kind: "setNoiseCancellingLevel", address: otherAddress, level: 4 } },
+      },
     ]);
   });
 
@@ -718,12 +742,24 @@ describe("Noise Cancelling Level", () => {
     fireEvent.change(slider, { target: { value: "3" } });
 
     expect(core.sent()).toEqual([
-      { command: "set_noise_cancelling_level", args: { address: BUDS_ADDRESS, level: 3 } },
+      {
+        command: "command",
+        args: { command: { kind: "setNoiseCancellingLevel", address: BUDS_ADDRESS, level: 3 } },
+      },
     ]);
   });
 });
 
 describe("Equalizer", () => {
+  /** Each Equalizer the window asked the core for, oldest first. */
+  const equalizersSent = (core: FakeCore) =>
+    core
+      .sent()
+      .map((sent) =>
+        sent.command === "command" && sent.args.command.kind === "setEqualizer"
+          ? sent.args.command.equalizer
+          : null,
+      );
   const preset = () => screen.findByRole("combobox", { name: "Preset" });
   const optionNames = async () =>
     Array.from((await preset()).querySelectorAll("option"), (option) => option.textContent);
@@ -755,8 +791,14 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
-        args: { address: BUDS_ADDRESS, equalizer: { preset: 1, bands: null, clearBass: null } },
+        command: "command",
+        args: {
+          command: {
+            kind: "setEqualizer",
+            address: BUDS_ADDRESS,
+            equalizer: { preset: 1, bands: null, clearBass: null },
+          },
+        },
       },
     ]);
     expect(await preset()).toHaveDisplayValue("Bass boost");
@@ -783,8 +825,14 @@ describe("Equalizer", () => {
     await userEvent.selectOptions(await preset(), "Normal");
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
-        args: { address: BUDS_ADDRESS, equalizer: { preset: 0, bands: null, clearBass: null } },
+        command: "command",
+        args: {
+          command: {
+            kind: "setEqualizer",
+            address: BUDS_ADDRESS,
+            equalizer: { preset: 0, bands: null, clearBass: null },
+          },
+        },
       },
     ]);
     core.emit(only(buds4Pro({ equalizer: { preset: 0, bands: null, clearBass: null } })));
@@ -819,7 +867,7 @@ describe("Equalizer", () => {
 
     await userEvent.selectOptions(await preset(), "Bass boost");
     await userEvent.selectOptions(await preset(), "Soft");
-    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
+    expect(equalizersSent(core)).toEqual([
       { preset: 1, bands: null, clearBass: null },
       { preset: 2, bands: null, clearBass: null },
     ]);
@@ -856,11 +904,11 @@ describe("Equalizer", () => {
     const core = new FakeCore(
       only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
     );
-    core.answer("set_equalizer", "hold");
+    core.answer("setEqualizer", "hold");
     renderWindow(core);
 
     await userEvent.selectOptions(await preset(), "Clear");
-    await core.release("set_equalizer", { reject: "unavailablePreset" });
+    await core.release("setEqualizer", { reject: "unavailablePreset" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't set Clear Preset: the app can't pick that Preset",
@@ -908,8 +956,14 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
-        args: { address: BUDS_ADDRESS, equalizer: { preset: 5, bands: null, clearBass: null } },
+        command: "command",
+        args: {
+          command: {
+            kind: "setEqualizer",
+            address: BUDS_ADDRESS,
+            equalizer: { preset: 5, bands: null, clearBass: null },
+          },
+        },
       },
     ]);
   });
@@ -1021,8 +1075,14 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0xa2, bands: null, clearBass: null } },
+        command: "command",
+        args: {
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0xa2, bands: null, clearBass: null },
+          },
+        },
       },
     ]);
     expect(await preset()).toHaveAttribute("aria-busy", "true");
@@ -1078,8 +1138,14 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
-        args: { address: XM5_ADDRESS, equalizer: { preset: 0x17, bands: null, clearBass: null } },
+        command: "command",
+        args: {
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0x17, bands: null, clearBass: null },
+          },
+        },
       },
     ]);
   });
@@ -1135,10 +1201,13 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
+        command: "command",
         args: {
-          address: XM5_ADDRESS,
-          equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: 2 },
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0xa1, bands: [-1, 6, 3, 5, 10], clearBass: 2 },
+          },
         },
       },
     ]);
@@ -1157,10 +1226,13 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
+        command: "command",
         args: {
-          address: XM5_ADDRESS,
-          equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 },
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 7], clearBass: 2 },
+          },
         },
       },
     ]);
@@ -1187,9 +1259,7 @@ describe("Equalizer", () => {
     expect(core.sent()).toEqual([]);
     fireEvent.keyUp(slider, { key: "ArrowUp" });
 
-    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
-      { preset: 0xa0, bands: [0, 0, 3, 5, 10], clearBass: 2 },
-    ]);
+    expect(equalizersSent(core)).toEqual([{ preset: 0xa0, bands: [0, 0, 3, 5, 10], clearBass: 2 }]);
   });
 
   it("keeps the newest curve Pending when two Bands are released in a row, until it lands", async () => {
@@ -1202,7 +1272,7 @@ describe("Equalizer", () => {
     fireEvent.pointerUp(await band("400 Hz"));
     fireEvent.change(await band("16 kHz"), { target: { value: "-4" } });
     fireEvent.pointerUp(await band("16 kHz"));
-    expect(core.sent().map((sent) => sent.args.equalizer)).toEqual([
+    expect(equalizersSent(core)).toEqual([
       { preset: 0xa0, bands: [3, 0, 0, 0, 0], clearBass: 2 },
       { preset: 0xa0, bands: [3, 0, 0, 0, -4], clearBass: 2 },
     ]);
@@ -1220,12 +1290,12 @@ describe("Equalizer", () => {
     const core = new FakeCore(
       only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
     );
-    core.answer("set_equalizer", "hold");
+    core.answer("setEqualizer", "hold");
     renderWindow(core);
 
     fireEvent.change(await band("1 kHz"), { target: { value: "5" } });
     fireEvent.pointerUp(await band("1 kHz"));
-    await core.release("set_equalizer", { reject: "fixedPreset" });
+    await core.release("setEqualizer", { reject: "fixedPreset" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't set Manual curve: that Preset's Bands can't be changed",
@@ -1284,10 +1354,13 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
+        command: "command",
         args: {
-          address: XM5_ADDRESS,
-          equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: -6 },
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0xa1, bands: [-1, 0, 3, 5, 10], clearBass: -6 },
+          },
         },
       },
     ]);
@@ -1306,10 +1379,13 @@ describe("Equalizer", () => {
 
     expect(core.sent()).toEqual([
       {
-        command: "set_equalizer",
+        command: "command",
         args: {
-          address: XM5_ADDRESS,
-          equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 },
+          command: {
+            kind: "setEqualizer",
+            address: XM5_ADDRESS,
+            equalizer: { preset: 0xa0, bands: [-1, 0, 3, 5, 10], clearBass: 8 },
+          },
         },
       },
     ]);
@@ -1495,7 +1571,9 @@ describe("a Device that isn't Attached", () => {
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
 
-    expect(core.sent()).toEqual([{ command: "retry_attach", args: { address: XM5_ADDRESS } }]);
+    expect(core.sent()).toEqual([
+      { command: "command", args: { command: { kind: "retryAttach", address: XM5_ADDRESS } } },
+    ]);
   });
 
   it("says who may be using a Device whose control link dropped", async () => {
@@ -1541,11 +1619,11 @@ describe("a Device that isn't Attached", () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
     );
-    core.answer("retry_attach", "hold");
+    core.answer("retryAttach", "hold");
     renderWindow(core);
 
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
-    await core.release("retry_attach", { reject: "unknownDevice" });
+    await core.release("retryAttach", { reject: "unknownDevice" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't retry: the Device isn't Connected",
@@ -1556,11 +1634,11 @@ describe("a Device that isn't Attached", () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),
     );
-    core.answer("retry_attach", "hold");
+    core.answer("retryAttach", "hold");
     renderWindow(core);
 
     await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
-    await core.release("retry_attach", { reject: "the shell went away" });
+    await core.release("retryAttach", { reject: "the shell went away" });
 
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't retry: the shell went away");
   });
@@ -1633,7 +1711,9 @@ describe("Power Off", () => {
 
     await userEvent.click(await powerOff());
 
-    expect(core.sent()).toEqual([{ command: "power_off", args: { address: XM5_ADDRESS } }]);
+    expect(core.sent()).toEqual([
+      { command: "command", args: { command: { kind: "powerOff", address: XM5_ADDRESS } } },
+    ]);
   });
 
   it("disables itself and every control of the Device while it is Powering Off", async () => {
@@ -1657,11 +1737,11 @@ describe("Power Off", () => {
 
   it("shows why the core refused Power Off", async () => {
     const core = new FakeCore(only(xm5()));
-    core.answer("power_off", "hold");
+    core.answer("powerOff", "hold");
     renderWindow(core);
 
     await userEvent.click(await powerOff());
-    await core.release("power_off", { reject: "poweringOff" });
+    await core.release("powerOff", { reject: "poweringOff" });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't Power Off: the Device is Powering Off",
@@ -1697,12 +1777,12 @@ describe("Power Off", () => {
 
   it("shows one alert at a time in the header", async () => {
     const core = new FakeCore(only(xm5({ powerOffFailed: true })));
-    core.answer("power_off", "hold");
+    core.answer("powerOff", "hold");
     renderWindow(core);
     expect(await screen.findByRole("alert")).toHaveTextContent("WH-1000XM5 didn't Power Off");
 
     await userEvent.click(await powerOff());
-    await core.release("power_off", { reject: "notAttached" });
+    await core.release("powerOff", { reject: "notAttached" });
 
     const alerts = screen.getAllByRole("alert");
     expect(alerts).toHaveLength(1);

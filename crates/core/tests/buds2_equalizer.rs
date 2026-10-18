@@ -8,12 +8,13 @@ mod support;
 
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
-    Battery, Command, CommandError, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
+    Battery, CommandError, CommandKind, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
     PresetId,
 };
 use support::{
-    buds2, fake_platform, fixture, linked_core, real_preset_picks_are_confirmed_by_their_acks,
-    received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds2, device_command, fake_platform, fixture, linked_core,
+    real_preset_picks_are_confirmed_by_their_acks, received, replay, samsung_frame, wait_for,
+    DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds2 Attached through `galaxy-buds2/attach`, the
@@ -142,9 +143,14 @@ async fn handled(core: &Core, link: &DeviceLink) -> Vec<headphone_bridge_core::D
 async fn setting_a_preset_sends_equalizer_and_an_ack_carrying_it_confirms_it() {
     let (core, _os, mut link) = attached_buds2().await;
 
-    core.command(Command::SetEqualizer(buds2().address, preset(1)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds2().address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(1),
+        },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(link.written.recv().await.unwrap(), SET_PRESET_1);
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
@@ -166,7 +172,10 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
     let (core, _os, mut link) = attached_buds2().await;
 
     let result = core
-        .command(Command::SetEqualizer(buds2().address, equalizer))
+        .command(device_command(
+            buds2().address,
+            CommandKind::SetEqualizer { equalizer },
+        ))
         .await;
 
     assert_eq!(result, Err(error));

@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Battery, Command, CommandError, Core, NoiseControlMode};
+use headphone_bridge_core::{Battery, CommandError, CommandKind, Core, NoiseControlMode};
 use support::{
-    fake_platform, fixture, replay, sony_frame, wait_for, with_equalizer_read, xm5, DeviceLink,
-    FakeOs,
+    device_command, fake_platform, fixture, replay, sony_frame, wait_for, with_equalizer_read, xm5,
+    DeviceLink, FakeOs,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -37,9 +37,11 @@ async fn attaching_reads_the_chosen_mode_and_ambient_level() {
 async fn setting_a_mode_resends_focus_on_voice_and_level_and_waits_for_the_device() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         xm5().address,
-        NoiseControlMode::NoiseCancelling,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::NoiseCancelling,
+        },
     ))
     .await
     .unwrap();
@@ -75,9 +77,12 @@ async fn setting_a_mode_resends_focus_on_voice_and_level_and_waits_for_the_devic
 async fn setting_a_level_resends_the_mode_and_focus_on_voice_and_waits_for_the_device() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::SetAmbientLevel(xm5().address, 15))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 15 },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(
         written(&mut link).await,
@@ -103,15 +108,20 @@ async fn setting_a_level_resends_the_mode_and_focus_on_voice_and_waits_for_the_d
 async fn a_set_made_before_the_last_is_confirmed_keeps_the_last() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         xm5().address,
-        NoiseControlMode::Off,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Off,
+        },
     ))
     .await
     .unwrap();
-    core.command(Command::SetAmbientLevel(xm5().address, 3))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 3 },
+    ))
+    .await
+    .unwrap();
 
     // Off keeps the mode byte, ambient, as it was.
     assert_eq!(
@@ -131,17 +141,22 @@ async fn adaptive_is_rejected_and_nothing_is_sent() {
     let (core, _os, mut link) = attached_xm5().await;
 
     assert_eq!(
-        core.command(Command::SetNoiseControlMode(
+        core.command(device_command(
             xm5().address,
-            NoiseControlMode::Adaptive,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Adaptive
+            }
         ))
         .await,
         Err(CommandError::MissingCapability)
     );
     // A later set is the next thing written.
-    core.command(Command::SetAmbientLevel(xm5().address, 20))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 20 },
+    ))
+    .await
+    .unwrap();
     assert_eq!(
         written(&mut link).await,
         sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x14])
@@ -154,8 +169,11 @@ async fn levels_outside_1_to_20_are_rejected() {
 
     for level in [0, 21] {
         assert_eq!(
-            core.command(Command::SetAmbientLevel(xm5().address, level))
-                .await,
+            core.command(device_command(
+                xm5().address,
+                CommandKind::SetAmbientLevel { level }
+            ))
+            .await,
             Err(CommandError::OutOfRange)
         );
     }
@@ -220,19 +238,53 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     let address = xm5().address;
     // Each set as the capture made it, and what the Device then reported.
     let sets = [
-        (Command::SetNoiseControlMode(address, Off), Off, 10),
         (
-            Command::SetNoiseControlMode(address, NoiseCancelling),
+            device_command(address, CommandKind::SetNoiseControlMode { mode: Off }),
+            Off,
+            10,
+        ),
+        (
+            device_command(
+                address,
+                CommandKind::SetNoiseControlMode {
+                    mode: NoiseCancelling,
+                },
+            ),
             NoiseCancelling,
             10,
         ),
-        (Command::SetNoiseControlMode(address, Ambient), Ambient, 10),
-        (Command::SetAmbientLevel(address, 15), Ambient, 15),
-        (Command::SetAmbientLevel(address, 20), Ambient, 20),
-        (Command::SetAmbientLevel(address, 1), Ambient, 1),
-        (Command::SetAmbientLevel(address, 10), Ambient, 10),
         (
-            Command::SetNoiseControlMode(address, NoiseCancelling),
+            device_command(address, CommandKind::SetNoiseControlMode { mode: Ambient }),
+            Ambient,
+            10,
+        ),
+        (
+            device_command(address, CommandKind::SetAmbientLevel { level: 15 }),
+            Ambient,
+            15,
+        ),
+        (
+            device_command(address, CommandKind::SetAmbientLevel { level: 20 }),
+            Ambient,
+            20,
+        ),
+        (
+            device_command(address, CommandKind::SetAmbientLevel { level: 1 }),
+            Ambient,
+            1,
+        ),
+        (
+            device_command(address, CommandKind::SetAmbientLevel { level: 10 }),
+            Ambient,
+            10,
+        ),
+        (
+            device_command(
+                address,
+                CommandKind::SetNoiseControlMode {
+                    mode: NoiseCancelling,
+                },
+            ),
             NoiseCancelling,
             10,
         ),
@@ -292,16 +344,21 @@ async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
     wait_for(&core, |list| list.devices[0].battery.is_some()).await;
 
     assert_eq!(
-        core.command(Command::SetNoiseControlMode(
+        core.command(device_command(
             xm5().address,
-            NoiseControlMode::NoiseCancelling,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::NoiseCancelling
+            }
         ))
         .await,
         Err(CommandError::SettingsNotReported)
     );
     assert_eq!(
-        core.command(Command::SetAmbientLevel(xm5().address, 15))
-            .await,
+        core.command(device_command(
+            xm5().address,
+            CommandKind::SetAmbientLevel { level: 15 }
+        ))
+        .await,
         Err(CommandError::SettingsNotReported)
     );
 
@@ -309,9 +366,12 @@ async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
     // the first set after it is the next thing written.
     replay(&mut link, &records[16..]).await;
     wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
-    core.command(Command::SetAmbientLevel(xm5().address, 15))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 15 },
+    ))
+    .await
+    .unwrap();
     assert_eq!(
         written(&mut link).await,
         sony_frame(1, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0f])

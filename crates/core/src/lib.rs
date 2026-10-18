@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::{mpsc, oneshot, watch};
 
-pub use command::{Command, CommandError, Equalizer, NoiseControlMode};
+pub use command::{Command, CommandError, CommandKind, DeviceCommand, Equalizer, NoiseControlMode};
 pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };

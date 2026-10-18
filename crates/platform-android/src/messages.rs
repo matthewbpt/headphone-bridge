@@ -2,7 +2,7 @@
 //! core's types.
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
-use headphone_bridge_core::{Command, CommandError, DeviceList, NoiseControlMode};
+use headphone_bridge_core::{Command, CommandError, DeviceCommand, DeviceList};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
 use uuid::Uuid;
@@ -112,45 +112,12 @@ pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
     })
 }
 
-/// [`Command`] as Kotlin writes it, sent to `NativeCore.command`. The frame
-/// log is the App Screen's, so it isn't here.
-#[derive(Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-enum WireCommand {
-    SetNoiseControlMode {
-        address: DeviceAddress,
-        mode: NoiseControlMode,
-    },
-    SetAmbientLevel {
-        address: DeviceAddress,
-        level: u8,
-    },
-    SetNoiseCancellingLevel {
-        address: DeviceAddress,
-        level: u8,
-    },
-    PowerOff {
-        address: DeviceAddress,
-    },
-    RetryAttach {
-        address: DeviceAddress,
-    },
-}
-
-/// Reads a command from Kotlin.
+/// Reads a command from Kotlin, sent to `NativeCore.command`: a
+/// [`DeviceCommand`], so it can't switch the frame log, the App Screen's
+/// host setting.
 pub fn parse_command(json: &str) -> Result<Command, BadMessage> {
-    let command = serde_json::from_str(json).map_err(BadMessage)?;
-    Ok(match command {
-        WireCommand::SetNoiseControlMode { address, mode } => {
-            Command::SetNoiseControlMode(address, mode)
-        }
-        WireCommand::SetAmbientLevel { address, level } => Command::SetAmbientLevel(address, level),
-        WireCommand::SetNoiseCancellingLevel { address, level } => {
-            Command::SetNoiseCancellingLevel(address, level)
-        }
-        WireCommand::PowerOff { address } => Command::PowerOff(address),
-        WireCommand::RetryAttach { address } => Command::RetryAttach(address),
-    })
+    let command: DeviceCommand = serde_json::from_str(json).map_err(BadMessage)?;
+    Ok(Command::Device(command))
 }
 
 /// A message from the core to Kotlin, for `NativeCore.fromCore`.
