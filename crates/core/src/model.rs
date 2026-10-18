@@ -74,9 +74,9 @@ impl Model {
                 noise_cancelling_level: None,
                 power_off: false,
                 // From GalaxyBudsClient, Gadgetbridge and Samsung's support
-                // pages, until a real capture shows a Buds2 off Normal.
-                // Samsung's app can't set a custom curve on it, so it has no
-                // Custom Preset.
+                // pages, and confirmed on a real Buds2
+                // (galaxy-buds2/real-equalizer*). Samsung's app can't set a
+                // custom curve on it, so it has no Custom Preset.
                 equalizer: Some(EqualizerCapability {
                     presets: samsung_presets(),
                     bands: None,
