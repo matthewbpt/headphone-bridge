@@ -80,7 +80,8 @@ export class FakeCore {
   /**
    * How the core answers every later call of `command`: accept it at once
    * (the default), reject it with an error, or hold it until `release`.
-   * Turning the frame log on or off is answered at once: accepted or rejected.
+   * Turning the frame log on or off, and opening the app's settings, are
+   * answered at once: accepted or rejected.
    */
   answer<C extends AnsweredCommand>(
     command: C,
@@ -137,6 +138,8 @@ export class FakeCore {
     share_frame_log: (args) => this.record("share_frame_log", args),
     nearby_devices_permission: () => Promise.resolve(this.nearbyDevices),
     open_app_settings: () => {
+      const answer = this.answers.get("open_app_settings") ?? "accept";
+      if (typeof answer === "object") return Promise.reject(answer.reject);
       this.appSettingsOpens += 1;
       return Promise.resolve();
     },
@@ -195,7 +198,7 @@ export type RecordedCommand =
   | "share_frame_log";
 
 /** The commands a test can tell the fake core how to answer. */
-type AnsweredCommand = RecordedCommand | "set_frame_log";
+type AnsweredCommand = RecordedCommand | "set_frame_log" | "open_app_settings";
 
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };

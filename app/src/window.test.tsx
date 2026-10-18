@@ -1790,6 +1790,18 @@ describe("the Nearby devices permission", () => {
     expect(core.appSettingsOpened()).toBe(1);
   });
 
+  it("shows why the app's settings couldn't open", async () => {
+    const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
+    core.answer("open_app_settings", { reject: { appSettingsFailed: "No settings app" } });
+    renderWindow(core);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open app settings" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't open app settings: No settings app",
+    );
+  });
+
   it("goes once it's granted in the app's settings, and the Devices show without a restart", async () => {
     const core = new FakeCore(NO_DEVICES, { platform: "android", nearbyDevices: "refused" });
     renderWindow(core);

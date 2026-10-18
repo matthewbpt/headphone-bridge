@@ -322,18 +322,37 @@ fn report_nearby_devices_permission(app: &AppHandle) {
     });
 }
 
+/// Why the app's settings page wasn't opened, as the UI names it.
+#[derive(Debug, serde::Serialize)]
+enum AppSettingsError {
+    /// Only Android has an app settings page.
+    #[serde(rename = "appSettingsUnsupported")]
+    #[cfg_attr(
+        all(target_os = "android", not(test)),
+        expect(dead_code, reason = "Android has app settings")
+    )]
+    Unsupported,
+    /// Android couldn't open it.
+    #[serde(rename = "appSettingsFailed")]
+    #[cfg_attr(
+        all(not(target_os = "android"), not(test)),
+        expect(dead_code, reason = "only Android opens app settings")
+    )]
+    Failed(String),
+}
+
 /// Opens the app's page in Android's settings, where the listener can grant
 /// the Nearby devices permission.
 #[tauri::command]
-async fn open_app_settings(app: AppHandle) -> Result<(), String> {
+async fn open_app_settings(app: AppHandle) -> Result<(), AppSettingsError> {
     #[cfg(target_os = "android")]
     return headphone_bridge_platform_android::android::open_app_settings(&app)
         .await
-        .map_err(|error| error.to_string());
+        .map_err(|error| AppSettingsError::Failed(error.to_string()));
     #[cfg(not(target_os = "android"))]
     {
         let _ = app;
-        Err("only Android has app settings".into())
+        Err(AppSettingsError::Unsupported)
     }
 }
 
@@ -366,7 +385,7 @@ async fn share_frame_log(
 /// `error` for the setup hook to return. Tauri keeps only the Display of
 /// what the hook returns, so the context chain goes into it here.
 #[cfg_attr(
-    target_os = "android",
+    all(target_os = "android", not(test)),
     expect(dead_code, reason = "Android's core is started by its adapter")
 )]
 fn through_setup_hook(error: &anyhow::Error) -> Box<dyn std::error::Error> {
@@ -530,6 +549,19 @@ mod tests {
         assert_eq!(
             json(SetFrameLogError::Core(CommandError::CoreStopped)),
             r#""coreStopped""#
+        );
+    }
+
+    #[test]
+    fn names_each_app_settings_failure_as_the_ui_does() {
+        let json = |error| serde_json::to_string(&error).unwrap();
+        assert_eq!(
+            json(AppSettingsError::Unsupported),
+            r#""appSettingsUnsupported""#
+        );
+        assert_eq!(
+            json(AppSettingsError::Failed("no settings app".into())),
+            r#"{"appSettingsFailed":"no settings app"}"#
         );
     }
 

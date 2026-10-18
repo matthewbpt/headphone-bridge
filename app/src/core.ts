@@ -69,8 +69,11 @@ export type CommandError =
 /** Why the shell couldn't hand the frame log to Android's share sheet. */
 export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string };
 
+/** Why the shell couldn't open the app's page in Android's settings. */
+export type AppSettingsError = "appSettingsUnsupported" | { appSettingsFailed: string };
+
 /** Why a command was rejected, by the core or the shell. */
-type Rejection = CommandError | ShareError;
+type Rejection = CommandError | ShareError | AppSettingsError;
 
 /** Each reason given, as the name it's sent under. */
 type RejectionKey = Rejection extends infer E ? (E extends string ? E : keyof E) : never;
@@ -100,6 +103,8 @@ const WORDS: {
   frameLogOff: "the frame log is off",
   frameLogEmpty: "it's empty until a Device is Attached",
   shareFailed: (message) => message,
+  appSettingsUnsupported: "only Android has app settings",
+  appSettingsFailed: (message) => message,
 };
 
 /**
