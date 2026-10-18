@@ -57,12 +57,18 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
-  - `real-equalizer-custom`: from the frame log on Linux, 2026-10-18,
-    firmware `R640XXU0AZD2`. Samsung's app can't connect while this app is
-    Attached, so the Device was disconnected from the laptop, Samsung's app set
-    a custom curve, and it was connected again. This Attach reports Preset 6:
-    the Buds4 Pro's Custom is 6 on the wire, not the 7 the upstream-derived
-    protocol gave.
+  - `real-equalizer`: from the frame log on Linux, 2026-10-18, firmware
+    `R640XXU0AZD2`. Attach on Normal, then Bass boost, Soft, Dynamic, Clear,
+    Treble boost and Normal picked from the app. Each `EQUALIZER` set is
+    confirmed only by an ACK carrying the applied Preset: its `MANAGER_INFO`
+    gets a bare `88 00`.
+  - `real-equalizer-from-samsungs-app`: the next session, the same day.
+    Samsung's app can't connect while this app is Attached, so the Device was
+    disconnected from the laptop, Samsung's app moved it to Bass boost, and it
+    was connected again. This Attach reports Preset 1.
+  - `real-equalizer-custom`: the session after, the same way, with a custom
+    curve set in Samsung's app. This Attach reports Preset 6: the Buds4 Pro's
+    Custom is 6 on the wire, not the 7 the upstream-derived protocol gave.
 - `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314,
   from the frame log on macOS, on 2026-10-17. Two link sessions, cut into the
   `real-*` files.
