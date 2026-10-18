@@ -114,6 +114,18 @@ async fn a_preset_the_model_does_not_list_is_reported_unchanged() {
     wait_for(&core, |list| list.devices[0].equalizer == Some(preset(9))).await;
 }
 
+#[tokio::test]
+async fn upstreams_custom_7_is_reported_unchanged() {
+    // Upstream gave the Buds4 Pro's Custom as 7, but the Device sends 6
+    // (real-equalizer-custom), so a 7 is a Preset the Model doesn't list.
+    let (core, _os, link) = attached_buds4pro().await;
+    wait_for(&core, |list| list.devices[0].equalizer == Some(preset(3))).await;
+
+    link.send.send(extended_status_with_preset(7)).unwrap();
+
+    wait_for(&core, |list| list.devices[0].equalizer == Some(preset(7))).await;
+}
+
 /// `EQUALIZER` (0x86) with Preset 1, Bass boost.
 const SET_PRESET_1: [u8; 8] = [0xfd, 0x04, 0x00, 0x86, 0x01, 0x1f, 0xa1, 0xdd];
 const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
