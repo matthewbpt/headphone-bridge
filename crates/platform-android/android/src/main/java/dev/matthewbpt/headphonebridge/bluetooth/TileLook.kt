@@ -13,14 +13,20 @@ data class TileLook(
   enum class State { ACTIVE, INACTIVE, UNAVAILABLE }
 
   sealed class Tap {
-    data class SetMode(val mode: String) : Tap()
+    data class SetMode(
+      val mode: String,
+    ) : Tap()
+
     object Refresh : Tap()
+
     object OpenApp : Tap()
+
     object Nothing : Tap()
   }
 }
 
 const val TILE_LABEL = "Noise Control"
+
 @DrawableRes val TILE_ICON = R.drawable.ic_noise_control
 
 /**
@@ -31,8 +37,18 @@ const val TILE_LABEL = "Noise Control"
  */
 fun tileLook(shown: StoredCopy.Shown): TileLook {
   val subtitle = shown.note ?: shown.name
-  if (shown.opensApp) return TileLook(TILE_LABEL, subtitle, TILE_ICON, TileLook.State.INACTIVE, TileLook.Tap.OpenApp)
-  if (shown.name == null) return TileLook(TILE_LABEL, subtitle, TILE_ICON, TileLook.State.UNAVAILABLE, TileLook.Tap.Nothing)
+  return when {
+    shown.opensApp -> TileLook(TILE_LABEL, subtitle, TILE_ICON, TileLook.State.INACTIVE, TileLook.Tap.OpenApp)
+    shown.name == null -> TileLook(TILE_LABEL, subtitle, TILE_ICON, TileLook.State.UNAVAILABLE, TileLook.Tap.Nothing)
+    else -> modeTileLook(shown, subtitle)
+  }
+}
+
+/** The tile for a Device it can step through the modes of. */
+private fun modeTileLook(
+  shown: StoredCopy.Shown,
+  subtitle: String?,
+): TileLook {
   val mode = shown.mode
   val label = mode?.let { modeLabel(it) } ?: TILE_LABEL
   val icon = mode?.let { modeIcon(it) } ?: TILE_ICON
@@ -42,7 +58,10 @@ fun tileLook(shown: StoredCopy.Shown): TileLook {
 }
 
 /** The mode after [mode] in [modes], wrapping round; the first if [mode] isn't one; null with no modes. */
-private fun nextMode(modes: List<String>, mode: String?): String? {
+private fun nextMode(
+  modes: List<String>,
+  mode: String?,
+): String? {
   if (modes.isEmpty()) return null
   return modes[(modes.indexOf(mode) + 1) % modes.size]
 }

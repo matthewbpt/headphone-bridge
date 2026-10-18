@@ -26,7 +26,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -54,13 +54,18 @@ impl FrameLog {
         let thread = std::thread::Builder::new()
             .name("frame-log".into())
             .spawn(move || write_records(file, queue))?;
-        *self.writer.lock().unwrap() = Some(Writer { records, thread });
+        *self.writer.lock().unwrap_or_else(PoisonError::into_inner) =
+            Some(Writer { records, thread });
         Ok(())
     }
 
     /// Switches the log off, once every record so far is written.
     pub(crate) fn stop(&self) {
-        let writer = self.writer.lock().unwrap().take();
+        let writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
         if let Some(Writer { records, thread }) = writer {
             drop(records);
             let _ = thread.join();
@@ -69,7 +74,7 @@ impl FrameLog {
 
     /// Records a frame, timestamped now, if the log is on.
     pub(crate) fn record(&self, model: &str, direction: Direction, bytes: &[u8]) {
-        if let Some(writer) = &*self.writer.lock().unwrap() {
+        if let Some(writer) = &*self.writer.lock().unwrap_or_else(PoisonError::into_inner) {
             let _ = writer.records.send(FrameRecord {
                 timestamp: SystemTime::now(),
                 model: model.to_owned(),

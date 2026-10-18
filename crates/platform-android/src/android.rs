@@ -29,8 +29,9 @@ pub fn log(message: &str) {
     }
     const INFO: c_int = 4;
     let tag = c"HeadphoneBridge";
-    let text = CString::new(format!("[rust] {message}").replace('\0', " "))
-        .expect("no NUL left in the text");
+    let Ok(text) = CString::new(format!("[rust] {message}").replace('\0', " ")) else {
+        return;
+    };
     // SAFETY: both are NUL-terminated strings that outlive the call.
     unsafe { __android_log_write(INFO, tag.as_ptr(), text.as_ptr()) };
 }
@@ -74,7 +75,12 @@ fn host_with(frame_log: Option<&Path>) -> &'static Host {
     HOST.get_or_init(|| {
         log_panics();
         static RUNTIME: OnceLock<Tokio> = OnceLock::new();
-        let runtime = RUNTIME.get_or_init(|| Tokio::new().expect("no Tokio runtime"));
+        let runtime = RUNTIME.get_or_init(|| {
+            Tokio::new().unwrap_or_else(|error| {
+                log(&format!("couldn't start Tokio: {error}"));
+                std::process::exit(1)
+            })
+        });
         let _entered = runtime.enter();
         let host = match frame_log {
             None => Host::start(to_kotlin),
@@ -149,7 +155,13 @@ fn to_kotlin(message: Message) -> bool {
             return false;
         }
     };
-    let text = message.to_json();
+    let text = match message.to_json() {
+        Ok(text) => text,
+        Err(error) => {
+            log(&format!("can't serialize a message for Kotlin: {error}"));
+            return false;
+        }
+    };
     let called = env.with_local_frame(4, |env| -> jni::errors::Result<()> {
         let text = env.new_string(&text)?;
         let class: &JClass = bridge.class.as_obj().into();

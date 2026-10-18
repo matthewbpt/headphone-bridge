@@ -1,7 +1,9 @@
 package dev.matthewbpt.headphonebridge.bluetooth
 
 /** How the widget's modes look. */
-data class WidgetLook(val slots: List<Slot>) {
+data class WidgetLook(
+  val slots: List<Slot>,
+) {
   data class Slot(
     val mode: String,
     val label: String,

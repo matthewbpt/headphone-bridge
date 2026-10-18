@@ -17,6 +17,7 @@ class StoredCopy(
   /** Where the copy is kept: SharedPreferences on the phone. */
   interface Storage {
     fun read(): String?
+
     fun write(copy: String)
   }
 
@@ -70,13 +71,14 @@ class StoredCopy(
       val before = devices[address]
       val modes = device.getJSONObject("capabilities").getJSONArray("noiseControlModes").strings()
       val reported = !device.isNull("chosenMode")
-      devices[address] = Remembered(
-        name = device.getString("name"),
-        modes = modes.ifEmpty { before?.modes.orEmpty() },
-        chosen = if (reported) device.getString("chosenMode") else before?.chosen,
-        battery = batteryText(device) ?: before?.battery,
-        updatedAt = if (reported) device.optLongOrNull("reportedAt") ?: now() else before?.updatedAt,
-      )
+      devices[address] =
+        Remembered(
+          name = device.getString("name"),
+          modes = modes.ifEmpty { before?.modes.orEmpty() },
+          chosen = if (reported) device.getString("chosenMode") else before?.chosen,
+          battery = batteryText(device) ?: before?.battery,
+          updatedAt = if (reported) device.optLongOrNull("reportedAt") ?: now() else before?.updatedAt,
+        )
       // Attached again, e.g. from the App Screen: whatever failed is over.
       if (!busy && device.getJSONObject("state").getString("kind") == "attached") note = null
     }
@@ -106,7 +108,15 @@ class StoredCopy(
   fun shown(hasPermission: Boolean): Shown {
     val device = primary?.let { devices[it] }
     if (!hasPermission) {
-      return Shown(device?.name, device?.battery, emptyList(), null, device?.updatedAt, ALLOW_NEARBY_DEVICES, opensApp = true)
+      return Shown(
+        device?.name,
+        device?.battery,
+        emptyList(),
+        null,
+        device?.updatedAt,
+        ALLOW_NEARBY_DEVICES,
+        opensApp = true,
+      )
     }
     return Shown(
       name = device?.name,
@@ -114,20 +124,22 @@ class StoredCopy(
       modes = device?.modes.orEmpty(),
       mode = pending ?: device?.chosen,
       updatedAt = device?.updatedAt,
-      note = note ?: when {
-        device == null -> NO_DEVICE_CONNECTED
-        device.modes.isEmpty() -> TAP_TO_REFRESH
-        else -> null
-      },
+      note =
+        note ?: when {
+          device == null -> NO_DEVICE_CONNECTED
+          device.modes.isEmpty() -> TAP_TO_REFRESH
+          else -> null
+        },
       pending = pending != null,
     )
   }
 
   private fun save() {
-    val saved = JSONObject()
-      .put("primary", primary ?: JSONObject.NULL)
-      // An action doesn't outlive the process, but why one failed does.
-      .put("note", (if (busy) null else note) ?: JSONObject.NULL)
+    val saved =
+      JSONObject()
+        .put("primary", primary ?: JSONObject.NULL)
+        // An action doesn't outlive the process, but why one failed does.
+        .put("note", (if (busy) null else note) ?: JSONObject.NULL)
     val all = JSONObject()
     for ((address, device) in devices) {
       all.put(
@@ -149,13 +161,14 @@ class StoredCopy(
     val all = saved.getJSONObject("devices")
     for (address in all.keys()) {
       val device = all.getJSONObject(address)
-      devices[address] = Remembered(
-        name = device.getString("name"),
-        modes = device.getJSONArray("modes").strings(),
-        chosen = device.optStringOrNull("chosen"),
-        battery = device.optStringOrNull("battery"),
-        updatedAt = device.optLongOrNull("updatedAt"),
-      )
+      devices[address] =
+        Remembered(
+          name = device.getString("name"),
+          modes = device.getJSONArray("modes").strings(),
+          chosen = device.optStringOrNull("chosen"),
+          battery = device.optStringOrNull("battery"),
+          updatedAt = device.optLongOrNull("updatedAt"),
+        )
     }
   }
 }
@@ -165,7 +178,8 @@ internal fun primaryDevice(list: JSONObject): JSONObject? {
   if (list.isNull("primary")) return null
   val primary = list.getString("primary")
   val devices = list.getJSONArray("devices")
-  return (0 until devices.length()).map { devices.getJSONObject(it) }
+  return (0 until devices.length())
+    .map { devices.getJSONObject(it) }
     .firstOrNull { it.getString("address") == primary }
 }
 

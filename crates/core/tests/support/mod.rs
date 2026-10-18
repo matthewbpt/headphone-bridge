@@ -4,7 +4,10 @@
 //! opening a control link turns out, and take the device end of every link the
 //! core opens so they can play back device frames and read what the core wrote.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "each test crate uses a different part of the fake"
+)]
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

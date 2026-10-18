@@ -13,9 +13,9 @@ mod share;
 mod tray;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 #[cfg(not(target_os = "android"))]
 use std::sync::OnceLock;
+use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode};
@@ -131,9 +131,7 @@ fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 enum Platform {
-    #[cfg_attr(mobile, allow(dead_code))]
     Desktop,
-    #[cfg_attr(desktop, allow(dead_code))]
     Android,
 }
 
@@ -216,7 +214,11 @@ async fn power_off(core: State<'_, &'static Core>, address: String) -> Result<()
 /// The frame log file, or `None` while the frame log is off.
 #[tauri::command]
 fn frame_log(frame_log: State<FrameLog>) -> Option<PathBuf> {
-    frame_log.0.lock().unwrap().clone()
+    frame_log
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 /// Switches the frame log on or off, from now and at later launches. Returns
@@ -235,7 +237,7 @@ async fn set_frame_log(
     };
     core.command(Command::SetFrameLog(path.clone())).await?;
     save_frame_log_setting(&app, enabled);
-    *frame_log.0.lock().unwrap() = path.clone();
+    *frame_log.0.lock().unwrap_or_else(PoisonError::into_inner) = path.clone();
     Ok(path)
 }
 
@@ -260,7 +262,10 @@ fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
 #[serde(rename_all = "camelCase")]
 enum Permission {
     Granted,
-    #[cfg_attr(desktop, allow(dead_code))]
+    #[cfg_attr(
+        desktop,
+        expect(dead_code, reason = "only Android asks for permission")
+    )]
     Refused,
 }
 
@@ -307,7 +312,11 @@ async fn share_frame_log(
     app: AppHandle,
     frame_log: State<'_, FrameLog>,
 ) -> Result<(), share::ShareError> {
-    let file = frame_log.0.lock().unwrap().clone();
+    let file = frame_log
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
     let file = share::frame_log_to_share(file.as_deref())?;
     #[cfg(target_os = "android")]
     return headphone_bridge_platform_android::android::share_file(&app, file, "Share frame log")
@@ -437,7 +446,10 @@ pub fn run() {
             set_simulated_device
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Headphone Bridge")
+        .unwrap_or_else(|error| {
+            eprintln!("Headphone Bridge couldn't start: {error}");
+            std::process::exit(1)
+        })
         .run(|app, event| {
             // Clicking the Dock icon while the window is hidden.
             #[cfg(target_os = "macos")]

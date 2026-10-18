@@ -24,3 +24,6 @@ tauri-plugin = { version = "2", features = ["build"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["time", "test-util"] }
+
+[lints]
+workspace = true

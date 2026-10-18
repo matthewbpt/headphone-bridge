@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  fmt:
+    name: Rust format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
   core:
     # The platform-independent crates must build and pass on every OS (ADR-0002).
     # The Tauri shell is excluded: it needs per-OS system libraries, so the Linux app job covers it.
@@ -18,10 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Install the Linux adapter's system libraries
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libpulse-dev pkg-config
+      # Each OS lints its own adapter's cfg-gated code.
+      - run: cargo clippy --workspace --exclude headphone-bridge --all-targets --locked -- -D warnings
       - run: cargo test --workspace --exclude headphone-bridge --locked
 
   linux-app:
@@ -61,6 +75,31 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
 
+  macos-app:
+    # The shell's macOS-only code, which no other job compiles: the core job
+    # skips the shell, and clippy can't check it from Linux, as a dependency's
+    # build script needs a macOS C compiler.
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      # Builds the UI, which the shell embeds.
+      - run: npm run build
+        working-directory: app
+      - run: cargo clippy -p headphone-bridge --all-targets --locked -- -D warnings
+      - run: cargo test -p headphone-bridge --locked
+
   android-app:
     # The Android app as a debug APK, so Android build breaks show up before
     # merging, then the Kotlin tests and lint. It needs no Linux system
@@ -72,7 +111,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+          components: clippy
       - uses: Swatinem/rust-cache@v2
+      # The Android-only code, which no other job compiles. Clippy doesn't
+      # link, so it needs no NDK, and it fails fast, before the APK build.
+      - run: cargo clippy -p headphone-bridge -p headphone-bridge-platform-android --target aarch64-linux-android --all-targets --locked -- -D warnings
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -98,6 +141,32 @@ jobs:
         with:
           name: headphone-bridge-android-debug
           path: app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+
+  kotlin:
+    # The Android plugin's hand-written Kotlin, not the generated app under
+    # app/src-tauri/gen. Rules: crates/platform-android/android/.editorconfig
+    # (ktlint) and detekt.yml.
+    name: Kotlin lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/platform-android/android
+    env:
+      KTLINT_VERSION: 1.8.0
+      DETEKT_VERSION: 1.23.8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install ktlint and detekt
+        run: |
+          curl -sSLo "$RUNNER_TEMP/ktlint" "https://github.com/pinterest/ktlint/releases/download/$KTLINT_VERSION/ktlint"
+          chmod +x "$RUNNER_TEMP/ktlint"
+          curl -sSLo "$RUNNER_TEMP/detekt-cli.jar" "https://github.com/detekt/detekt/releases/download/v$DETEKT_VERSION/detekt-cli-$DETEKT_VERSION-all.jar"
+      - run: '"$RUNNER_TEMP/ktlint" "src/**/*.kt" "*.kts"'
+      - run: java -jar "$RUNNER_TEMP/detekt-cli.jar" --config detekt.yml --input src
 
   ui:
     name: UI typecheck and tests

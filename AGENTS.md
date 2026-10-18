@@ -14,6 +14,14 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 Commit messages follow Conventional Commits (`<type>(<scope>)!: <description>`), checked by `.githooks/commit-msg` locally and in CI. Before writing a commit message, read `docs/agents/commits.md` for the types, scopes and footers. Enable the hook once per clone with `git config core.hooksPath .githooks`.
 
+### Rust code
+
+Before writing, changing or reviewing Rust, read `docs/agents/rust.md` for the error-handling, ownership and lint standards. Production code propagates errors with `?`; `.unwrap()` and `.expect()` are for tests only.
+
+### Kotlin code
+
+Kotlin in `crates/platform-android/android` passes ktlint and detekt, with the rules beside it (`.editorconfig`, `detekt.yml`). Run them as the `kotlin` job in `.github/workflows/ci.yml` does; `ktlint -F` fixes formatting. The generated app under `app/src-tauri/gen` isn't linted.
+
 ## Herdr
 
 When `HERDR_ENV=1` you are running inside Herdr, and Herdr owns worktrees and subagents. Treat this section as the user's standing request to use Herdr for both, and load the `herdr` skill for command syntax.

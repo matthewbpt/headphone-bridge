@@ -3,7 +3,7 @@
 //! headphones. It starts from the frames the core's tests replay, and
 //! confirms mode, Level and Equalizer changes the way the real Device does.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{ControlLink, DeviceAddress, DeviceIdentity};
@@ -32,16 +32,17 @@ pub(crate) struct SimulatedDevice {
 }
 
 impl SimulatedDevice {
-    pub(crate) fn new(model: Model) -> SimulatedDevice {
+    /// `None` if the Model's fixture doesn't decode, which its tests rule out.
+    pub(crate) fn new(model: Model) -> Option<SimulatedDevice> {
         let device: Box<dyn Simulated> = match model {
-            Model::GalaxyBuds4Pro => Box::new(Buds::buds4pro()),
-            Model::GalaxyBuds2 => Box::new(Buds::buds2()),
-            Model::Wh1000Xm5 => Box::new(Headphones::new()),
+            Model::GalaxyBuds4Pro => Box::new(Buds::buds4pro()?),
+            Model::GalaxyBuds2 => Box::new(Buds::buds2()?),
+            Model::Wh1000Xm5 => Box::new(Headphones::new()?),
         };
-        SimulatedDevice {
+        Some(SimulatedDevice {
             model,
             device: Arc::new(Mutex::new(device)),
-        }
+        })
     }
 
     pub(crate) fn model(&self) -> Model {
@@ -73,11 +74,14 @@ impl SimulatedDevice {
         let (to_core, incoming) = mpsc::unbounded_channel();
         let (outgoing, mut from_core) = mpsc::unbounded_channel::<Vec<u8>>();
         let device = self.device.clone();
-        device.lock().unwrap().link_opened();
+        device
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .link_opened();
         tokio::spawn(async move {
             while let Some(bytes) = from_core.recv().await {
                 let (replies, powered_off) = {
-                    let mut device = device.lock().unwrap();
+                    let mut device = device.lock().unwrap_or_else(PoisonError::into_inner);
                     (device.receive(&bytes), device.powered_off())
                 };
                 for reply in replies {
@@ -108,14 +112,17 @@ trait Simulated: Send {
     }
 }
 
-/// The frames a Device sent in a fixture, deframed with `deframe`.
-fn received<F>(fixture: &str, mut deframe: impl FnMut(&[u8]) -> Vec<F>) -> Vec<F> {
-    FrameRecord::parse_all(fixture)
-        .expect("the fixture parses")
-        .iter()
-        .filter(|record| record.direction == Direction::Received)
-        .flat_map(|record| deframe(&record.bytes))
-        .collect()
+/// The frames a Device sent in a fixture, deframed with `deframe`, or `None`
+/// if the fixture doesn't parse.
+fn received<F>(fixture: &str, mut deframe: impl FnMut(&[u8]) -> Vec<F>) -> Option<Vec<F>> {
+    let records = FrameRecord::parse_all(fixture).ok()?;
+    Some(
+        records
+            .iter()
+            .filter(|record| record.direction == Direction::Received)
+            .flat_map(|record| deframe(&record.bytes))
+            .collect(),
+    )
 }
 
 /// A Galaxy Buds4 Pro or Buds2, both buds in the ear.
@@ -138,7 +145,7 @@ mod samsung_status {
 impl Buds {
     /// A Buds4 Pro from capture-3's first extended status: L 100 %, R 97 %,
     /// Ambient.
-    fn buds4pro() -> Buds {
+    fn buds4pro() -> Option<Buds> {
         Buds::new(include_str!(
             "../../core/tests/fixtures/galaxy-buds4-pro/capture-3.frames"
         ))
@@ -147,26 +154,25 @@ impl Buds {
     /// A Buds2 from the extended status in GalaxyBudsClient's tests: device
     /// id 316, L and R 100 %, Noise Cancelling, Ambient Level 1. A Buds2's
     /// sets reach the same bytes as a Buds4 Pro's.
-    fn buds2() -> Buds {
+    fn buds2() -> Option<Buds> {
         Buds::new(include_str!(
             "../../core/tests/fixtures/galaxy-buds2/attach.frames"
         ))
     }
 
     /// Starts from the first extended status the Device sent in `fixture`.
-    fn new(fixture: &str) -> Buds {
+    fn new(fixture: &str) -> Option<Buds> {
         let mut deframer = samsung::Deframer::default();
-        let mut status = received(fixture, |bytes| deframer.push(bytes))
+        let mut status = received(fixture, |bytes| deframer.push(bytes))?
             .into_iter()
-            .find(|frame| frame.id == samsung::id::EXTENDED_STATUS_UPDATED)
-            .expect("the fixture has an extended status")
+            .find(|frame| frame.id == samsung::id::EXTENDED_STATUS_UPDATED)?
             .payload;
         // Both buds in the ear, so the Effective Mode is the Chosen Mode.
-        status[samsung_status::PLACEMENT] = 0x11;
-        Buds {
+        *status.get_mut(samsung_status::PLACEMENT)? = 0x11;
+        Some(Buds {
             deframer: samsung::Deframer::default(),
             status,
-        }
+        })
     }
 }
 
@@ -229,12 +235,12 @@ struct Headphones {
 }
 
 impl Headphones {
-    fn new() -> Headphones {
+    fn new() -> Option<Headphones> {
         let mut deframer = sony::Deframer::default();
         let records = FrameRecord::parse_all(include_str!(
             "../../core/tests/fixtures/wh-1000xm5/attach.frames"
         ))
-        .expect("attach.frames parses");
+        .ok()?;
         // Each of the core's requests, paired with the Device's next message.
         let mut answers = Vec::new();
         let mut asked = None;
@@ -256,32 +262,32 @@ impl Headphones {
         let noise_control = answers
             .iter()
             .find(|(command, _)| *command == sony::command::NCASM_GET_PARAM)
-            .map(|(_, answer)| answer[1..].to_vec())
-            .expect("attach.frames reports noise control");
+            .and_then(|(_, answer)| answer.get(1..))?
+            .to_vec();
         let reported = answers
             .iter()
             .find(|(command, _)| *command == sony::command::EQEBB_GET_PARAM)
-            .map(|(_, answer)| answer.clone())
-            .expect("attach.frames reports the Equalizer");
+            .map(|(_, answer)| answer)?;
+        let preset = *reported.get(2)?;
         let mut deframer = sony::Deframer::default();
         let mut curves: Vec<(u8, Vec<u8>)> = received(
             include_str!("../../core/tests/fixtures/wh-1000xm5/real-equalizer-presets.frames"),
             |bytes| deframer.push(bytes),
-        )
+        )?
         .into_iter()
         .filter(|frame| frame.data.first() == Some(&sony::command::EQEBB_NTFY_PARAM))
-        .map(|frame| (frame.data[2], frame.data[3..].to_vec()))
+        .filter_map(|frame| Some((*frame.data.get(2)?, frame.data.get(3..)?.to_vec())))
         .collect();
-        curves.insert(0, (reported[2], reported[3..].to_vec()));
-        Headphones {
+        curves.insert(0, (preset, reported.get(3..)?.to_vec()));
+        Some(Headphones {
             deframer: sony::Deframer::default(),
             seq: 0,
             answers,
             noise_control,
-            preset: reported[2],
+            preset,
             curves,
             powered_off: false,
-        }
+        })
     }
 
     fn message(&mut self, data: &[u8]) -> Vec<u8> {

@@ -5,7 +5,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use headphone_bridge_core::platform::{
     ControlLink, DeviceAddress, LinkFailure, Observation, Observations, Platform,
@@ -63,7 +63,10 @@ impl Shared {
     /// one simulated now, Disconnecting that one and Connecting `model`.
     #[cfg(debug_assertions)]
     fn simulate(&self, model: Option<Model>, from: impl FnOnce(Option<Model>) -> bool) {
-        let mut simulated = self.simulated.lock().unwrap();
+        let mut simulated = self
+            .simulated
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let now = simulated.as_ref().map(SimulatedDevice::model);
         if now == model || !from(now) {
             return;
@@ -74,8 +77,7 @@ impl Shared {
                 .observations
                 .send(Observation::DeviceDisconnected(address));
         }
-        if let Some(model) = model {
-            let device = SimulatedDevice::new(model);
+        if let Some(device) = model.and_then(SimulatedDevice::new) {
             let _ = self
                 .observations
                 .send(Observation::DeviceConnected(device.identity()));
@@ -167,7 +169,11 @@ impl Host {
     /// The Simulated Device's Model while it's switched on.
     #[cfg(debug_assertions)]
     pub fn simulated(&self) -> Option<Model> {
-        let simulated = self.shared.simulated.lock().unwrap();
+        let simulated = self
+            .shared
+            .simulated
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         simulated.as_ref().map(SimulatedDevice::model)
     }
 
@@ -198,33 +204,64 @@ impl Host {
             }
             Event::Opened { request, link } => {
                 let (incoming_tx, incoming) = mpsc::unbounded_channel();
-                shared.links.lock().unwrap().insert(link, incoming_tx);
-                let waiter = shared.opening.lock().unwrap().remove(&request);
+                shared
+                    .links
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(link, incoming_tx);
+                let waiter = shared
+                    .opening
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&request);
                 let delivered =
                     waiter.is_some_and(|waiter| waiter.send(Ok((link, incoming))).is_ok());
                 if !delivered {
                     // The core stopped waiting for it, e.g. its hold ended.
-                    shared.links.lock().unwrap().remove(&link);
+                    shared
+                        .links
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .remove(&link);
                     shared.send(Message::Close { link });
                 }
             }
             Event::OpenFailed { request, failure } => {
-                if let Some(waiter) = shared.opening.lock().unwrap().remove(&request) {
+                if let Some(waiter) = shared
+                    .opening
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&request)
+                {
                     let _ = waiter.send(Err(failure));
                 }
             }
             Event::Data { link, bytes } => {
-                if let Some(incoming) = shared.links.lock().unwrap().get(&link) {
+                if let Some(incoming) = shared
+                    .links
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .get(&link)
+                {
                     let _ = incoming.send(bytes);
                 }
             }
             Event::Closed { link } => {
                 // Dropping the sender tells the core the link dropped.
-                shared.links.lock().unwrap().remove(&link);
+                shared
+                    .links
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&link);
             }
             Event::Hold(kind) => {
                 // A second hold of a kind already in place changes nothing.
-                if let Entry::Vacant(entry) = self.holds.lock().unwrap().entry(kind) {
+                if let Entry::Vacant(entry) = self
+                    .holds
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .entry(kind)
+                {
                     let hold = match kind {
                         HoldKind::All => Some(self.core.hold_all()),
                         // No Primary Device, nothing to hold.
@@ -236,7 +273,10 @@ impl Host {
                 }
             }
             Event::EndHold(kind) => {
-                self.holds.lock().unwrap().remove(&kind);
+                self.holds
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&kind);
             }
         }
         Ok(())
@@ -253,9 +293,9 @@ impl Platform for KotlinBluetooth {
     fn observations(&self) -> Observations {
         self.observations
             .lock()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .take()
-            .expect("the core takes its observations once")
+            .unwrap_or_else(|| mpsc::unbounded_channel().1)
     }
 
     async fn open_control_link(
@@ -265,7 +305,11 @@ impl Platform for KotlinBluetooth {
     ) -> Result<ControlLink, LinkFailure> {
         let shared = &self.shared;
         #[cfg(debug_assertions)]
-        if let Some(device) = &*shared.simulated.lock().unwrap() {
+        if let Some(device) = &*shared
+            .simulated
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+        {
             if device.is_at(address) {
                 // Powering Off switches it off, as it stops being Connected.
                 let model = device.model();
@@ -276,14 +320,22 @@ impl Platform for KotlinBluetooth {
         }
         let request = shared.next_request.fetch_add(1, Ordering::Relaxed);
         let (opened_tx, opened) = oneshot::channel();
-        shared.opening.lock().unwrap().insert(request, opened_tx);
+        shared
+            .opening
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(request, opened_tx);
         let asked = shared.send(Message::Open {
             request,
             address: address.clone(),
             service,
         });
         if !asked {
-            shared.opening.lock().unwrap().remove(&request);
+            shared
+                .opening
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&request);
             return Err(LinkFailure::Other("Bluetooth isn't ready yet".into()));
         }
         let (link, incoming) = opened
@@ -296,7 +348,11 @@ impl Platform for KotlinBluetooth {
                 shared.send(Message::Write { link, bytes });
             }
             // The core is done with the link.
-            shared.links.lock().unwrap().remove(&link);
+            shared
+                .links
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&link);
             shared.send(Message::Close { link });
         });
         Ok(ControlLink { incoming, outgoing })

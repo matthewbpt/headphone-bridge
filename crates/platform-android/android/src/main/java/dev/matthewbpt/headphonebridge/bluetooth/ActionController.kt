@@ -43,7 +43,10 @@ class ActionController(
    * Sets [mode] on the Primary Device, or just refreshes what's shown when
    * [mode] is null. [onDone] runs once the action that takes this tap is over.
    */
-  fun tap(mode: String?, onDone: () -> Unit = {}) {
+  fun tap(
+    mode: String?,
+    onDone: () -> Unit = {},
+  ) {
     synchronized(lock) {
       if (mode != null) target = mode
       whenDone.add(onDone)
@@ -66,18 +69,19 @@ class ActionController(
   private fun work() {
     while (true) {
       val failure = round()
-      val done = synchronized(lock) {
-        // A tap since the last check takes another round, now that the hold
-        // has ended, so this round's end doesn't end the next one's hold.
-        if (failure == null && target != null) {
-          null
-        } else {
-          running = false
-          target = null
-          copy.actionFinished(failure)
-          whenDone.toList().also { whenDone.clear() }
+      val done =
+        synchronized(lock) {
+          // A tap since the last check takes another round, now that the hold
+          // has ended, so this round's end doesn't end the next one's hold.
+          if (failure == null && target != null) {
+            null
+          } else {
+            running = false
+            target = null
+            copy.actionFinished(failure)
+            whenDone.toList().also { whenDone.clear() }
+          }
         }
-      }
       if (done != null) {
         done.forEach { it() }
         return
@@ -91,37 +95,65 @@ class ActionController(
     val deadline = System.currentTimeMillis() + timeouts.attachMs
     // On a cold start the core hears of the Connected Devices just after
     // starting, and holding the Primary Device before it has one holds nothing.
-    link.awaitDeviceList(timeouts.attachMs) { primaryDevice(it) != null }
-      ?: return NO_DEVICE_CONNECTED
+    val connected = link.awaitDeviceList(timeouts.attachMs) { primaryDevice(it) != null }
+    return if (connected == null) NO_DEVICE_CONNECTED else holdingPrimary(deadline)
+  }
+
+  /**
+   * Holds the Primary Device while it Attaches, by [deadline], and takes every
+   * target. Returns why it failed, or null.
+   */
+  private fun holdingPrimary(deadline: Long): String? {
     link.holdPrimary()
     try {
-      link.awaitDeviceList(deadline - System.currentTimeMillis()) { attachedWithMode(it) }
-        ?: return notAttachedText(link.deviceList)
-      while (true) {
-        val mode = synchronized(lock) { target } ?: return null
-        val device = link.deviceList?.let { primaryDevice(it) } ?: return NO_DEVICE_CONNECTED
-        if (device.optString("chosenMode") != mode) {
-          val error = link.command(
-            JSONObject()
-              .put("kind", "setNoiseControlMode")
-              .put("address", device.getString("address"))
-              .put("mode", mode),
-            timeouts.commandMs,
-          )
-          if (error != null) {
-            log("action: setting $mode failed, $error")
-            return "Couldn't set ${modeLabel(mode)}"
-          }
-          link.awaitDeviceList(timeouts.confirmMs) { primaryDevice(it)?.optString("chosenMode") == mode }
-            ?: return "The Device didn't confirm ${modeLabel(mode)}"
-        }
-        synchronized(lock) {
-          if (target == mode) target = null
-        }
-      }
+      val attached = link.awaitDeviceList(deadline - System.currentTimeMillis()) { attachedWithMode(it) }
+      return if (attached == null) notAttachedText(link.deviceList) else setTargets()
     } finally {
       link.endHoldPrimary()
     }
+  }
+
+  /** Sets each target in turn until none is left. Returns why one failed, or null. */
+  private fun setTargets(): String? {
+    var failure: String? = null
+    while (failure == null) {
+      val mode = synchronized(lock) { target } ?: return null
+      failure = setMode(mode)
+    }
+    return failure
+  }
+
+  /** Sets [mode] on the Primary Device, then retires it as the target. Returns why it failed, or null. */
+  private fun setMode(mode: String): String? {
+    val device = link.deviceList?.let { primaryDevice(it) } ?: return NO_DEVICE_CONNECTED
+    val failure = if (device.optString("chosenMode") == mode) null else changeMode(device, mode)
+    if (failure == null) {
+      synchronized(lock) {
+        if (target == mode) target = null
+      }
+    }
+    return failure
+  }
+
+  /** Asks the core to change [device]'s mode to [mode] and waits for the Device to confirm it. */
+  private fun changeMode(
+    device: JSONObject,
+    mode: String,
+  ): String? {
+    val error =
+      link.command(
+        JSONObject()
+          .put("kind", "setNoiseControlMode")
+          .put("address", device.getString("address"))
+          .put("mode", mode),
+        timeouts.commandMs,
+      )
+    if (error != null) {
+      log("action: setting $mode failed, $error")
+      return "Couldn't set ${modeLabel(mode)}"
+    }
+    val confirmed = link.awaitDeviceList(timeouts.confirmMs) { primaryDevice(it)?.optString("chosenMode") == mode }
+    return if (confirmed == null) "The Device didn't confirm ${modeLabel(mode)}" else null
   }
 
   private fun attachedWithMode(list: JSONObject): Boolean {

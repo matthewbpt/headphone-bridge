@@ -1,5 +1,7 @@
 //! How BlueZ's replies to ConnectProfile become the port's failure reasons.
 
+#![cfg(test)]
+
 use headphone_bridge_core::platform::LinkFailure;
 use headphone_bridge_platform_linux::{connect_profile_failure, ConnectProfileFailure};
 

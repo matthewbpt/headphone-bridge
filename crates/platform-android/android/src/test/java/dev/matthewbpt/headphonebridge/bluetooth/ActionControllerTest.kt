@@ -10,12 +10,13 @@ class ActionControllerTest {
   private val link = FakeCoreLink().apply { connect() }
   private val copy = StoredCopy(MemoryStorage(), now = { 5_000L })
   private var permitted = true
-  private val controller = ActionController(
-    link,
-    copy,
-    start = { permitted },
-    timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
-  )
+  private val controller =
+    ActionController(
+      link,
+      copy,
+      start = { permitted },
+      timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
+    )
 
   /** Taps [mode], or refresh when null, and waits for the action to finish. */
   private fun tapAndWait(mode: String?) {
@@ -135,7 +136,11 @@ class ActionControllerTest {
   @Test
   fun watchingStartsBluetoothSoTheCopyFollowsTheDevicesWithoutHoldingAny() {
     val started = CountDownLatch(1)
-    val watcher = ActionController(link, copy, start = { started.countDown(); true })
+    val watcher =
+      ActionController(link, copy, start = {
+        started.countDown()
+        true
+      })
 
     watcher.watch()
 

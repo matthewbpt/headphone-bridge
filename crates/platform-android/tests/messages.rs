@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
 use headphone_bridge_core::{Command, CommandError, DeviceList, NoiseControlMode};
 use headphone_bridge_platform_android::messages::{
@@ -166,7 +168,7 @@ fn a_command_the_core_does_not_know_is_refused() {
 }
 
 fn sent(message: Message) -> Value {
-    serde_json::from_str(&message.to_json()).unwrap()
+    serde_json::from_str(&message.to_json().unwrap()).unwrap()
 }
 
 #[test]

@@ -1,41 +1,41 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("com.android.library")
-    id("org.jetbrains.kotlin.android")
+  id("com.android.library")
+  id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "dev.matthewbpt.headphonebridge.bluetooth"
-    compileSdk = 37
+  namespace = "dev.matthewbpt.headphonebridge.bluetooth"
+  compileSdk = 37
 
-    defaultConfig {
-        minSdk = 31
-        consumerProguardFiles("consumer-rules.pro")
-    }
+  defaultConfig {
+    minSdk = 31
+    consumerProguardFiles("consumer-rules.pro")
+  }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+  }
 
-    // Robolectric reads the merged manifest and resources.
-    testOptions.unitTests.isIncludeAndroidResources = true
+  // Robolectric reads the merged manifest and resources.
+  testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 kotlin {
-    compilerOptions {
-        jvmTarget = JvmTarget.JVM_1_8
-    }
+  compilerOptions {
+    jvmTarget = JvmTarget.JVM_1_8
+  }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.16.0")
-    implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation(project(":tauri-android"))
-    testImplementation("junit:junit:4.13.2")
-    // Android's org.json is a stub in JVM tests.
-    testImplementation("org.json:json:20240303")
-    testImplementation("org.robolectric:robolectric:4.17")
-    testImplementation("androidx.test:core:1.7.0")
+  implementation("androidx.core:core-ktx:1.16.0")
+  implementation("androidx.appcompat:appcompat:1.7.1")
+  implementation(project(":tauri-android"))
+  testImplementation("junit:junit:4.13.2")
+  // Android's org.json is a stub in JVM tests.
+  testImplementation("org.json:json:20240303")
+  testImplementation("org.robolectric:robolectric:4.17")
+  testImplementation("androidx.test:core:1.7.0")
 }

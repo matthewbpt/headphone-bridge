@@ -59,11 +59,12 @@ class FakeCoreLink(
     }
   }
 
-  private fun publishDevice(device: JSONObject?) = publish(
-    JSONObject()
-      .put("devices", JSONArray().apply { device?.let { put(it) } })
-      .put("primary", device?.getString("address") ?: JSONObject.NULL)
-  )
+  private fun publishDevice(device: JSONObject?) =
+    publish(
+      JSONObject()
+        .put("devices", JSONArray().apply { device?.let { put(it) } })
+        .put("primary", device?.getString("address") ?: JSONObject.NULL),
+    )
 
   private fun device(state: JSONObject) = device(address, name, state, modes, chosen)
 
@@ -74,6 +75,7 @@ class FakeCoreLink(
   override fun hasPermission() = permitted
 
   override fun holdAll() = record("holdAll")
+
   override fun endHoldAll() = record("endHoldAll")
 
   override fun holdPrimary() {
@@ -90,7 +92,10 @@ class FakeCoreLink(
     publishDevice(device(state("detached")).put("reportedAt", 1_000L))
   }
 
-  override fun command(command: JSONObject, timeoutMs: Long): String? {
+  override fun command(
+    command: JSONObject,
+    timeoutMs: Long,
+  ): String? {
     val mode = command.getString("mode")
     record("set $mode")
     if (commandError != null) return commandError
@@ -101,7 +106,10 @@ class FakeCoreLink(
     return null
   }
 
-  override fun awaitDeviceList(timeoutMs: Long, ready: (JSONObject) -> Boolean): JSONObject? {
+  override fun awaitDeviceList(
+    timeoutMs: Long,
+    ready: (JSONObject) -> Boolean,
+  ): JSONObject? {
     val deadline = System.currentTimeMillis() + timeoutMs
     synchronized(lock) {
       while (true) {
@@ -120,10 +128,13 @@ class FakeCoreLink(
 
 fun state(kind: String): JSONObject = JSONObject().put("kind", kind)
 
-fun notAttached(reason: String): JSONObject =
-  state("notAttached").put("reason", JSONObject().put("kind", reason))
+fun notAttached(reason: String): JSONObject = state("notAttached").put("reason", JSONObject().put("kind", reason))
 
-/** A Device as the core's Device list has it. */
+/**
+ * A Device as the core's Device list has it. Tests name only the parameters
+ * they care about; the rest default.
+ */
+@Suppress("LongParameterList")
 fun device(
   address: String,
   name: String,
@@ -131,16 +142,18 @@ fun device(
   modes: List<String> = emptyList(),
   chosen: String? = null,
   battery: JSONObject? = null,
-): JSONObject = JSONObject()
-  .put("address", address)
-  .put("name", name)
-  .put("state", state)
-  .put("capabilities", JSONObject().put("noiseControlModes", JSONArray(modes)))
-  .put("chosenMode", chosen ?: JSONObject.NULL)
-  .put("battery", battery ?: JSONObject.NULL)
-  .put("reportedAt", JSONObject.NULL)
+): JSONObject =
+  JSONObject()
+    .put("address", address)
+    .put("name", name)
+    .put("state", state)
+    .put("capabilities", JSONObject().put("noiseControlModes", JSONArray(modes)))
+    .put("chosenMode", chosen ?: JSONObject.NULL)
+    .put("battery", battery ?: JSONObject.NULL)
+    .put("reportedAt", JSONObject.NULL)
 
 /** A Device list with [devices], the first being the Primary Device. */
-fun deviceList(vararg devices: JSONObject): JSONObject = JSONObject()
-  .put("devices", JSONArray(devices.toList()))
-  .put("primary", devices.firstOrNull()?.getString("address") ?: JSONObject.NULL)
+fun deviceList(vararg devices: JSONObject): JSONObject =
+  JSONObject()
+    .put("devices", JSONArray(devices.toList()))
+    .put("primary", devices.firstOrNull()?.getString("address") ?: JSONObject.NULL)

@@ -43,7 +43,9 @@ private const val GRACE_MS = 3000L
  * core; [Hub.ensureStarted] copes either way.
  */
 @TauriPlugin
-class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
+class BluetoothPlugin(
+  private val activity: Activity,
+) : Plugin(activity) {
   private val main = Handler(Looper.getMainLooper())
   private val endHold = Runnable { Hub.endHoldAll() }
 
@@ -77,8 +79,9 @@ class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
   /** Opens the app's page in Android's settings, where the listener can grant the permission. */
   @Command
   fun openAppSettings(invoke: Invoke) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-      .setData(Uri.fromParts("package", activity.packageName, null))
+    val intent =
+      Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData(Uri.fromParts("package", activity.packageName, null))
     activity.startActivity(intent)
     invoke.resolve()
   }
@@ -86,9 +89,11 @@ class BluetoothPlugin(private val activity: Activity) : Plugin(activity) {
   /**
    * Opens the share sheet with a copy of the file at `path`, as plain text,
    * so it can be saved to Files or sent from the phone. Resolves once the
-   * sheet is open; rejects with why it couldn't be.
+   * sheet is open; rejects with why it couldn't be. Whatever goes wrong is a
+   * rejection, as an invoke left unanswered keeps the window waiting for ever.
    */
   @Command
+  @Suppress("TooGenericExceptionCaught")
   fun shareFile(invoke: Invoke) {
     val args = invoke.parseArgs(ShareFileArgs::class.java)
     try {

@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 mod support;
 
 use headphone_bridge_core::platform::{DeviceIdentity, Observation};

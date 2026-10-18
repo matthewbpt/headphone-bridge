@@ -1,5 +1,7 @@
 //! The Simulated Device, in debug builds: a Buds4 Pro, a Buds2 or an XM5
 //! answering the core in-process, for the emulator, which has no headphones.
+
+#![cfg(test)]
 #![cfg(debug_assertions)]
 
 use std::collections::VecDeque;
