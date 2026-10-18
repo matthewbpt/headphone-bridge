@@ -96,6 +96,20 @@ fn a_failed_open_for_a_reason_the_core_does_not_know_is_refused() {
 }
 
 #[test]
+fn a_failed_open_whose_detail_does_not_fit_its_reason_is_refused() {
+    assert!(matches!(
+        parse_event(r#"{"type":"openFailed","request":3,"reason":"other"}"#),
+        Err(BadMessage(_))
+    ));
+    assert!(matches!(
+        parse_event(
+            r#"{"type":"openFailed","request":3,"reason":"bluetoothPermissionDenied","detail":"denied"}"#
+        ),
+        Err(BadMessage(_))
+    ));
+}
+
+#[test]
 fn a_failed_open_without_a_cause_carries_its_detail() {
     assert_eq!(
         parse_event(
