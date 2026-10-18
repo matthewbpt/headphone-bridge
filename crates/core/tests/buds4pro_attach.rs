@@ -284,23 +284,23 @@ async fn a_link_that_cannot_be_opened_leaves_the_device_connected_with_the_reaso
     for (failure, reason) in [
         (
             LinkFailure::InUseByAnotherProcess,
-            NotAttachedReason::InUseByAnotherProcess,
+            NotAttachedReason::LinkFailed(LinkFailure::InUseByAnotherProcess),
         ),
         (
             LinkFailure::BluetoothPermissionDenied,
-            NotAttachedReason::BluetoothPermissionDenied,
+            NotAttachedReason::LinkFailed(LinkFailure::BluetoothPermissionDenied),
         ),
         (
             LinkFailure::ServiceNotFound,
-            NotAttachedReason::ServiceNotFound,
+            NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound),
         ),
         (
             LinkFailure::DeviceNotConnected,
-            NotAttachedReason::DeviceNotConnected,
+            NotAttachedReason::LinkFailed(LinkFailure::DeviceNotConnected),
         ),
         (
             LinkFailure::Other("timed out".into()),
-            NotAttachedReason::Other("timed out".into()),
+            NotAttachedReason::LinkFailed(LinkFailure::Other("timed out".into())),
         ),
     ] {
         let (platform, os) = fake_platform();

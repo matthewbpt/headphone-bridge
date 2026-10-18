@@ -7,6 +7,7 @@
 Production code returns `Result` and propagates with `?`; it never calls `.unwrap()` or `.expect()`.
 
 - **Library crates** (`crates/*`): a `thiserror` enum, one documented variant per cause the caller can act on, like `CommandError`.
+- **Display**: an error's `Display` is developer text for logs; the shell's labels (`labels.rs`) own the text the listener sees.
 - **The shell** (`app/src-tauri`): `anyhow` with `.context(...)`, except a `#[tauri::command]`, whose error crosses to the UI and so stays a `Serialize` enum, like `ShareError`.
 - **Mutex locks**: `.lock().unwrap_or_else(PoisonError::into_inner)`; our locked data stays valid after a panicking holder.
 - **"Checked above" lookups**: make the check yield the value with `if let`, `let ... else` or the `entry` API.

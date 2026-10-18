@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use headphone_bridge_core::platform::LinkFailure;
 use headphone_bridge_core::{EffectiveModeReason, Model, NoiseControlMode, NotAttachedReason};
 use serde::Serialize;
 
@@ -31,19 +32,22 @@ pub fn hint(reason: EffectiveModeReason) -> &'static str {
     }
 }
 
-/// Why a Device isn't Attached.
-pub fn reason(reason: &NotAttachedReason) -> String {
+/// Why a Device isn't Attached. A link failure without a cause has one
+/// label; the window shows its detail beneath it.
+pub fn reason(reason: &NotAttachedReason) -> &'static str {
     match reason {
-        NotAttachedReason::UnsupportedModel => "Unsupported Model".into(),
-        NotAttachedReason::InUseByAnotherProcess => "In use by another app".into(),
-        NotAttachedReason::BluetoothPermissionDenied => {
-            "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth".into()
-        }
-        NotAttachedReason::ServiceNotFound => "Control service not found".into(),
-        NotAttachedReason::DeviceNotConnected => "Not Connected".into(),
-        NotAttachedReason::LinkDropped => "Another app or device may be using it".into(),
-        NotAttachedReason::NoResponse => "The Device didn't respond".into(),
-        NotAttachedReason::Other(message) => message.clone(),
+        NotAttachedReason::UnsupportedModel => "Unsupported Model",
+        NotAttachedReason::LinkDropped => "Another app or device may be using it",
+        NotAttachedReason::NoResponse => "The Device didn't respond",
+        NotAttachedReason::LinkFailed(failure) => match failure {
+            LinkFailure::InUseByAnotherProcess => "In use by another app",
+            LinkFailure::BluetoothPermissionDenied => {
+                "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
+            }
+            LinkFailure::ServiceNotFound => "Control service not found",
+            LinkFailure::DeviceNotConnected => "Not Connected",
+            LinkFailure::Other(_) => "Couldn't open the control link",
+        },
     }
 }
 
@@ -61,15 +65,16 @@ const HINTS: [EffectiveModeReason; 2] = [
     EffectiveModeReason::Unknown,
 ];
 
-/// Every reason but `Other`, whose label is its own message.
-const REASONS: [NotAttachedReason; 7] = [
+/// Every reason, one per kind: `Other`'s label doesn't depend on its detail.
+const REASONS: [NotAttachedReason; 8] = [
     NotAttachedReason::UnsupportedModel,
-    NotAttachedReason::InUseByAnotherProcess,
-    NotAttachedReason::BluetoothPermissionDenied,
-    NotAttachedReason::ServiceNotFound,
-    NotAttachedReason::DeviceNotConnected,
+    NotAttachedReason::LinkFailed(LinkFailure::InUseByAnotherProcess),
+    NotAttachedReason::LinkFailed(LinkFailure::BluetoothPermissionDenied),
+    NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound),
+    NotAttachedReason::LinkFailed(LinkFailure::DeviceNotConnected),
     NotAttachedReason::LinkDropped,
     NotAttachedReason::NoResponse,
+    NotAttachedReason::LinkFailed(LinkFailure::Other(String::new())),
 ];
 
 /// The labels, as the window gets them.
@@ -86,7 +91,7 @@ pub struct Labels {
 #[derive(Debug, Serialize)]
 struct ReasonLabel {
     reason: NotAttachedReason,
-    text: String,
+    text: &'static str,
 }
 
 pub fn all() -> Labels {
@@ -102,5 +107,47 @@ pub fn all() -> Labels {
                 reason: r,
             })
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::to_value;
+
+    use super::*;
+
+    #[test]
+    fn labels_every_reason_the_window_can_get() {
+        let labels = to_value(all()).unwrap();
+        let reasons = labels["reasons"].as_array().unwrap();
+
+        let kinds: Vec<_> = reasons
+            .iter()
+            .map(|label| label["reason"]["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "unsupportedModel",
+                "inUseByAnotherProcess",
+                "bluetoothPermissionDenied",
+                "serviceNotFound",
+                "deviceNotConnected",
+                "linkDropped",
+                "noResponse",
+                "other",
+            ]
+        );
+        for label in reasons {
+            assert_ne!(label["text"], "", "{} has no label", label["reason"]);
+        }
+    }
+
+    #[test]
+    fn labels_a_link_failure_without_a_cause_the_same_whatever_its_detail() {
+        let reason = NotAttachedReason::LinkFailed(LinkFailure::Other(
+            "IOBluetooth error 0xE00002BC".into(),
+        ));
+        assert_eq!(super::reason(&reason), "Couldn't open the control link");
     }
 }

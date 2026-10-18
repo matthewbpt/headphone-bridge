@@ -1,5 +1,6 @@
 //! The Device list snapshot: the core's only output.
 
+use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
 
 use crate::command::{CommandError, Equalizer, NoiseControlMode};
@@ -166,32 +167,41 @@ impl DeviceState {
 }
 
 /// Why a Connected Device isn't Attached.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", content = "message", rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotAttachedReason {
     /// The Model isn't on the allowlist, so the app won't control it.
     UnsupportedModel,
-    InUseByAnotherProcess,
-    BluetoothPermissionDenied,
-    ServiceNotFound,
-    DeviceNotConnected,
     /// The control link closed while Attached.
     LinkDropped,
     /// The control link opened, but the Device didn't identify itself in time,
     /// or stopped acknowledging what the app sent.
     NoResponse,
-    Other(String),
+    /// The control link couldn't be opened.
+    LinkFailed(LinkFailure),
 }
 
-impl From<LinkFailure> for NotAttachedReason {
-    fn from(failure: LinkFailure) -> Self {
-        match failure {
-            LinkFailure::InUseByAnotherProcess => NotAttachedReason::InUseByAnotherProcess,
-            LinkFailure::BluetoothPermissionDenied => NotAttachedReason::BluetoothPermissionDenied,
-            LinkFailure::ServiceNotFound => NotAttachedReason::ServiceNotFound,
-            LinkFailure::DeviceNotConnected => NotAttachedReason::DeviceNotConnected,
-            LinkFailure::Other(message) => NotAttachedReason::Other(message),
+/// Sent flat, as `{kind}`, with a link failure under its own kind and
+/// `LinkFailure::Other` as `{kind: "other", detail}`.
+impl Serialize for NotAttachedReason {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let (kind, detail) = match self {
+            NotAttachedReason::UnsupportedModel => ("unsupportedModel", None),
+            NotAttachedReason::LinkDropped => ("linkDropped", None),
+            NotAttachedReason::NoResponse => ("noResponse", None),
+            NotAttachedReason::LinkFailed(failure) => match failure {
+                LinkFailure::InUseByAnotherProcess => ("inUseByAnotherProcess", None),
+                LinkFailure::BluetoothPermissionDenied => ("bluetoothPermissionDenied", None),
+                LinkFailure::ServiceNotFound => ("serviceNotFound", None),
+                LinkFailure::DeviceNotConnected => ("deviceNotConnected", None),
+                LinkFailure::Other(detail) => ("other", Some(detail)),
+            },
+        };
+        let mut map = serializer.serialize_map(Some(1 + usize::from(detail.is_some())))?;
+        map.serialize_entry("kind", kind)?;
+        if let Some(detail) = detail {
+            map.serialize_entry("detail", detail)?;
         }
+        map.end()
     }
 }
 

@@ -69,7 +69,8 @@ export type NotAttachedReason =
   | { kind: "deviceNotConnected" }
   | { kind: "linkDropped" }
   | { kind: "noResponse" }
-  | { kind: "other"; message: string };
+  /** A link failure without a cause, with the adapter's detail. */
+  | { kind: "other"; detail: string };
 
 export type NoiseControlMode = "off" | "noiseCancelling" | "ambient" | "adaptive";
 
@@ -151,12 +152,11 @@ export interface Labels {
   modes: Record<NoiseControlMode, string>;
   models: Record<Model, string>;
   hints: Record<EffectiveModeReason, string>;
-  /** Every reason but "other", whose label is its own message. */
+  /** Every reason, one per kind. */
   reasons: { reason: NotAttachedReason; text: string }[];
 }
 
 /** Why a Device isn't Attached, labelled as the tray labels it. */
 export function reasonText(labels: Labels, reason: NotAttachedReason): string {
-  if (reason.kind === "other") return reason.message;
   return labels.reasons.find((label) => label.reason.kind === reason.kind)?.text ?? reason.kind;
 }

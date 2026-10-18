@@ -1508,6 +1508,35 @@ describe("a Device that isn't Attached", () => {
     expect(await screen.findByText("Another app or device may be using it")).toBeVisible();
   });
 
+  it("shows a link failure without a cause with its detail beneath", async () => {
+    renderWindow(
+      new FakeCore(
+        only(
+          notAttached(xm5(), {
+            kind: "notAttached",
+            reason: { kind: "other", detail: "IOBluetooth error 0xE00002BC" },
+          }),
+        ),
+      ),
+    );
+
+    expect(await screen.findByText("Couldn't open the control link")).toBeVisible();
+    expect(screen.getByText("IOBluetooth error 0xE00002BC")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
+  });
+
+  it("shows a link failure without a cause or detail as its label alone", async () => {
+    renderWindow(
+      new FakeCore(
+        only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "other", detail: "" } })),
+      ),
+    );
+
+    const label = await screen.findByText("Couldn't open the control link");
+    expect(label.parentElement?.children).toHaveLength(2);
+    expect(label.nextElementSibling).toBe(screen.getByRole("button", { name: "Retry" }));
+  });
+
   it("shows why the core rejected Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),

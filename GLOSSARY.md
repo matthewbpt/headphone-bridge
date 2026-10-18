@@ -48,6 +48,10 @@ _Avoid_: Lock, lease, claim, keep-alive
 When the app Attaches a Connected Device that no Hold is on: **Always**, for as long as it's Connected, as on desktop; or **On request**, never, so it stays Detached and another app or device can have its Control Link, as on Android.
 _Avoid_: Attach mode, auto-attach
 
+**Bluetooth Unavailable**:
+Why the app can't Attach a Connected Device when the operating system's Bluetooth is switched off or not ready yet. It clears by itself once Bluetooth is ready.
+_Avoid_: Bluetooth off, adapter down, no Bluetooth
+
 **Power Off**:
 The action of switching a Device off from the app. The Device then stops being Connected of its own accord; the app can't switch it back on.
 _Avoid_: Turn off, shut down, disconnect

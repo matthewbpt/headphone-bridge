@@ -141,7 +141,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:maxLines="1"
+            android:maxLines="2"
             android:textColor="@color/hb_text_secondary"
             android:textSize="11sp" />
 

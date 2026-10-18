@@ -247,7 +247,7 @@ impl TrayMenu {
                 DeviceState::NotAttached { reason }
                     if *reason != NotAttachedReason::UnsupportedModel =>
                 {
-                    Some((device.name.clone(), labels::reason(reason)))
+                    Some((device.name.clone(), labels::reason(reason).into()))
                 }
                 _ => None,
             });
@@ -387,6 +387,7 @@ fn battery_text(battery: Battery) -> String {
 
 #[cfg(test)]
 mod tests {
+    use headphone_bridge_core::platform::LinkFailure;
     use headphone_bridge_core::{Device, EffectiveModeReason, Model};
 
     use super::*;
@@ -479,7 +480,7 @@ mod tests {
     fn says_why_a_device_is_not_attached() {
         for (reason, status) in [
             (
-                NotAttachedReason::InUseByAnotherProcess,
+                NotAttachedReason::LinkFailed(LinkFailure::InUseByAnotherProcess),
                 "In use by another app",
             ),
             (
@@ -487,7 +488,7 @@ mod tests {
                 "Another app or device may be using it",
             ),
             (
-                NotAttachedReason::BluetoothPermissionDenied,
+                NotAttachedReason::LinkFailed(LinkFailure::BluetoothPermissionDenied),
                 "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth",
             ),
         ] {
