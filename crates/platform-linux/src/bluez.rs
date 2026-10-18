@@ -6,6 +6,7 @@
 //! more on the Device's existing connection, alongside A2DP.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
@@ -32,6 +33,9 @@ const NEW_CONNECTION_GRACE: Duration = Duration::from_secs(2);
 /// connected.
 const BUSY_RETRIES: u32 = 10;
 const BUSY_PAUSE: Duration = Duration::from_millis(1500);
+/// How long the Device watcher waits before trying BlueZ again, e.g. when
+/// the app starts at login before bluetoothd does.
+const RECONNECT_PAUSE: Duration = Duration::from_secs(5);
 
 /// The BlueZ session, shared by the Device watcher and every link opened.
 pub struct Bluez {
@@ -70,15 +74,35 @@ impl Connection {
     }
 }
 
-/// Reports Devices as they become Connected and disconnected, until BlueZ
-/// goes away. Never scans, connects or disconnects anything.
+/// Reports Devices as they become Connected and disconnected, for the life
+/// of the process, connecting to BlueZ again whenever it goes away. Never
+/// scans, connects or disconnects anything.
 pub async fn watch(connection: Connection, observations: mpsc::UnboundedSender<Observation>) {
-    let bluez = match connection.get().await {
-        Ok(bluez) => bluez,
-        Err(error) => return eprintln!("not watching Bluetooth Devices: {error:?}"),
-    };
-    if let Err(error) = Watcher::new(observations).run(&bluez.adapter).await {
-        eprintln!("stopped watching Bluetooth Devices: {error}");
+    keep_watching(&observations, || async {
+        let bluez = connection.get().await.map_err(|e| e.to_string())?;
+        Watcher::new(observations.clone())
+            .run(&bluez.adapter)
+            .await
+            .map_err(|e| e.to_string())
+    })
+    .await;
+}
+
+/// Runs `watch_once` again after a pause each time it ends, until the core
+/// stops listening.
+async fn keep_watching<W, F, E>(
+    observations: &mpsc::UnboundedSender<Observation>,
+    mut watch_once: W,
+) where
+    W: FnMut() -> F,
+    F: Future<Output = Result<(), E>>,
+    E: std::fmt::Display,
+{
+    while !observations.is_closed() {
+        if let Err(error) = watch_once().await {
+            eprintln!("not watching Bluetooth Devices: {error}");
+        }
+        tokio::time::sleep(RECONNECT_PAUSE).await;
     }
 }
 
@@ -102,7 +126,15 @@ impl Watcher {
         }
     }
 
+    /// Follows `adapter` until BlueZ goes away, then reports every Device it
+    /// reported Connected as disconnected, since none can be observed now.
     async fn run(mut self, adapter: &Adapter) -> bluer::Result<()> {
+        let result = self.follow_adapter(adapter).await;
+        self.stopped();
+        result
+    }
+
+    async fn follow_adapter(&mut self, adapter: &Adapter) -> bluer::Result<()> {
         let mut adapter_events = adapter.events().await?;
         // Connected changes arrive per Device, so follow every Device BlueZ
         // knows, and every one it learns about.
@@ -206,6 +238,14 @@ impl Watcher {
                 name,
                 service_uuids,
             }));
+    }
+
+    fn stopped(&mut self) {
+        for address in std::mem::take(&mut self.reported) {
+            let _ = self
+                .observations
+                .send(Observation::DeviceDisconnected(port_address(address)));
+        }
     }
 
     fn disconnected(&mut self, address: Address) {
@@ -400,4 +440,46 @@ fn dbus_error(error: &bluer::Error) -> (String, String) {
 fn failure(error: bluer::Error) -> LinkFailure {
     let (name, message) = dbus_error(&error);
     connect_profile_failure(&name, &message)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::{Cell, RefCell};
+
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn the_device_watcher_tries_again_after_a_pause_until_the_core_stops() {
+        let (observations, core) = mpsc::unbounded_channel();
+        let core = RefCell::new(Some(core));
+        let attempts = Cell::new(0);
+        let started = tokio::time::Instant::now();
+        keep_watching(&observations, || async {
+            attempts.set(attempts.get() + 1);
+            if attempts.get() == 3 {
+                core.borrow_mut().take();
+            }
+            Err("bluetoothd isn't running")
+        })
+        .await;
+        assert_eq!(attempts.get(), 3);
+        assert_eq!(started.elapsed(), RECONNECT_PAUSE * 3);
+    }
+
+    #[test]
+    fn devices_reported_connected_are_reported_disconnected_when_watching_stops() {
+        let (observations, mut core) = mpsc::unbounded_channel();
+        let mut watcher = Watcher::new(observations);
+        watcher
+            .reported
+            .insert(Address::new([0xAC, 0x80, 0x0A, 0x11, 0x22, 0x33]));
+        watcher.stopped();
+        assert_eq!(
+            core.try_recv(),
+            Ok(Observation::DeviceDisconnected(DeviceAddress(
+                "AC:80:0A:11:22:33".into()
+            )))
+        );
+        assert!(core.try_recv().is_err());
+    }
 }

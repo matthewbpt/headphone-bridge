@@ -16,5 +16,8 @@ bluer = { version = "0.17.4", features = ["bluetoothd", "rfcomm"] }
 futures = "0.3"
 libpulse-binding = "2.30"
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tokio = { workspace = true, features = ["time", "test-util"] }
+
 [lints]
 workspace = true
