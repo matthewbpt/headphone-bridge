@@ -10,7 +10,7 @@ jobs:
     name: Rust format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -26,7 +26,7 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -44,12 +44,12 @@ jobs:
     name: Linux app
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -68,7 +68,7 @@ jobs:
       - run: cargo test -p headphone-bridge --locked
       - run: npm run tauri build -- --bundles deb,appimage
         working-directory: app
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: headphone-bridge-linux
           path: |
@@ -82,12 +82,12 @@ jobs:
     name: macOS app
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -107,7 +107,7 @@ jobs:
     name: Android debug APK
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
@@ -116,11 +116,11 @@ jobs:
       # The Android-only code, which no other job compiles. Clippy doesn't
       # link, so it needs no NDK, and it fails fast, before the APK build.
       - run: cargo clippy -p headphone-bridge -p headphone-bridge-platform-android --target aarch64-linux-android --all-targets --locked -- -D warnings
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -137,7 +137,7 @@ jobs:
       # generates the :tauri-android project they depend on.
       - run: ./gradlew :headphone-bridge-platform-android:testDebugUnitTest :headphone-bridge-platform-android:lintDebug
         working-directory: app/src-tauri/gen/android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: headphone-bridge-android-debug
           path: app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
@@ -155,8 +155,8 @@ jobs:
       KTLINT_VERSION: 1.8.0
       DETEKT_VERSION: 1.23.8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -175,8 +175,8 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
