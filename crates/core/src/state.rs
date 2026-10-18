@@ -275,7 +275,7 @@ impl<P: Platform> State<P> {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             }
-        } else if self.wants_attached(&identity.address) {
+        } else if self.wants_attached(identity.address) {
             DeviceState::Attaching
         } else {
             DeviceState::Detached
@@ -294,31 +294,34 @@ impl<P: Platform> State<P> {
         };
         self.devices.insert(address, tracked);
         if state_is_attaching {
-            self.reattach(&address, Duration::ZERO);
+            self.reattach(address, Duration::ZERO);
         }
     }
 
     /// Starts a new session for the tracked Device at `address` that opens
     /// the Control Link after `delay`, in place of any session it had.
-    fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
-        let Some(vendor) = self.devices.get(address).and_then(|tracked| tracked.vendor) else {
+    fn reattach(&mut self, address: DeviceAddress, delay: Duration) {
+        let Some(vendor) = self
+            .devices
+            .get(&address)
+            .and_then(|tracked| tracked.vendor)
+        else {
             return;
         };
         let session = self.attach(address, vendor, delay);
-        if let Some(tracked) = self.devices.get_mut(address) {
+        if let Some(tracked) = self.devices.get_mut(&address) {
             tracked.session = Some(session);
         }
     }
 
     /// Starts a session that opens the Control Link after `delay`.
-    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
+    fn attach(&mut self, address: DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let platform = self.platform.clone();
         let events = self.link_events.clone();
         let frame_log = self.frame_log.clone();
-        let address = *address;
         let task = tokio::spawn(async move {
             let send = |kind| {
                 let _ = events.send(LinkEvent {
@@ -336,7 +339,7 @@ impl<P: Platform> State<P> {
                 Vendor::Sony => sony::SERVICE,
             };
             let on_update = |update| send(LinkEventKind::Update(update));
-            let reason = match platform.open_control_link(&address, service).await {
+            let reason = match platform.open_control_link(address, service).await {
                 Ok(link) => match vendor {
                     Vendor::Samsung(candidate) => {
                         let session = samsung::Session::new(candidate);
@@ -429,7 +432,7 @@ impl<P: Platform> State<P> {
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
-                    self.reattach(&event.address, delay);
+                    self.reattach(event.address, delay);
                 }
             }
         }
@@ -506,7 +509,7 @@ impl<P: Platform> State<P> {
                 // Retrying by hand starts over, straight away.
                 tracked.device.state = DeviceState::Attaching;
                 tracked.retries = 0;
-                self.reattach(&address, Duration::ZERO);
+                self.reattach(address, Duration::ZERO);
                 Ok(())
             }
         }
@@ -514,12 +517,12 @@ impl<P: Platform> State<P> {
 
     /// Whether the policy, or a hold, asks for the Device at `address` to be
     /// Attached.
-    fn wants_attached(&self, address: &DeviceAddress) -> bool {
+    fn wants_attached(&self, address: DeviceAddress) -> bool {
         self.policy == AttachPolicy::Always
             || self
                 .holds
                 .values()
-                .any(|held| held.as_ref().is_none_or(|held| held == address))
+                .any(|held| held.is_none_or(|held| held == address))
     }
 
     /// Attaches every Detached Device the policy or a hold now asks for, and
@@ -528,8 +531,8 @@ impl<P: Platform> State<P> {
         let wanted: BTreeSet<DeviceAddress> = self
             .devices
             .keys()
-            .filter(|address| self.wants_attached(address))
-            .cloned()
+            .copied()
+            .filter(|&address| self.wants_attached(address))
             .collect();
         let mut to_attach = Vec::new();
         for (address, tracked) in &mut self.devices {
@@ -549,7 +552,7 @@ impl<P: Platform> State<P> {
             }
         }
         for address in to_attach {
-            self.reattach(&address, Duration::ZERO);
+            self.reattach(address, Duration::ZERO);
         }
     }
 
@@ -575,7 +578,7 @@ impl<P: Platform> State<P> {
             .map(|(address, _)| *address)
             .collect();
         for address in timed_out {
-            let wanted = self.wants_attached(&address);
+            let wanted = self.wants_attached(address);
             let Some(tracked) = self.devices.get_mut(&address) else {
                 continue;
             };
@@ -592,7 +595,7 @@ impl<P: Platform> State<P> {
             }
             tracked.device.power_off_failed = true;
             if reattach {
-                self.reattach(&address, Duration::ZERO);
+                self.reattach(address, Duration::ZERO);
             }
         }
     }

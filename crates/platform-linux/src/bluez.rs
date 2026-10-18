@@ -259,7 +259,7 @@ impl Watcher {
         let _ = self
             .observations
             .send(Observation::DeviceConnected(DeviceIdentity {
-                address: port_address(address),
+                address: DeviceAddress::from_octets(address.0),
                 name,
                 service_uuids,
             }));
@@ -278,21 +278,19 @@ impl Watcher {
     }
 
     fn report_disconnected(&self, address: Address) {
-        let _ = self
-            .observations
-            .send(Observation::DeviceDisconnected(port_address(address)));
+        let _ =
+            self.observations
+                .send(Observation::DeviceDisconnected(DeviceAddress::from_octets(
+                    address.0,
+                )));
     }
-}
-
-fn port_address(address: Address) -> DeviceAddress {
-    DeviceAddress::from_octets(address.0)
 }
 
 impl Bluez {
     /// Opens a control link to `service` on the Connected Device at `address`.
     pub async fn open(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
         let address = Address::new(address.octets());

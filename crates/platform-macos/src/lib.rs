@@ -74,7 +74,7 @@ impl Platform for MacBluetooth {
 
     async fn open_control_link(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
         let stopped = || {
@@ -83,7 +83,7 @@ impl Platform for MacBluetooth {
         };
         let (reply, opened) = oneshot::channel();
         if !self.send(Command::Open {
-            address: *address,
+            address,
             service,
             reply,
         }) {

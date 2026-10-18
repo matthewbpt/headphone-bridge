@@ -72,12 +72,12 @@ impl FakeOs {
 
     /// Every attempt to open a control link to `address` fails with `failure`
     /// until [`FakeOs::allow_links`] is called.
-    pub fn fail_links(&self, address: &DeviceAddress, failure: LinkFailure) {
-        self.failures.lock().unwrap().insert(*address, failure);
+    pub fn fail_links(&self, address: DeviceAddress, failure: LinkFailure) {
+        self.failures.lock().unwrap().insert(address, failure);
     }
 
-    pub fn allow_links(&self, address: &DeviceAddress) {
-        self.failures.lock().unwrap().remove(address);
+    pub fn allow_links(&self, address: DeviceAddress) {
+        self.failures.lock().unwrap().remove(&address);
     }
 
     /// The address of the next Device the core tries to open a control link
@@ -116,17 +116,17 @@ impl Platform for FakePlatform {
 
     async fn open_control_link(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let _ = self.attempted.send(*address);
-        if let Some(failure) = self.failures.lock().unwrap().get(address) {
+        let _ = self.attempted.send(address);
+        if let Some(failure) = self.failures.lock().unwrap().get(&address) {
             return Err(failure.clone());
         }
         let (to_core, from_device) = mpsc::unbounded_channel();
         let (to_device, from_core) = mpsc::unbounded_channel();
         let _ = self.opened.send(DeviceLink {
-            address: *address,
+            address,
             service,
             written: from_core,
             send: to_core,

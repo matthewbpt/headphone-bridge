@@ -15,11 +15,9 @@ pub struct Sink<'a> {
     pub device_string: Option<&'a str>,
 }
 
-/// The Bluetooth Device `sink` plays to, or `None` for any other sink.
+/// The Bluetooth Device `sink` plays to, or `None` for any other sink. Each
+/// place the address can be is tried in turn, past any that doesn't parse.
 pub fn sink_device(sink: &Sink) -> Option<DeviceAddress> {
-    if let Some(address) = sink.bluez5_address {
-        return address.parse().ok();
-    }
     let from_name = || {
         let rest = sink
             .name
@@ -27,7 +25,8 @@ pub fn sink_device(sink: &Sink) -> Option<DeviceAddress> {
             .or_else(|| sink.name.strip_prefix("bluez_sink."))?;
         rest.get(..17)?.replace('_', ":").parse().ok()
     };
-    sink.device_string
+    sink.bluez5_address
         .and_then(|s| s.parse().ok())
+        .or_else(|| sink.device_string.and_then(|s| s.parse().ok()))
         .or_else(from_name)
 }

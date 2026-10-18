@@ -21,7 +21,7 @@ pub trait Platform: Send + Sync + 'static {
     /// Device at `address`.
     fn open_control_link(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> impl Future<Output = Result<ControlLink, LinkFailure>> + Send;
 }
@@ -103,8 +103,12 @@ impl TryFrom<String> for DeviceAddress {
 
 impl fmt::Display for DeviceAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let [a, b, c, d, e, g] = self.0;
-        write!(f, "{a:02X}:{b:02X}:{c:02X}:{d:02X}:{e:02X}:{g:02X}")
+        let [first, rest @ ..] = self.0;
+        write!(f, "{first:02X}")?;
+        for octet in rest {
+            write!(f, ":{octet:02X}")?;
+        }
+        Ok(())
     }
 }
 

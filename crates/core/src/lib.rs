@@ -52,8 +52,8 @@ pub struct Hold {
 impl Hold {
     /// The Device held, for a hold on the Primary Device; `None` for a hold on
     /// every Connected Device.
-    pub fn device(&self) -> Option<&DeviceAddress> {
-        self.device.as_ref()
+    pub fn device(&self) -> Option<DeviceAddress> {
+        self.device
     }
 }
 

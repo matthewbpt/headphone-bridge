@@ -99,7 +99,7 @@ async fn holding_the_primary_device_attaches_only_it_until_the_hold_ends() {
     wait_for(&core, |list| list.primary == Some(buds4pro().address)).await;
 
     let hold = core.hold_primary().expect("a Primary Device");
-    assert_eq!(hold.device(), Some(&buds4pro().address));
+    assert_eq!(hold.device(), Some(buds4pro().address));
     assert_eq!(os.next_attempt().await, buds4pro().address);
     let mut link = os.next_link().await;
     assert_eq!(link.address, buds4pro().address);

@@ -63,3 +63,19 @@ fn other_sinks_are_not_bluetooth_devices() {
         assert_eq!(sink_device(&sink), None, "{name}");
     }
 }
+
+#[test]
+fn a_sink_with_a_malformed_bluez5_address_falls_back_to_device_string_then_its_name() {
+    let sink = Sink {
+        name: "bluez_output.11_22_33_44_55_66.1",
+        bluez5_address: Some("not an address"),
+        device_string: Some("AC:80:0A:11:22:33"),
+    };
+    assert_eq!(sink_device(&sink), address("AC:80:0A:11:22:33"));
+
+    let sink = Sink {
+        device_string: None,
+        ..sink
+    };
+    assert_eq!(sink_device(&sink), address("11:22:33:44:55:66"));
+}

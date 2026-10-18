@@ -34,7 +34,7 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let address = buds4pro().address;
-    os.fail_links(&address, LinkFailure::InUseByAnotherProcess);
+    os.fail_links(address, LinkFailure::InUseByAnotherProcess);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
     wait_for(&core, |list| {
@@ -47,7 +47,7 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     })
     .await;
 
-    os.allow_links(&address);
+    os.allow_links(address);
     core.command(device_command(address, CommandKind::RetryAttach))
         .await
         .unwrap();
@@ -123,7 +123,7 @@ async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
 async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
-    os.fail_links(&buds4pro().address, LinkFailure::ServiceNotFound);
+    os.fail_links(buds4pro().address, LinkFailure::ServiceNotFound);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
     let start = tokio::time::Instant::now();
@@ -138,7 +138,7 @@ async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button(
         &core.device_list(),
         not_attached(NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound))
     ));
-    os.allow_links(&buds4pro().address);
+    os.allow_links(buds4pro().address);
     core.command(device_command(buds4pro().address, CommandKind::RetryAttach))
         .await
         .unwrap();
@@ -178,10 +178,10 @@ async fn each_link_failure_is_retried_unless_only_the_listener_or_a_restart_can_
     ] {
         let (platform, mut os) = fake_platform();
         let _core = Core::builder().start(platform);
-        os.fail_links(&buds4pro().address, failure.clone());
+        os.fail_links(buds4pro().address, failure.clone());
         os.observe(Observation::DeviceConnected(buds4pro()));
         os.next_attempt().await;
-        os.allow_links(&buds4pro().address);
+        os.allow_links(buds4pro().address);
 
         assert_eq!(
             os.attempts_within(Duration::from_secs(600)).await,
@@ -196,7 +196,7 @@ async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straigh
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let address = buds4pro().address;
-    os.fail_links(&address, LinkFailure::DeviceNotConnected);
+    os.fail_links(address, LinkFailure::DeviceNotConnected);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
 
@@ -204,7 +204,7 @@ async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straigh
     wait_for(&core, |list| list.devices.is_empty()).await;
     assert!(!os.attempts_within(Duration::from_secs(600)).await);
 
-    os.allow_links(&address);
+    os.allow_links(address);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     identify_buds4pro(&link);

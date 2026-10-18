@@ -305,7 +305,7 @@ async fn a_link_that_cannot_be_opened_leaves_the_device_connected_with_the_reaso
     ] {
         let (platform, os) = fake_platform();
         let core = Core::builder().start(platform);
-        os.fail_links(&buds4pro().address, failure);
+        os.fail_links(buds4pro().address, failure);
 
         os.observe(Observation::DeviceConnected(buds4pro()));
 

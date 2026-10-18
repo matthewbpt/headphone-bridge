@@ -64,8 +64,8 @@ impl SimulatedDevice {
     }
 
     /// Whether it's at `asked`.
-    pub(crate) fn is_at(&self, asked: &DeviceAddress) -> bool {
-        address(self.model) == *asked
+    pub(crate) fn is_at(&self, asked: DeviceAddress) -> bool {
+        address(self.model) == asked
     }
 
     /// Opens a control link to it, which it answers until the core drops the
