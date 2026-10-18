@@ -21,7 +21,7 @@ fn received_with_id(records: &[FrameRecord], id: u8) -> Vec<Vec<u8>> {
 /// status: R in ear, L in the case, Ambient.
 async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");

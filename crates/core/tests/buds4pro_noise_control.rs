@@ -17,7 +17,7 @@ const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 
 /// status, which reports Ambient as the Chosen Mode.
 async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -77,7 +77,7 @@ async fn setting_a_mode_sends_noise_controls_then_polls_and_an_ack_of_another_mo
 #[tokio::test]
 async fn a_mode_set_from_the_app_appears_once_the_noise_controls_update_confirms_it() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -142,7 +142,7 @@ async fn a_placement_change_alone_does_not_change_the_chosen_mode() {
 #[tokio::test]
 async fn a_gesture_on_the_device_changes_the_chosen_mode_live() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     // capture-4: the extended status reports Ambient, then pinch-and-hold
@@ -183,7 +183,7 @@ async fn a_mode_changed_from_the_phone_appears_through_the_extended_status() {
 #[tokio::test]
 async fn a_mode_is_not_sent_before_the_model_and_its_capabilities_are_known() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -203,7 +203,7 @@ async fn a_mode_is_not_sent_before_the_model_and_its_capabilities_are_known() {
 #[tokio::test]
 async fn a_mode_is_never_sent_to_an_unsupported_model() {
     let (platform, os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let buds3pro = DeviceIdentity {
         address: DeviceAddress("10:20:30:40:50:60".into()),
         name: "Galaxy Buds3 Pro (9F3C)".into(),
@@ -227,7 +227,7 @@ async fn real_buds4pro_sets_are_confirmed_by_their_acks() {
     use headphone_bridge_core::frame_log::Direction;
     use NoiseControlMode::*;
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     // The Device ACKs each set with `78 <applied mode>` and sends nothing

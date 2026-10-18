@@ -9,7 +9,7 @@ use support::fake_platform;
 #[tokio::test]
 async fn a_command_for_a_device_that_is_not_connected_is_rejected() {
     let (platform, _os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let unknown = DeviceAddress("AA:BB:CC:DD:EE:FF".into());
 
     for command in [

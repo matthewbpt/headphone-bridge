@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Device, DeviceList, DeviceState, Equalizer, Model, NoiseControlMode, PresetId,
+    Battery, Command, Core, Device, DeviceList, DeviceState, Equalizer, Model, NoiseControlMode,
+    PresetId,
 };
 use headphone_bridge_platform_android::messages::Message;
 use headphone_bridge_platform_android::Host;
@@ -24,7 +25,7 @@ struct Kotlin {
 
 fn start() -> (Host, Kotlin) {
     let (sink, messages) = mpsc::unbounded_channel();
-    let host = Host::start(move |message| sink.send(message).is_ok());
+    let host = Host::start(move |message| sink.send(message).is_ok(), Core::builder());
     let skipped = VecDeque::new();
     (host, Kotlin { messages, skipped })
 }

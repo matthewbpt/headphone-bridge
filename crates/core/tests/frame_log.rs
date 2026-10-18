@@ -85,7 +85,7 @@ fn read_log(path: &PathBuf) -> Vec<FrameRecord> {
 async fn every_frame_sent_and_received_is_logged_with_its_direction_and_model() {
     let path = log_path("every_frame_sent_and_received_is_logged");
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     core.command(Command::SetFrameLog(Some(path.clone())))
         .await
         .unwrap();
@@ -125,7 +125,7 @@ async fn every_frame_sent_and_received_is_logged_with_its_direction_and_model() 
 async fn a_recorded_log_replays_through_the_fake_platform() {
     let path = log_path("a_recorded_log_replays");
     let (platform, mut os) = fake_platform();
-    let recording = Core::start(platform);
+    let recording = Core::builder().start(platform);
     recording
         .command(Command::SetFrameLog(Some(path.clone())))
         .await
@@ -152,7 +152,7 @@ async fn a_recorded_log_replays_through_the_fake_platform() {
 
     let log = read_log(&path);
     let (platform, mut os) = fake_platform();
-    let replay = Core::start(platform);
+    let replay = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     for frame in received(&log) {
@@ -174,7 +174,7 @@ async fn a_recorded_log_replays_through_the_fake_platform() {
 async fn frames_after_the_log_is_switched_off_are_not_logged() {
     let path = log_path("frames_after_the_log_is_switched_off");
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     core.command(Command::SetFrameLog(Some(path.clone())))
         .await
         .unwrap();
@@ -222,7 +222,7 @@ async fn a_core_whose_frame_log_cannot_be_opened_starts_and_reports_the_path_and
 #[tokio::test]
 async fn a_frame_log_that_cannot_be_opened_is_reported() {
     let (platform, _os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-dir/log.frames");
 
     let result = core.command(Command::SetFrameLog(Some(path.clone()))).await;
@@ -242,7 +242,7 @@ async fn a_frame_log_that_cannot_be_opened_is_reported() {
 async fn frames_sent_by_a_command_are_logged_under_the_model() {
     let path = log_path("frames_sent_by_a_command_are_logged");
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     core.command(Command::SetFrameLog(Some(path.clone())))
         .await
         .unwrap();

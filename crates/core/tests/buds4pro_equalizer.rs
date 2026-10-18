@@ -16,7 +16,7 @@ use support::{
 /// status, which reports Preset 3, Dynamic (byte 9).
 async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -220,7 +220,7 @@ async fn clear_bass_is_rejected_as_the_model_has_none() {
 #[tokio::test]
 async fn a_preset_is_not_sent_before_the_device_is_attached() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");

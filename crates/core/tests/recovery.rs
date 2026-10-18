@@ -31,7 +31,7 @@ fn is(list: &DeviceList, state: DeviceState) -> bool {
 #[tokio::test(start_paused = true)]
 async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_go() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let address = buds4pro().address;
     os.fail_links(&address, LinkFailure::InUseByAnotherProcess);
     os.observe(Observation::DeviceConnected(buds4pro()));
@@ -59,7 +59,7 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
 #[tokio::test(start_paused = true)]
 async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
         address: DeviceAddress("A1:B2:C3:00:00:02".into()),
         name: "Galaxy Buds2 Pro (0002)".into(),
@@ -93,7 +93,7 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
 #[tokio::test(start_paused = true)]
 async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -119,7 +119,7 @@ async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
 #[tokio::test(start_paused = true)]
 async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.fail_links(&buds4pro().address, LinkFailure::ServiceNotFound);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
@@ -174,7 +174,7 @@ async fn each_link_failure_is_retried_unless_only_the_listener_or_a_restart_can_
         LinkFailure::Other("IOBluetooth error 0xE00002BC".into()),
     ] {
         let (platform, mut os) = fake_platform();
-        let _core = Core::start(platform);
+        let _core = Core::builder().start(platform);
         os.fail_links(&buds4pro().address, failure.clone());
         os.observe(Observation::DeviceConnected(buds4pro()));
         os.next_attempt().await;
@@ -191,7 +191,7 @@ async fn each_link_failure_is_retried_unless_only_the_listener_or_a_restart_can_
 #[tokio::test(start_paused = true)]
 async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straight_away() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let address = buds4pro().address;
     os.fail_links(&address, LinkFailure::DeviceNotConnected);
     os.observe(Observation::DeviceConnected(buds4pro()));
@@ -212,7 +212,7 @@ async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straigh
 #[tokio::test(start_paused = true)]
 async fn another_sony_model_is_not_retried() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let wh1000xm6 = DeviceIdentity {
         address: DeviceAddress("AC:80:0A:44:55:66".into()),
         name: "WH-1000XM6".into(),
@@ -240,7 +240,7 @@ async fn another_sony_model_is_not_retried() {
 #[tokio::test(start_paused = true)]
 async fn an_xm5_that_never_answers_is_given_up_on_and_retried() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     let opened_at = tokio::time::Instant::now();
@@ -272,7 +272,7 @@ const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
 async fn attached_xm5() -> (Core, support::FakeOs, support::DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;

@@ -18,6 +18,8 @@ use std::sync::OnceLock;
 use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::DeviceAddress;
+#[cfg(not(target_os = "android"))]
+use headphone_bridge_core::CoreBuilder;
 use headphone_bridge_core::{Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -102,24 +104,30 @@ fn frame_log_wanted(app: &AppHandle) -> bool {
 /// while it's on.
 #[cfg(not(target_os = "android"))]
 fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
-    let platform = platform::start();
-    let path = frame_log_wanted(app)
-        .then(|| frame_log_path(app))
-        .transpose();
-    match path {
-        Ok(Some(path)) => match Core::start_with_frame_log(platform, &path) {
-            (core, Ok(())) => (core, Some(path)),
-            (core, Err(error)) => {
-                eprintln!("couldn't open the frame log: {error:?}");
-                (core, None)
-            }
-        },
-        Ok(None) => (Core::start(platform), None),
+    let mut core = Core::builder();
+    let path = start_frame_log(app, &mut core);
+    (core.start(platform::start()), path)
+}
+
+/// Switches the frame log on for the core `core` starts, if wanted. Returns
+/// the log file while it's on.
+#[cfg(not(target_os = "android"))]
+fn start_frame_log(app: &AppHandle, core: &mut CoreBuilder) -> Option<PathBuf> {
+    if !frame_log_wanted(app) {
+        return None;
+    }
+    let path = match frame_log_path(app) {
+        Ok(path) => path,
         Err(error) => {
             eprintln!("couldn't open the frame log: {error:?}");
-            (Core::start(platform), None)
+            return None;
         }
+    };
+    if let Err(error) = core.frame_log(&path) {
+        eprintln!("couldn't open the frame log: {error:?}");
+        return None;
     }
+    Some(path)
 }
 
 /// The process's one core, started here unless Kotlin got there first (with

@@ -88,52 +88,7 @@ impl CoreBuilder {
 
     /// Starts the core on the current Tokio runtime.
     pub fn start(self, platform: impl Platform) -> Core {
-        Core::start_logging(platform, self.policy, self.frame_log)
-    }
-}
-
-impl Core {
-    /// A builder for a core: [`CoreBuilder::start`] starts it.
-    pub fn builder() -> CoreBuilder {
-        CoreBuilder::default()
-    }
-
-    /// Starts the core on the current Tokio runtime, Attaching every
-    /// Connected Device.
-    pub fn start(platform: impl Platform) -> Core {
-        Core::start_with(platform, AttachPolicy::Always)
-    }
-
-    /// Starts the core on the current Tokio runtime with `policy`.
-    pub fn start_with(platform: impl Platform, policy: AttachPolicy) -> Core {
-        Core::start_logging(platform, policy, FrameLog::default())
-    }
-
-    /// Starts the core like [`Core::start`], with the frame log already on, appending to `path`,
-    /// so Devices Attached at startup are logged too. The core starts even if
-    /// the file can't be opened, with the frame log off.
-    pub fn start_with_frame_log(
-        platform: impl Platform,
-        path: &Path,
-    ) -> (Core, Result<(), CommandError>) {
-        Core::start_with_policy_and_frame_log(platform, AttachPolicy::Always, path)
-    }
-
-    /// Starts the core like [`Core::start_with`], with the frame log already
-    /// on, like [`Core::start_with_frame_log`].
-    pub fn start_with_policy_and_frame_log(
-        platform: impl Platform,
-        policy: AttachPolicy,
-        path: &Path,
-    ) -> (Core, Result<(), CommandError>) {
-        let frame_log = FrameLog::default();
-        let started = frame_log
-            .start(path)
-            .map_err(CommandError::FrameLogUnavailable);
-        (Core::start_logging(platform, policy, frame_log), started)
-    }
-
-    fn start_logging(platform: impl Platform, policy: AttachPolicy, frame_log: FrameLog) -> Core {
+        let CoreBuilder { policy, frame_log } = self;
         let (requests, requests_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
         state::spawn(platform, policy, device_list_tx, frame_log, requests_rx);
@@ -142,6 +97,13 @@ impl Core {
             device_list,
             next_hold: AtomicU64::new(0),
         }
+    }
+}
+
+impl Core {
+    /// A builder for a core: [`CoreBuilder::start`] starts it.
+    pub fn builder() -> CoreBuilder {
+        CoreBuilder::default()
     }
 
     /// Sends `command` to the core. Resolves once the command has been

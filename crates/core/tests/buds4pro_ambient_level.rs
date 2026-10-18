@@ -12,7 +12,7 @@ use support::{
 /// status, which reports Ambient Level 2 (byte 23).
 async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -95,7 +95,7 @@ async fn a_level_outside_the_models_range_is_rejected_before_anything_is_sent() 
 #[tokio::test]
 async fn a_level_is_not_sent_before_the_model_and_its_capabilities_are_known() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
