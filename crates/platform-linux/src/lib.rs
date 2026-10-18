@@ -66,7 +66,11 @@ mod linux {
             address: &DeviceAddress,
             service: Uuid,
         ) -> Result<ControlLink, LinkFailure> {
-            self.bluez.get().await?.open(address, service).await
+            let bluez = self.bluez.get().await.map_err(|error| {
+                eprintln!("Bluetooth is unavailable: {error}");
+                LinkFailure::from(error)
+            })?;
+            bluez.open(address, service).await
         }
     }
 }

@@ -49,17 +49,40 @@ pub struct Bluez {
 /// Who is waiting for BlueZ to hand over a channel, by Device.
 type Waiters = Arc<std::sync::Mutex<HashMap<Address, oneshot::Sender<ConnectRequest>>>>;
 
+/// Why BlueZ couldn't be reached or watched.
+#[derive(Debug, thiserror::Error)]
+pub enum BluezError {
+    /// No session with bluetoothd, e.g. it isn't running yet, or D-Bus isn't.
+    #[error("couldn't connect to BlueZ: {0}")]
+    Connection(#[source] bluer::Error),
+    /// bluetoothd has no Bluetooth adapter.
+    #[error("BlueZ has no Bluetooth adapter: {0}")]
+    NoAdapter(#[source] bluer::Error),
+    /// Following the adapter's Devices failed.
+    #[error("lost BlueZ while watching Devices: {0}")]
+    Watching(#[source] bluer::Error),
+}
+
+impl From<BluezError> for LinkFailure {
+    fn from(_: BluezError) -> LinkFailure {
+        LinkFailure::BluetoothUnavailable
+    }
+}
+
 /// Connects to BlueZ once, for whoever asks first. A failed connection isn't
 /// kept, so the next caller tries again once Bluetooth is ready.
 #[derive(Clone, Default)]
 pub struct Connection(Arc<OnceCell<Bluez>>);
 
 impl Connection {
-    pub async fn get(&self) -> Result<&Bluez, LinkFailure> {
+    pub async fn get(&self) -> Result<&Bluez, BluezError> {
         self.0
             .get_or_try_init(|| async {
-                let session = Session::new().await?;
-                let adapter = session.default_adapter().await?;
+                let session = Session::new().await.map_err(BluezError::Connection)?;
+                let adapter = session
+                    .default_adapter()
+                    .await
+                    .map_err(BluezError::NoAdapter)?;
                 Ok(Bluez {
                     session,
                     adapter,
@@ -67,10 +90,6 @@ impl Connection {
                 })
             })
             .await
-            .map_err(|e: bluer::Error| {
-                eprintln!("Bluetooth is unavailable: {e}");
-                LinkFailure::BluetoothUnavailable
-            })
     }
 }
 
@@ -79,11 +98,11 @@ impl Connection {
 /// scans, connects or disconnects anything.
 pub async fn watch(connection: Connection, observations: mpsc::UnboundedSender<Observation>) {
     keep_watching(&observations, || async {
-        let bluez = connection.get().await.map_err(|e| e.to_string())?;
+        let bluez = connection.get().await?;
         Watcher::new(observations.clone())
             .run(&bluez.adapter)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(BluezError::Watching)
     })
     .await;
 }
@@ -481,5 +500,19 @@ mod tests {
             )))
         );
         assert!(core.try_recv().is_err());
+    }
+
+    #[test]
+    fn bluez_unreachable_is_bluetooth_unavailable() {
+        let unreachable = bluer::Error {
+            kind: bluer::ErrorKind::Internal(bluer::InternalErrorKind::DBus(
+                "org.freedesktop.DBus.Error.ServiceUnknown".into(),
+            )),
+            message: "The name org.bluez was not provided by any .service files".into(),
+        };
+        assert_eq!(
+            LinkFailure::from(BluezError::Connection(unreachable)),
+            LinkFailure::BluetoothUnavailable
+        );
     }
 }
