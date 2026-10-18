@@ -64,18 +64,56 @@ fn an_opened_link_answers_its_request() {
 }
 
 #[test]
-fn a_failed_open_is_for_want_of_permission_or_else_says_why() {
-    assert_eq!(
-        parse_event(r#"{"type":"openFailed","request":3,"permission":true,"message":"denied"}"#)
+fn a_failed_open_says_why_by_its_link_failure_name() {
+    for (reason, failure) in [
+        ("inUseByAnotherProcess", LinkFailure::InUseByAnotherProcess),
+        (
+            "bluetoothPermissionDenied",
+            LinkFailure::BluetoothPermissionDenied,
+        ),
+        ("serviceNotFound", LinkFailure::ServiceNotFound),
+        ("deviceNotConnected", LinkFailure::DeviceNotConnected),
+    ] {
+        assert_eq!(
+            parse_event(&format!(
+                r#"{{"type":"openFailed","request":3,"reason":"{reason}"}}"#
+            ))
             .unwrap(),
-        Event::OpenFailed {
-            request: 3,
-            failure: LinkFailure::BluetoothPermissionDenied
-        }
-    );
+            Event::OpenFailed {
+                request: 3,
+                failure
+            }
+        );
+    }
+}
+
+#[test]
+fn a_failed_open_for_a_reason_the_core_does_not_know_is_refused() {
+    assert!(matches!(
+        parse_event(r#"{"type":"openFailed","request":3,"reason":"cosmicRays"}"#),
+        Err(BadMessage(_))
+    ));
+}
+
+#[test]
+fn a_failed_open_whose_detail_does_not_fit_its_reason_is_refused() {
+    assert!(matches!(
+        parse_event(r#"{"type":"openFailed","request":3,"reason":"other"}"#),
+        Err(BadMessage(_))
+    ));
+    assert!(matches!(
+        parse_event(
+            r#"{"type":"openFailed","request":3,"reason":"bluetoothPermissionDenied","detail":"denied"}"#
+        ),
+        Err(BadMessage(_))
+    ));
+}
+
+#[test]
+fn a_failed_open_without_a_cause_carries_its_detail() {
     assert_eq!(
         parse_event(
-            r#"{"type":"openFailed","request":4,"permission":false,"message":"secure: IOException"}"#
+            r#"{"type":"openFailed","request":4,"reason":"other","detail":"secure: IOException"}"#
         )
         .unwrap(),
         Event::OpenFailed {

@@ -59,10 +59,12 @@ enum WireEvent {
         request: u64,
         link: i32,
     },
+    /// `{request, reason, detail?}`: `reason` is the link failure's serde
+    /// name, and only `other` carries a `detail`.
     OpenFailed {
         request: u64,
-        permission: bool,
-        message: String,
+        #[serde(flatten)]
+        failure: LinkFailure,
     },
     Data {
         link: i32,
@@ -98,18 +100,7 @@ pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
             Event::Observed(Observation::AudioOutputChanged(address.map(DeviceAddress)))
         }
         WireEvent::Opened { request, link } => Event::Opened { request, link },
-        WireEvent::OpenFailed {
-            request,
-            permission,
-            message,
-        } => Event::OpenFailed {
-            request,
-            failure: if permission {
-                LinkFailure::BluetoothPermissionDenied
-            } else {
-                LinkFailure::Other(message)
-            },
-        },
+        WireEvent::OpenFailed { request, failure } => Event::OpenFailed { request, failure },
         WireEvent::Data { link, bytes } => Event::Data { link, bytes },
         WireEvent::Closed { link } => Event::Closed { link },
         WireEvent::HoldAll => Event::Hold(HoldKind::All),

@@ -205,7 +205,7 @@ async fn without_the_nearby_devices_permission_a_device_is_not_attached_for_want
     host.event(r#"{"type":"holdAll"}"#).unwrap();
     let request = kotlin.open_asked(XM5).await;
     host.event(&format!(
-        r#"{{"type":"openFailed","request":{request},"permission":true,"message":"denied"}}"#
+        r#"{{"type":"openFailed","request":{request},"reason":"bluetoothPermissionDenied"}}"#
     ))
     .unwrap();
     kotlin

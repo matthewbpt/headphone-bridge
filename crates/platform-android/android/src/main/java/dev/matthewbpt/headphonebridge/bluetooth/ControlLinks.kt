@@ -17,6 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger
 /** The most a control link's reader takes from its socket at once. */
 private const val READ_BUFFER_BYTES = 4096
 
+// Copies of LinkFailure's serde names, in crates/core/src/platform.rs, for
+// why a control link couldn't be opened. Keep them in step.
+private const val PERMISSION_DENIED = "bluetoothPermissionDenied"
+private const val OTHER = "other"
+
 /** The RFCOMM control links the core asks [Hub] to open, by link id. */
 @SuppressLint("MissingPermission")
 internal object ControlLinks {
@@ -40,7 +45,7 @@ internal object ControlLinks {
     address: String,
     uuid: String,
   ) {
-    if (!permitted) return openFailed(request, true, "no Nearby devices permission")
+    if (!permitted) return openFailed(request, PERMISSION_DENIED)
     Thread({ answerOpen(adapter, request, address, uuid) }, "rfcomm-open-$address").start()
   }
 
@@ -61,11 +66,12 @@ internal object ControlLinks {
       sendToCore(coreEvent("opened").put("request", request).put("link", linkId))
       startReader(linkId, socket)
     } catch (e: SecurityException) {
-      openFailed(request, true, "${e.message}")
+      Log.i(TAG, "open to $address: ${e.message}")
+      openFailed(request, PERMISSION_DENIED)
     } catch (e: IOException) {
-      openFailed(request, false, "${e.message}")
+      openFailedOther(request, e.message ?: e.javaClass.simpleName)
     } catch (e: Exception) {
-      openFailed(request, false, "${e.javaClass.simpleName}: ${e.message}")
+      openFailedOther(request, "${e.javaClass.simpleName}: ${e.message}")
     }
   }
 
@@ -110,13 +116,17 @@ internal object ControlLinks {
     }
   }
 
+  /** Answers [request] with the link failure named [reason], a cause with no detail. */
   private fun openFailed(
     request: Long,
-    permission: Boolean,
-    message: String,
-  ) = sendToCore(
-    coreEvent("openFailed").put("request", request).put("permission", permission).put("message", message),
-  )
+    reason: String,
+  ) = sendToCore(coreEvent("openFailed").put("request", request).put("reason", reason))
+
+  /** Answers [request] with a link failure that has no cause, only its [detail]. */
+  private fun openFailedOther(
+    request: Long,
+    detail: String,
+  ) = sendToCore(coreEvent("openFailed").put("request", request).put("reason", OTHER).put("detail", detail))
 
   /** Reads [socket] on its own thread until it closes, then tells the core. */
   private fun startReader(
