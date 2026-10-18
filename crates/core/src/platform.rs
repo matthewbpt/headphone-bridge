@@ -7,7 +7,7 @@
 use std::fmt;
 use std::future::Future;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -66,8 +66,11 @@ pub struct ControlLink {
 }
 
 /// Why a control link couldn't be opened. Its `Display` is for logs; the
-/// shell words it for the listener.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+/// shell words it for the listener. An adapter whose OS side reports it in
+/// JSON reads it as `{reason, detail?}`, with `detail` only for
+/// [`LinkFailure::Other`].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Deserialize)]
+#[serde(tag = "reason", content = "detail", rename_all = "camelCase")]
 pub enum LinkFailure {
     /// Another process, such as the vendor's desktop app, holds the link.
     #[error("another process holds the control link")]

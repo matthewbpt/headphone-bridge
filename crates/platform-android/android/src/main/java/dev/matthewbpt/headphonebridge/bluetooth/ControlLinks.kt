@@ -17,6 +17,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /** The most a control link's reader takes from its socket at once. */
 private const val READ_BUFFER_BYTES = 4096
 
+// The core's names for why a control link couldn't be opened.
+private const val PERMISSION_DENIED = "bluetoothPermissionDenied"
+private const val OTHER = "other"
+
 /** The RFCOMM control links the core asks [Hub] to open, by link id. */
 @SuppressLint("MissingPermission")
 internal object ControlLinks {
@@ -40,7 +44,7 @@ internal object ControlLinks {
     address: String,
     uuid: String,
   ) {
-    if (!permitted) return openFailed(request, true, "no Nearby devices permission")
+    if (!permitted) return openFailed(request, PERMISSION_DENIED)
     Thread({ answerOpen(adapter, request, address, uuid) }, "rfcomm-open-$address").start()
   }
 
@@ -61,11 +65,12 @@ internal object ControlLinks {
       sendToCore(coreEvent("opened").put("request", request).put("link", linkId))
       startReader(linkId, socket)
     } catch (e: SecurityException) {
-      openFailed(request, true, "${e.message}")
+      Log.i(TAG, "open to $address: ${e.message}")
+      openFailed(request, PERMISSION_DENIED)
     } catch (e: IOException) {
-      openFailed(request, false, "${e.message}")
+      openFailed(request, OTHER, "${e.message}")
     } catch (e: Exception) {
-      openFailed(request, false, "${e.javaClass.simpleName}: ${e.message}")
+      openFailed(request, OTHER, "${e.javaClass.simpleName}: ${e.message}")
     }
   }
 
@@ -110,12 +115,18 @@ internal object ControlLinks {
     }
   }
 
+  /**
+   * Answers [request] with why the open failed: [reason] is the core's name
+   * for a link failure, and only [OTHER] carries a [detail].
+   */
   private fun openFailed(
     request: Long,
-    permission: Boolean,
-    message: String,
+    reason: String,
+    detail: String? = null,
   ) = sendToCore(
-    coreEvent("openFailed").put("request", request).put("permission", permission).put("message", message),
+    coreEvent("openFailed").put("request", request).put("reason", reason).apply {
+      if (detail != null) put("detail", detail)
+    },
   )
 
   /** Reads [socket] on its own thread until it closes, then tells the core. */
