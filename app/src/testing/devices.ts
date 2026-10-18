@@ -21,7 +21,7 @@ const buds4ProCapabilities: Capabilities = {
   noiseCancellingLevel: { min: 0, max: 4 },
   powerOff: false,
   equalizer: {
-    presets: [...samsungPresets, { id: 7, name: "Custom", editable: false, selectable: false }],
+    presets: [...samsungPresets, { id: 6, name: "Custom", editable: false, selectable: false }],
     bands: null,
     clearBass: null,
   },

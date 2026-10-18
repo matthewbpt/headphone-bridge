@@ -795,7 +795,7 @@ describe("Equalizer", () => {
 
   it("shows Custom, set from Samsung's app, without offering it to pick", async () => {
     renderWindow(
-      new FakeCore(only(buds4Pro({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
+      new FakeCore(only(buds4Pro({ equalizer: { preset: 6, bands: null, clearBass: null } }))),
     );
 
     expect(await preset()).toHaveDisplayValue("Custom");
