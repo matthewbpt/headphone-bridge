@@ -41,21 +41,45 @@ pub fn watch(observations: mpsc::UnboundedSender<Observation>) {
 
 type Shared<T> = Rc<RefCell<T>>;
 
+/// Why watching the sound server stopped.
+#[derive(Debug, thiserror::Error)]
+enum SoundServerError {
+    /// libpulse couldn't create a main loop.
+    #[error("no main loop")]
+    NoMainLoop,
+    /// libpulse couldn't create a context.
+    #[error("no context")]
+    NoContext,
+    /// The connection to the sound server failed or ended.
+    #[error("couldn't connect")]
+    ConnectionFailed,
+    /// The main loop was asked to quit.
+    #[error("the main loop quit")]
+    MainLoopQuit,
+    /// The core stopped listening for observations.
+    #[error("the core stopped")]
+    CoreStopped,
+    /// A PulseAudio call failed.
+    #[error("{}", describe(*.0))]
+    PulseAudio(libpulse_binding::error::PAErr),
+}
+
 /// Watches until the connection to the sound server ends.
 fn run(
     observations: &mpsc::UnboundedSender<Observation>,
     last: &mut Option<Option<DeviceAddress>>,
-) -> Result<(), String> {
-    let mut mainloop = Mainloop::new().ok_or("no main loop")?;
-    let mut context = Context::new(&mainloop, "Headphone Bridge").ok_or("no context")?;
+) -> Result<(), SoundServerError> {
+    let mut mainloop = Mainloop::new().ok_or(SoundServerError::NoMainLoop)?;
+    let mut context =
+        Context::new(&mainloop, "Headphone Bridge").ok_or(SoundServerError::NoContext)?;
     context
         .connect(None, FlagSet::NOFAIL, None)
-        .map_err(describe)?;
+        .map_err(SoundServerError::PulseAudio)?;
     loop {
         iterate(&mut mainloop)?;
         match context.get_state() {
             State::Ready => break,
-            State::Failed | State::Terminated => return Err("couldn't connect".into()),
+            State::Failed | State::Terminated => return Err(SoundServerError::ConnectionFailed),
             _ => {}
         }
     }
@@ -108,18 +132,18 @@ fn run(
                 *last = Some(device.clone());
                 observations
                     .send(Observation::AudioOutputChanged(device))
-                    .map_err(|_| "the core stopped")?;
+                    .map_err(|_| SoundServerError::CoreStopped)?;
             }
         }
         iterate(&mut mainloop)?;
     }
 }
 
-fn iterate(mainloop: &mut Mainloop) -> Result<(), String> {
+fn iterate(mainloop: &mut Mainloop) -> Result<(), SoundServerError> {
     match mainloop.iterate(true) {
         IterateResult::Success(_) => Ok(()),
-        IterateResult::Quit(_) => Err("the main loop quit".into()),
-        IterateResult::Err(error) => Err(describe(error)),
+        IterateResult::Quit(_) => Err(SoundServerError::MainLoopQuit),
+        IterateResult::Err(error) => Err(SoundServerError::PulseAudio(error)),
     }
 }
 
