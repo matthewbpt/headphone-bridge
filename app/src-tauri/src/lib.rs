@@ -131,11 +131,10 @@ fn start_frame_log(app: &AppHandle, core: &mut CoreBuilder) -> Option<PathBuf> {
 /// wanted. Devices stay Detached until the App Screen holds them, so no
 /// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
-fn android_core(
-    app: &AppHandle,
-) -> Result<(&'static Core, Option<PathBuf>), headphone_bridge_platform_android::android::StartError>
-{
-    let core = headphone_bridge_platform_android::android::core()?;
+fn android_core(app: &AppHandle) -> anyhow::Result<(&'static Core, Option<PathBuf>)> {
+    use anyhow::Context;
+    let core =
+        headphone_bridge_platform_android::android::core().context("couldn't start the core")?;
     if !frame_log_wanted(app) {
         return Ok((core, None));
     }
@@ -381,10 +380,6 @@ async fn share_frame_log(
 
 /// `error` for the setup hook to return. Tauri keeps only the Display of
 /// what the hook returns, so the context chain goes into it here.
-#[cfg_attr(
-    all(target_os = "android", not(test)),
-    expect(dead_code, reason = "Android's core is started by its adapter")
-)]
 fn setup_hook_error(error: &anyhow::Error) -> Box<dyn std::error::Error> {
     format!("{error:#}").into()
 }
@@ -443,7 +438,8 @@ pub fn run() {
                 (CORE.get_or_init(|| core), frame_log)
             };
             #[cfg(target_os = "android")]
-            let (core, frame_log) = android_core(app.handle())?;
+            let (core, frame_log) =
+                android_core(app.handle()).map_err(|error| setup_hook_error(&error))?;
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
