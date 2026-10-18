@@ -81,8 +81,11 @@ export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string
 /** Why the shell couldn't open the app's page in Android's settings. */
 export type AppSettingsError = "appSettingsUnsupported" | { appSettingsFailed: string };
 
+/** Why the shell couldn't switch the Simulated Device: the developer text why. */
+export type SimulateError = { simulatedDeviceUnavailable: string };
+
 /** Why a command was rejected, by the core or the shell. */
-type Rejection = CommandError | ShareError | AppSettingsError;
+type Rejection = CommandError | ShareError | AppSettingsError | SimulateError;
 
 /** Each reason given, as the name it's sent under. */
 type RejectionKey = Rejection extends infer E ? (E extends string ? E : keyof E) : never;
@@ -114,6 +117,7 @@ const WORDS: {
   shareFailed: (message) => message,
   appSettingsUnsupported: "only Android has app settings",
   appSettingsFailed: (message) => message,
+  simulatedDeviceUnavailable: (message) => message,
 };
 
 /**
@@ -225,7 +229,7 @@ export function useFrameLog(): {
 }
 
 /**
- * The Simulated Device, a stand-in for headphones on the emulator: the Model
+ * The Simulated Device, a stand-in for headphones in debug builds: the Model
  * it answers as, or null while it's off. Undefined until known, and for good
  * where the shell has none, as in release builds.
  */

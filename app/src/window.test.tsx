@@ -1959,33 +1959,60 @@ describe("Settings", () => {
     expect(screen.getByRole("checkbox", { name: "Frame log" })).not.toBeChecked();
   });
 
-  it("switches on a Simulated Device from the Developer section of a debug Android build", async () => {
-    const core = new FakeCore(only(buds4Pro()), { platform: "android", simulatedDevice: true });
+  it.each(["desktop", "android"] as const)(
+    "switches on a Simulated Device from the Developer section of a %s debug build",
+    async (platform) => {
+      const core = new FakeCore(only(buds4Pro()), { platform, simulatedDevice: true });
+      renderWindow(core);
+
+      await userEvent.click(await screen.findByText("Settings"));
+      await userEvent.click(screen.getByText("Developer"));
+      const simulated = await screen.findByRole("combobox", { name: "Simulated Device" });
+      expect(simulated).toHaveValue("");
+
+      await userEvent.selectOptions(simulated, "WH-1000XM5");
+      expect(core.simulatedDevice()).toBe("wh1000xm5");
+      expect(simulated).toHaveValue("wh1000xm5");
+
+      await userEvent.selectOptions(simulated, "None");
+      expect(core.simulatedDevice()).toBeNull();
+    },
+  );
+
+  it("shows why the Simulated Device couldn't be switched", async () => {
+    const core = new FakeCore(only(buds4Pro()), { simulatedDevice: true });
+    core.answer("set_simulated_device", {
+      reject: { simulatedDeviceUnavailable: "the Galaxy Buds fixture has no extended status" },
+    });
     renderWindow(core);
 
     await userEvent.click(await screen.findByText("Settings"));
     await userEvent.click(screen.getByText("Developer"));
     const simulated = await screen.findByRole("combobox", { name: "Simulated Device" });
-    expect(simulated).toHaveValue("");
+    await userEvent.selectOptions(simulated, "Galaxy Buds2");
 
-    await userEvent.selectOptions(simulated, "WH-1000XM5");
-    expect(core.simulatedDevice()).toBe("wh1000xm5");
-    expect(simulated).toHaveValue("wh1000xm5");
-
-    await userEvent.selectOptions(simulated, "None");
+    expect(
+      await screen.findByText(
+        "Couldn't switch the Simulated Device: the Galaxy Buds fixture has no extended status",
+      ),
+    ).toBeVisible();
     expect(core.simulatedDevice()).toBeNull();
+    expect(simulated).toHaveValue("");
   });
 
-  it("has no Simulated Device where the shell has none, as in release builds", async () => {
-    const core = new FakeCore(only(buds4Pro()), { platform: "android" });
-    renderWindow(core);
+  it.each(["desktop", "android"] as const)(
+    "has no Simulated Device where the %s shell has none, as in release builds",
+    async (platform) => {
+      const core = new FakeCore(only(buds4Pro()), { platform });
+      renderWindow(core);
 
-    await userEvent.click(await screen.findByText("Settings"));
-    await userEvent.click(screen.getByText("Developer"));
+      await userEvent.click(await screen.findByText("Settings"));
+      await userEvent.click(screen.getByText("Developer"));
 
-    expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
-    expect(screen.queryByRole("combobox", { name: "Simulated Device" })).not.toBeInTheDocument();
-  });
+      expect(screen.getByRole("checkbox", { name: "Frame log" })).toBeVisible();
+      expect(screen.queryByRole("combobox", { name: "Simulated Device" })).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("Share frame log", () => {
