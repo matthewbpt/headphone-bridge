@@ -125,25 +125,6 @@ pub fn simulator() -> Result<&'static headphone_bridge_simulated::Simulator, Sta
     Ok(host()?.simulator())
 }
 
-/// Switches the Simulated Device on as `model`, or off with `None`, once the
-/// core has started; before that there's nothing to switch. Debug builds
-/// alone have it.
-#[cfg(debug_assertions)]
-pub fn simulate(model: Option<headphone_bridge_core::Model>) {
-    if let Some(host) = HOST.get() {
-        if let Err(error) = host.simulator().simulate(model) {
-            log(&format!("couldn't switch the Simulated Device: {error}"));
-        }
-    }
-}
-
-/// The Simulated Device's Model while it's switched on: never before the
-/// core has started.
-#[cfg(debug_assertions)]
-pub fn simulated() -> Option<headphone_bridge_core::Model> {
-    HOST.get().and_then(|host| host.simulator().model())
-}
-
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
 /// hasn't, with the frame log on at `frame_log` if the setting is on, so a
 /// widget or tile tap's Attach is logged too. From `NativeCore.start`.
