@@ -54,12 +54,15 @@ private fun notAttachedReasonText(reason: JSONObject): String =
     "serviceNotFound" -> "Control service not found"
     "deviceNotConnected" -> "Not Connected"
     "noResponse" -> "The Device didn't respond"
-    "other" -> reason.optString("message")
+    "other" -> "$LINK_FAILED\n${reason.optString("detail")}"
     else -> LINK_DROPPED
   }
 
 /** The shell's label for a dropped link, and the widget's for one it can't get. */
 const val LINK_DROPPED = "Another app or device may be using it"
+
+/** The shell's label for a link failure without a cause, above its detail. */
+const val LINK_FAILED = "Couldn't open the control link"
 const val NO_DEVICE_CONNECTED = "No Device Connected"
 const val ALLOW_NEARBY_DEVICES = "Open the app to allow Nearby devices"
 const val TAP_TO_REFRESH = "Tap to refresh"
