@@ -249,18 +249,14 @@ async fn set_frame_log(
 #[cfg(all(target_os = "android", debug_assertions))]
 #[tauri::command]
 fn simulated_device() -> Option<headphone_bridge_core::Model> {
-    // The setup started the core, so it's there to ask.
     headphone_bridge_platform_android::android::simulated()
-        .ok()
-        .flatten()
 }
 
 /// Switches the Simulated Device on as `model`, or off with `None`.
 #[cfg(all(target_os = "android", debug_assertions))]
 #[tauri::command]
 fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
-    // The setup started the core, so it's there to switch.
-    let _ = headphone_bridge_platform_android::android::simulate(model);
+    headphone_bridge_platform_android::android::simulate(model);
 }
 
 /// Whether Android lets the app use Bluetooth: the Nearby devices permission,

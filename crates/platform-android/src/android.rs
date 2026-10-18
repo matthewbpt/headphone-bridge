@@ -66,6 +66,10 @@ pub enum StartError {
     /// Tokio's runtime couldn't be built, e.g. the OS refused it a thread.
     #[error("couldn't start Tokio")]
     Runtime(#[source] std::io::Error),
+    /// Kotlin's `NativeCore` couldn't be reached over JNI, so the core would
+    /// have no one to send its messages to.
+    #[error("can't reach Kotlin")]
+    Kotlin(#[source] jni::errors::Error),
 }
 
 /// The process's one core, started on first use. Safe to call from any
@@ -117,18 +121,21 @@ fn runtime() -> Result<&'static Tokio, StartError> {
     Ok(RUNTIME.get_or_init(|| runtime))
 }
 
-/// Switches the Simulated Device on as `model`, or off with `None`. Debug
-/// builds alone have it.
+/// Switches the Simulated Device on as `model`, or off with `None`, once the
+/// core has started; before that there's nothing to switch. Debug builds
+/// alone have it.
 #[cfg(debug_assertions)]
-pub fn simulate(model: Option<headphone_bridge_core::Model>) -> Result<(), StartError> {
-    host()?.simulate(model);
-    Ok(())
+pub fn simulate(model: Option<headphone_bridge_core::Model>) {
+    if let Some(host) = HOST.get() {
+        host.simulate(model);
+    }
 }
 
-/// The Simulated Device's Model while it's switched on.
+/// The Simulated Device's Model while it's switched on: never before the
+/// core has started.
 #[cfg(debug_assertions)]
-pub fn simulated() -> Result<Option<headphone_bridge_core::Model>, StartError> {
-    Ok(host()?.simulated())
+pub fn simulated() -> Option<headphone_bridge_core::Model> {
+    HOST.get().and_then(Host::simulated)
 }
 
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
@@ -142,10 +149,7 @@ pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) -> Resu
                 let _ = BRIDGE.set(Bridge { vm, class });
                 log("Kotlin connected");
             }
-            (Err(error), _) | (_, Err(error)) => {
-                log(&format!("can't reach Kotlin: {error}"));
-                return Ok(());
-            }
+            (Err(error), _) | (_, Err(error)) => return Err(StartError::Kotlin(error)),
         }
     }
     host_with(frame_log)?.resend_device_list();
