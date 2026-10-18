@@ -9,8 +9,8 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
-import android.text.style.StyleSpan
 import android.text.format.DateUtils
+import android.text.style.StyleSpan
 import android.util.Log
 import android.util.SizeF
 import android.view.View
@@ -25,12 +25,19 @@ import android.widget.RemoteViews
  * Nearby devices permission, every tap opens the app.
  */
 class ModeWidget : AppWidgetProvider() {
-  override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+  override fun onUpdate(
+    context: Context,
+    manager: AppWidgetManager,
+    ids: IntArray,
+  ) {
     Surfaces.watch(context)
     render(context, manager, ids)
   }
 
-  override fun onReceive(context: Context, intent: Intent) {
+  override fun onReceive(
+    context: Context,
+    intent: Intent,
+  ) {
     when (intent.action) {
       ACTION_SET_MODE, ACTION_REFRESH -> {
         val mode = intent.getStringExtra(EXTRA_MODE)
@@ -39,7 +46,10 @@ class ModeWidget : AppWidgetProvider() {
         val result = goAsync()
         Surfaces.controller(context).tap(mode) { result.finish() }
       }
-      else -> super.onReceive(context, intent)
+
+      else -> {
+        super.onReceive(context, intent)
+      }
     }
   }
 
@@ -49,6 +59,7 @@ class ModeWidget : AppWidgetProvider() {
     private const val EXTRA_MODE = "mode"
     private const val REFRESH_REQUEST = 100
     private const val OPEN_REQUEST = 200
+
     /** How faded a Pending mode's circle and label are; RemoteViews can't spin a ring round it. */
     private const val PENDING_ALPHA = 0.6f
 
@@ -58,14 +69,21 @@ class ModeWidget : AppWidgetProvider() {
     /** The height, in dp, from which the full layout fits: two rows on One UI and Pixel. */
     private const val FULL_HEIGHT = 160f
 
-    private class SlotViews(val slot: Int, val trackStart: Int, val trackEnd: Int, val circle: Int, val label: Int)
-
-    private val SLOT_VIEWS = listOf(
-      SlotViews(R.id.slot0, R.id.track0_start, R.id.track0_end, R.id.circle0, R.id.label0),
-      SlotViews(R.id.slot1, R.id.track1_start, R.id.track1_end, R.id.circle1, R.id.label1),
-      SlotViews(R.id.slot2, R.id.track2_start, R.id.track2_end, R.id.circle2, R.id.label2),
-      SlotViews(R.id.slot3, R.id.track3_start, R.id.track3_end, R.id.circle3, R.id.label3),
+    private class SlotViews(
+      val slot: Int,
+      val trackStart: Int,
+      val trackEnd: Int,
+      val circle: Int,
+      val label: Int,
     )
+
+    private val SLOT_VIEWS =
+      listOf(
+        SlotViews(R.id.slot0, R.id.track0_start, R.id.track0_end, R.id.circle0, R.id.label0),
+        SlotViews(R.id.slot1, R.id.track1_start, R.id.track1_end, R.id.circle1, R.id.label1),
+        SlotViews(R.id.slot2, R.id.track2_start, R.id.track2_end, R.id.circle2, R.id.label2),
+        SlotViews(R.id.slot3, R.id.track3_start, R.id.track3_end, R.id.circle3, R.id.label3),
+      )
 
     fun updateAll(context: Context) {
       val manager = AppWidgetManager.getInstance(context)
@@ -73,19 +91,29 @@ class ModeWidget : AppWidgetProvider() {
       if (ids.isNotEmpty()) render(context, manager, ids)
     }
 
-    private fun render(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    private fun render(
+      context: Context,
+      manager: AppWidgetManager,
+      ids: IntArray,
+    ) {
       val shown = Surfaces.copy(context).shown(hasNearbyDevicesPermission(context))
       // One row gets the compact layout; two rows and up the full one.
-      val views = RemoteViews(
-        mapOf(
-          SizeF(MIN_WIDTH, 0f) to layout(context, R.layout.mode_widget_compact, shown, compact = true),
-          SizeF(MIN_WIDTH, FULL_HEIGHT) to layout(context, R.layout.mode_widget, shown, compact = false),
-        ),
-      )
+      val views =
+        RemoteViews(
+          mapOf(
+            SizeF(MIN_WIDTH, 0f) to layout(context, R.layout.mode_widget_compact, shown, compact = true),
+            SizeF(MIN_WIDTH, FULL_HEIGHT) to layout(context, R.layout.mode_widget, shown, compact = false),
+          ),
+        )
       manager.updateAppWidget(ids, views)
     }
 
-    private fun layout(context: Context, layout: Int, shown: StoredCopy.Shown, compact: Boolean): RemoteViews {
+    private fun layout(
+      context: Context,
+      layout: Int,
+      shown: StoredCopy.Shown,
+      compact: Boolean,
+    ): RemoteViews {
       val views = RemoteViews(context.packageName, layout)
       val open = openApp(context)
 
@@ -99,20 +127,30 @@ class ModeWidget : AppWidgetProvider() {
 
       renderModes(context, views, widgetLook(shown))
 
-      views.setTextViewText(R.id.note, shown.note ?: shown.updatedAt?.let {
-        // The compact layout shares its line with the name and battery: "5 min. ago".
-        val ago = DateUtils.getRelativeTimeSpanString(
-          it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
-          if (compact) DateUtils.FORMAT_ABBREV_RELATIVE else 0,
-        )
-        if (compact) ago else "Updated $ago"
-      } ?: "")
+      views.setTextViewText(
+        R.id.note,
+        shown.note ?: shown.updatedAt?.let {
+          // The compact layout shares its line with the name and battery: "5 min. ago".
+          val ago =
+            DateUtils.getRelativeTimeSpanString(
+              it,
+              System.currentTimeMillis(),
+              DateUtils.MINUTE_IN_MILLIS,
+              if (compact) DateUtils.FORMAT_ABBREV_RELATIVE else 0,
+            )
+          if (compact) ago else "Updated $ago"
+        } ?: "",
+      )
       views.setOnClickPendingIntent(R.id.note, if (shown.opensApp) open else null)
       views.setOnClickPendingIntent(R.id.open, open)
       return views
     }
 
-    private fun renderModes(context: Context, views: RemoteViews, look: WidgetLook) {
+    private fun renderModes(
+      context: Context,
+      views: RemoteViews,
+      look: WidgetLook,
+    ) {
       // Invisible rather than gone, so the note stays at the bottom.
       views.setViewVisibility(R.id.modes, if (look.slots.isEmpty()) View.INVISIBLE else View.VISIBLE)
       SLOT_VIEWS.forEachIndexed { i, ids ->
@@ -151,10 +189,18 @@ class ModeWidget : AppWidgetProvider() {
         PendingIntent.getActivity(context, OPEN_REQUEST, it, PendingIntent.FLAG_IMMUTABLE)
       }
 
-    private fun broadcast(context: Context, action: String, mode: String?, code: Int): PendingIntent {
+    private fun broadcast(
+      context: Context,
+      action: String,
+      mode: String?,
+      code: Int,
+    ): PendingIntent {
       val intent = Intent(context, ModeWidget::class.java).setAction(action).putExtra(EXTRA_MODE, mode)
       return PendingIntent.getBroadcast(
-        context, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        context,
+        code,
+        intent,
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
       )
     }
   }

@@ -39,11 +39,16 @@ class ModeTile : TileService() {
         Log.i(TAG, "tile: set ${tap.mode}")
         Surfaces.controller(this).tap(tap.mode)
       }
+
       TileLook.Tap.Refresh -> {
         Log.i(TAG, "tile: refresh")
         Surfaces.controller(this).tap(null)
       }
-      TileLook.Tap.OpenApp -> if (isLocked) unlockAndRun { openApp() } else openApp()
+
+      TileLook.Tap.OpenApp -> {
+        if (isLocked) unlockAndRun { openApp() } else openApp()
+      }
+
       TileLook.Tap.Nothing -> {}
     }
     show()
@@ -57,11 +62,12 @@ class ModeTile : TileService() {
     tile.label = look.label
     tile.subtitle = look.subtitle
     tile.icon = Icon.createWithResource(this, look.icon)
-    tile.state = when (look.state) {
-      TileLook.State.ACTIVE -> Tile.STATE_ACTIVE
-      TileLook.State.INACTIVE -> Tile.STATE_INACTIVE
-      TileLook.State.UNAVAILABLE -> Tile.STATE_UNAVAILABLE
-    }
+    tile.state =
+      when (look.state) {
+        TileLook.State.ACTIVE -> Tile.STATE_ACTIVE
+        TileLook.State.INACTIVE -> Tile.STATE_INACTIVE
+        TileLook.State.UNAVAILABLE -> Tile.STATE_UNAVAILABLE
+      }
     tile.updateTile()
   }
 
@@ -69,7 +75,7 @@ class ModeTile : TileService() {
   @SuppressLint("StartActivityAndCollapseDeprecated")
   private fun openApp() {
     val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return
-    if (Build.VERSION.SDK_INT >= 34) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startActivityAndCollapse(PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE))
     } else {
       startActivityAndCollapse(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -21,10 +21,12 @@ object Surfaces {
     copy?.let { return it }
     val app = context.applicationContext
     val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    val storage = object : StoredCopy.Storage {
-      override fun read(): String? = prefs.getString(KEY, null)
-      override fun write(copy: String) = prefs.edit { putString(KEY, copy) }
-    }
+    val storage =
+      object : StoredCopy.Storage {
+        override fun read(): String? = prefs.getString(KEY, null)
+
+        override fun write(copy: String) = prefs.edit { putString(KEY, copy) }
+      }
     return StoredCopy(storage, System::currentTimeMillis) { render(app) }.also { copy = it }
   }
 

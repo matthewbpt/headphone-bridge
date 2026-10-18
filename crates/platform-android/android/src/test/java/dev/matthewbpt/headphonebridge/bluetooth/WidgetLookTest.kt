@@ -10,6 +10,8 @@ class WidgetLookTest {
   private val buds = listOf("off", "noiseCancelling", "ambient", "adaptive")
   private val xm5 = listOf("off", "noiseCancelling", "ambient")
 
+  // Tests name only the parameters they care about; the rest default.
+  @Suppress("LongParameterList")
   private fun shown(
     mode: String? = "off",
     modes: List<String> = buds,
@@ -98,7 +100,8 @@ class WidgetLookTest {
 
   @Test
   fun withNoKnownModesThereAreNoSlots() {
-    assertEquals(emptyList<WidgetLook.Slot>(), widgetLook(shown(mode = null, modes = emptyList(), note = TAP_TO_REFRESH)).slots)
+    val shown = shown(mode = null, modes = emptyList(), note = TAP_TO_REFRESH)
+    assertEquals(emptyList<WidgetLook.Slot>(), widgetLook(shown).slots)
   }
 
   @Test
@@ -111,12 +114,13 @@ class WidgetLookTest {
   private fun action(): Triple<FakeCoreLink, StoredCopy, ActionController> {
     val link = FakeCoreLink(chosen = "off").apply { connect() }
     val copy = StoredCopy(MemoryStorage(), now = { 5_000L })
-    val controller = ActionController(
-      link,
-      copy,
-      start = { true },
-      timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
-    )
+    val controller =
+      ActionController(
+        link,
+        copy,
+        start = { true },
+        timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
+      )
     copy.onDeviceList(link.deviceList!!)
     link.attaches = false
     return Triple(link, copy, controller)

@@ -22,7 +22,10 @@ object NativeCore {
   @JvmStatic external fun event(json: String)
 
   /** Runs a command; its result comes back as a `commandResult` message. */
-  @JvmStatic external fun command(request: Long, json: String)
+  @JvmStatic external fun command(
+    request: Long,
+    json: String,
+  )
 
   /** Every message from the core, on a Rust thread. Must not block. */
   @JvmStatic
@@ -30,3 +33,9 @@ object NativeCore {
     Hub.fromCore(JSONObject(json))
   }
 }
+
+/** Sends [event] to the core. */
+internal fun sendToCore(event: JSONObject) = NativeCore.event(event.toString())
+
+/** An event for the core, of [type]. */
+internal fun coreEvent(type: String): JSONObject = JSONObject().put("type", type)

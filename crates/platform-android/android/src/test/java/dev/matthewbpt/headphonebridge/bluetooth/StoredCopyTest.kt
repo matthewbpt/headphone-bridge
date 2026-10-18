@@ -10,12 +10,17 @@ class StoredCopyTest {
   private val copy = StoredCopy(storage, now = { now })
 
   private val buds = listOf("off", "noiseCancelling", "ambient", "adaptive")
-  private val budsBattery = JSONObject().put("kind", "buds").put("left", 80).put("right", 75).put("case", 50)
+  private val budsBattery =
+    JSONObject()
+      .put("kind", "buds")
+      .put("left", 80)
+      .put("right", 75)
+      .put("case", 50)
 
   @Test
   fun theCopySurvivesTheProcessBeingKilled() {
     copy.onDeviceList(
-      deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "ambient", budsBattery))
+      deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "ambient", budsBattery)),
     )
 
     val shown = StoredCopy(storage, now = { 99_000L }).shown(hasPermission = true)
@@ -80,7 +85,7 @@ class StoredCopyTest {
   @Test
   fun valuesKeptWhileDetachedAreDatedWhenTheDeviceReportedThem() {
     copy.onDeviceList(
-      deviceList(device("AA", "Galaxy Buds4 Pro", state("detached"), buds, "ambient").put("reportedAt", 4_000L))
+      deviceList(device("AA", "Galaxy Buds4 Pro", state("detached"), buds, "ambient").put("reportedAt", 4_000L)),
     )
 
     assertEquals(4_000L, copy.shown(hasPermission = true).updatedAt)

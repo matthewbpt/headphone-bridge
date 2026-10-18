@@ -99,20 +99,22 @@ class TileLookTest {
   fun threeQuickTapsMakeOneChangeToTheModeShownLast() {
     val link = FakeCoreLink(chosen = "off").apply { connect() }
     val copy = StoredCopy(MemoryStorage(), now = { 5_000L })
-    val controller = ActionController(
-      link,
-      copy,
-      start = { true },
-      timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
-    )
+    val controller =
+      ActionController(
+        link,
+        copy,
+        start = { true },
+        timeouts = ActionController.Timeouts(attachMs = 300, commandMs = 300, confirmMs = 300),
+      )
     copy.onDeviceList(link.deviceList!!)
     link.attaches = false
     val done = CountDownLatch(3)
-    val looks = (1..3).map {
-      val tap = tileLook(copy.shown(hasPermission = true)).tap as TileLook.Tap.SetMode
-      controller.tap(tap.mode) { done.countDown() }
-      tileLook(copy.shown(hasPermission = true))
-    }
+    val looks =
+      (1..3).map {
+        val tap = tileLook(copy.shown(hasPermission = true)).tap as TileLook.Tap.SetMode
+        controller.tap(tap.mode) { done.countDown() }
+        tileLook(copy.shown(hasPermission = true))
+      }
     // The label and icon step with every tap, before the Device is even Attached.
     assertEquals(listOf("Noise Cancelling", "Ambient", "Adaptive"), looks.map { it.label })
     assertEquals(
