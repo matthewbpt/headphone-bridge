@@ -52,15 +52,24 @@ type Waiters = Arc<std::sync::Mutex<HashMap<Address, oneshot::Sender<ConnectRequ
 /// Why BlueZ couldn't be reached or watched.
 #[derive(Debug, thiserror::Error)]
 pub enum BluezError {
-    /// No session with bluetoothd, e.g. it isn't running yet, or D-Bus isn't.
-    #[error("couldn't connect to BlueZ: {0}")]
-    Connection(#[source] bluer::Error),
-    /// bluetoothd has no Bluetooth adapter.
-    #[error("BlueZ has no Bluetooth adapter: {0}")]
-    NoAdapter(#[source] bluer::Error),
+    /// D-Bus or bluetoothd isn't reachable, e.g. bluetoothd isn't running yet.
+    #[error("couldn't reach BlueZ: {0}")]
+    Unreachable(bluer::Error),
+    /// bluetoothd is running but has no Bluetooth adapter.
+    #[error("BlueZ has no Bluetooth adapter")]
+    NoAdapter,
     /// Following the adapter's Devices failed.
     #[error("lost BlueZ while watching Devices: {0}")]
-    Watching(#[source] bluer::Error),
+    Watching(bluer::Error),
+}
+
+/// Why `default_adapter` failed: bluer reports no adapter as `NotFound`, and
+/// anything else is bluetoothd not answering on D-Bus.
+fn adapter_error(error: bluer::Error) -> BluezError {
+    match error.kind {
+        bluer::ErrorKind::NotFound => BluezError::NoAdapter,
+        _ => BluezError::Unreachable(error),
+    }
 }
 
 impl From<BluezError> for LinkFailure {
@@ -78,11 +87,8 @@ impl Connection {
     pub async fn get(&self) -> Result<&Bluez, BluezError> {
         self.0
             .get_or_try_init(|| async {
-                let session = Session::new().await.map_err(BluezError::Connection)?;
-                let adapter = session
-                    .default_adapter()
-                    .await
-                    .map_err(BluezError::NoAdapter)?;
+                let session = Session::new().await.map_err(BluezError::Unreachable)?;
+                let adapter = session.default_adapter().await.map_err(adapter_error)?;
                 Ok(Bluez {
                     session,
                     adapter,
@@ -94,8 +100,8 @@ impl Connection {
 }
 
 /// Reports Devices as they become Connected and disconnected, for the life
-/// of the process, connecting to BlueZ again whenever it goes away. Never
-/// scans, connects or disconnects anything.
+/// of the process. Until BlueZ is reached, and whenever a watch ends, tries
+/// again after a pause. Never scans, connects or disconnects anything.
 pub async fn watch(connection: Connection, observations: mpsc::UnboundedSender<Observation>) {
     keep_watching(&observations, || async {
         let bluez = connection.get().await?;
@@ -261,18 +267,20 @@ impl Watcher {
 
     fn stopped(&mut self) {
         for address in std::mem::take(&mut self.reported) {
-            let _ = self
-                .observations
-                .send(Observation::DeviceDisconnected(port_address(address)));
+            self.report_disconnected(address);
         }
     }
 
     fn disconnected(&mut self, address: Address) {
         if self.reported.remove(&address) {
-            let _ = self
-                .observations
-                .send(Observation::DeviceDisconnected(port_address(address)));
+            self.report_disconnected(address);
         }
+    }
+
+    fn report_disconnected(&self, address: Address) {
+        let _ = self
+            .observations
+            .send(Observation::DeviceDisconnected(port_address(address)));
     }
 }
 
@@ -502,16 +510,39 @@ mod tests {
         assert!(core.try_recv().is_err());
     }
 
-    #[test]
-    fn bluez_unreachable_is_bluetooth_unavailable() {
-        let unreachable = bluer::Error {
+    /// What `default_adapter` fails with while bluetoothd isn't running.
+    fn bluetoothd_not_running() -> bluer::Error {
+        bluer::Error {
             kind: bluer::ErrorKind::Internal(bluer::InternalErrorKind::DBus(
                 "org.freedesktop.DBus.Error.ServiceUnknown".into(),
             )),
             message: "The name org.bluez was not provided by any .service files".into(),
-        };
+        }
+    }
+
+    #[test]
+    fn bluetoothd_not_running_is_bluez_unreachable() {
+        assert!(matches!(
+            adapter_error(bluetoothd_not_running()),
+            BluezError::Unreachable(_)
+        ));
+    }
+
+    #[test]
+    fn bluetoothd_without_an_adapter_is_no_adapter() {
+        assert!(matches!(
+            adapter_error(bluer::Error {
+                kind: bluer::ErrorKind::NotFound,
+                message: String::new(),
+            }),
+            BluezError::NoAdapter
+        ));
+    }
+
+    #[test]
+    fn bluez_unreachable_is_bluetooth_unavailable() {
         assert_eq!(
-            LinkFailure::from(BluezError::Connection(unreachable)),
+            LinkFailure::from(adapter_error(bluetoothd_not_running())),
             LinkFailure::BluetoothUnavailable
         );
     }
