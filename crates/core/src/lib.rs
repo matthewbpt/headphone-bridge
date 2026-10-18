@@ -384,8 +384,6 @@ impl Drop for LinkSession {
 }
 
 /// A command for the Device, already checked against its Capabilities.
-// Named after the `Command`s they come from.
-#[allow(clippy::enum_variant_names)]
 enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),

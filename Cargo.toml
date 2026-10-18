@@ -11,3 +11,11 @@ repository = "https://github.com/matthewbpt/headphone-bridge"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 uuid = { version = "1", features = ["serde"] }
+
+# Production code returns errors instead of panicking (docs/agents/rust.md);
+# clippy.toml lets tests unwrap. CI runs clippy with `-D warnings`.
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"

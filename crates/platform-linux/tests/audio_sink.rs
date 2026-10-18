@@ -1,5 +1,7 @@
 //! Which Bluetooth Device, if any, the default audio sink plays to.
 
+#![cfg(test)]
+
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_platform_linux::{sink_device, Sink};
 

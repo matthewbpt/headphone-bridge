@@ -1,6 +1,8 @@
 //! The Galaxy Buds2, from a synthesised Attach (`fixtures/galaxy-buds2/
 //! attach.frames`) and the `real-*` fixtures from a frame log.
 
+#![cfg(test)]
+
 mod support;
 
 use std::time::Duration;

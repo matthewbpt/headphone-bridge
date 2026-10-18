@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
 use headphone_bridge_core::{Command, CommandError, DeviceList, NoiseControlMode};
 use headphone_bridge_platform_android::messages::{

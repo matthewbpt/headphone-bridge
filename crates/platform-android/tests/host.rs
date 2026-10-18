@@ -1,6 +1,8 @@
 //! The host as Kotlin sees it: JSON events and commands in, JSON messages out,
 //! with a real core behind it.
 
+#![cfg(test)]
+
 use std::path::PathBuf;
 use std::time::Duration;
 

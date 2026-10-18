@@ -131,9 +131,7 @@ fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 enum Platform {
-    #[cfg_attr(mobile, allow(dead_code))]
     Desktop,
-    #[cfg_attr(desktop, allow(dead_code))]
     Android,
 }
 
@@ -260,7 +258,10 @@ fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
 #[serde(rename_all = "camelCase")]
 enum Permission {
     Granted,
-    #[cfg_attr(desktop, allow(dead_code))]
+    #[cfg_attr(
+        desktop,
+        expect(dead_code, reason = "only Android asks for permission")
+    )]
     Refused,
 }
 
