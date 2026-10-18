@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/matthewbpt/headphone-bridge/compare/v1.0.0...v1.1.0) (2026-10-18)
+
+
+### Features
+
+* give startup failures context and app settings a typed error ([#116](https://github.com/matthewbpt/headphone-bridge/issues/116)) ([8d1afc2](https://github.com/matthewbpt/headphone-bridge/commit/8d1afc21a5a61ecab4c5b2596173724b8bbd9a60))
+* label the widget's Not Attached reasons from the shell ([#119](https://github.com/matthewbpt/headphone-bridge/issues/119)) ([2b898b9](https://github.com/matthewbpt/headphone-bridge/commit/2b898b9f94f1e9eb163565ba1b94cc58e965b29c))
+* name four recurring link failures and label them ([#115](https://github.com/matthewbpt/headphone-bridge/issues/115)) ([ca09861](https://github.com/matthewbpt/headphone-bridge/commit/ca098610babdb197184150ba73bcde9894f4a4a7))
+* send a typed reason when Android can't open a control link ([#112](https://github.com/matthewbpt/headphone-bridge/issues/112)) ([d823350](https://github.com/matthewbpt/headphone-bridge/commit/d8233509bde5cf13411e00704fdb3fa57b74a011))
+* switch on the Simulated Device in every debug build ([#133](https://github.com/matthewbpt/headphone-bridge/issues/133)) ([a41b961](https://github.com/matthewbpt/headphone-bridge/commit/a41b9617c392edc577e6ea61289fe1111f9f17ca))
+
+
+### Bug Fixes
+
+* **linux:** find Devices when bluetoothd starts after the app ([#117](https://github.com/matthewbpt/headphone-bridge/issues/117)) ([b4a3b3f](https://github.com/matthewbpt/headphone-bridge/commit/b4a3b3fd43a0a98a3b91f0fa3b1efcaf1dfc28f2))
+
 ## [1.0.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.3.0...v1.0.0) (2026-10-18)
 
 

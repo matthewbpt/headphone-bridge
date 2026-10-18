@@ -1,6 +1,6 @@
 [package]
 name = "headphone-bridge-simulated"
-version = "1.0.0"
+version = "1.1.0"
 description = "Headphone Bridge's Simulated Device: a platform adapter that wraps another and answers the core as a real Model would"
 edition.workspace = true
 license.workspace = true
