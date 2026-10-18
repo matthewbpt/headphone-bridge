@@ -75,6 +75,31 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
 
+  macos-app:
+    # The shell's macOS-only code, which no other job compiles: the core job
+    # skips the shell, and clippy can't check it from Linux, as a dependency's
+    # build script needs a macOS C compiler.
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      # Builds the UI, which the shell embeds.
+      - run: npm run build
+        working-directory: app
+      - run: cargo clippy -p headphone-bridge --all-targets --locked -- -D warnings
+      - run: cargo test -p headphone-bridge --locked
+
   android-app:
     # The Android app as a debug APK, so Android build breaks show up before
     # merging, then the Kotlin tests and lint. It needs no Linux system
