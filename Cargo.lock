@@ -1585,6 +1585,7 @@ dependencies = [
 name = "headphone-bridge-core"
 version = "1.0.0"
 dependencies = [
+ "headphone-bridge-fixtures",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -1593,10 +1594,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "headphone-bridge-fixtures"
+version = "1.0.0"
+
+[[package]]
 name = "headphone-bridge-platform-android"
 version = "1.0.0"
 dependencies = [
  "headphone-bridge-core",
+ "headphone-bridge-fixtures",
  "jni",
  "serde",
  "serde_json",

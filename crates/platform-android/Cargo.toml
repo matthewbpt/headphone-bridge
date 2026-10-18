@@ -10,6 +10,7 @@ links = "headphone-bridge-platform-android"
 
 [dependencies]
 headphone-bridge-core = { path = "../core" }
+headphone-bridge-fixtures = { path = "../fixtures" }
 serde.workspace = true
 serde_json = "1"
 thiserror.workspace = true

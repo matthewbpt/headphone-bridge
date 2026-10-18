@@ -9,6 +9,7 @@ use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{ControlLink, DeviceAddress, DeviceIdentity};
 use headphone_bridge_core::wire::{samsung, sony};
 use headphone_bridge_core::Model;
+use headphone_bridge_fixtures as fixtures;
 use tokio::sync::mpsc;
 
 /// Where each Model is simulated: locally administered addresses, so never a
@@ -147,18 +148,14 @@ impl Buds {
     /// A Buds4 Pro from capture-3's first extended status: L 100 %, R 97 %,
     /// Ambient.
     fn buds4pro() -> Option<Buds> {
-        Buds::new(include_str!(
-            "../../core/tests/fixtures/galaxy-buds4-pro/capture-3.frames"
-        ))
+        Buds::new(fixtures::BUDS4PRO_CAPTURE)
     }
 
     /// A Buds2 from the extended status in GalaxyBudsClient's tests: device
     /// id 316, L and R 100 %, Noise Cancelling, Ambient Level 1. A Buds2's
     /// sets reach the same bytes as a Buds4 Pro's.
     fn buds2() -> Option<Buds> {
-        Buds::new(include_str!(
-            "../../core/tests/fixtures/galaxy-buds2/attach.frames"
-        ))
+        Buds::new(fixtures::BUDS2_ATTACH)
     }
 
     /// Starts from the first extended status the Device sent in `fixture`.
@@ -238,10 +235,7 @@ struct Headphones {
 impl Headphones {
     fn new() -> Option<Headphones> {
         let mut deframer = sony::Deframer::default();
-        let records = FrameRecord::parse_all(include_str!(
-            "../../core/tests/fixtures/wh-1000xm5/attach.frames"
-        ))
-        .ok()?;
+        let records = FrameRecord::parse_all(fixtures::XM5_ATTACH).ok()?;
         // Each of the core's requests, paired with the Device's next message.
         let mut answers = Vec::new();
         let mut asked = None;
@@ -271,10 +265,9 @@ impl Headphones {
             .map(|(_, answer)| answer)?;
         let preset = *reported.get(2)?;
         let mut deframer = sony::Deframer::default();
-        let mut curves: Vec<(u8, Vec<u8>)> = received(
-            include_str!("../../core/tests/fixtures/wh-1000xm5/real-equalizer-presets.frames"),
-            |bytes| deframer.push(bytes),
-        )?
+        let mut curves: Vec<(u8, Vec<u8>)> = received(fixtures::XM5_EQUALIZER_PRESETS, |bytes| {
+            deframer.push(bytes)
+        })?
         .into_iter()
         .filter(|frame| frame.data.first() == Some(&sony::command::EQEBB_NTFY_PARAM))
         .filter_map(|frame| Some((*frame.data.get(2)?, frame.data.get(3..)?.to_vec())))

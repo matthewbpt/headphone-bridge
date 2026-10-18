@@ -171,8 +171,7 @@ mod tests {
     use crate::sony::frame::DataType;
     use crate::{samsung, sony};
 
-    const BUDS2_ATTACH: &str = include_str!("../tests/fixtures/galaxy-buds2/attach.frames");
-    const XM5_ATTACH: &str = include_str!("../tests/fixtures/wh-1000xm5/attach.frames");
+    use headphone_bridge_fixtures::{BUDS2_ATTACH, XM5_ATTACH};
 
     /// The WH-1000XM5 Attach up to the model name reply and what the app
     /// writes in answer to it.
