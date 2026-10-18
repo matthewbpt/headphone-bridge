@@ -46,6 +46,10 @@ pub fn reason(reason: &NotAttachedReason) -> &'static str {
             }
             LinkFailure::ServiceNotFound => "Control service not found",
             LinkFailure::DeviceNotConnected => "Not Connected",
+            LinkFailure::BluetoothUnavailable => "Bluetooth is off or unavailable",
+            LinkFailure::TimedOut => "The Device didn't answer in time",
+            LinkFailure::Busy => "Bluetooth is busy with the Device",
+            LinkFailure::BluetoothHandlingStopped => "Something went wrong: restart the app",
             LinkFailure::Other(_) => "Couldn't open the control link",
         },
     }
@@ -66,12 +70,16 @@ const HINTS: [EffectiveModeReason; 2] = [
 ];
 
 /// Every reason, one per kind: `Other`'s label doesn't depend on its detail.
-const REASONS: [NotAttachedReason; 8] = [
+const REASONS: [NotAttachedReason; 12] = [
     NotAttachedReason::UnsupportedModel,
     NotAttachedReason::LinkFailed(LinkFailure::InUseByAnotherProcess),
     NotAttachedReason::LinkFailed(LinkFailure::BluetoothPermissionDenied),
     NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound),
     NotAttachedReason::LinkFailed(LinkFailure::DeviceNotConnected),
+    NotAttachedReason::LinkFailed(LinkFailure::BluetoothUnavailable),
+    NotAttachedReason::LinkFailed(LinkFailure::TimedOut),
+    NotAttachedReason::LinkFailed(LinkFailure::Busy),
+    NotAttachedReason::LinkFailed(LinkFailure::BluetoothHandlingStopped),
     NotAttachedReason::LinkDropped,
     NotAttachedReason::NoResponse,
     NotAttachedReason::LinkFailed(LinkFailure::Other(String::new())),
@@ -116,6 +124,34 @@ mod tests {
 
     use super::*;
 
+    /// Where `reason` sits in [`REASONS`]. Matched exhaustively, so a new
+    /// reason or link failure can't build until it's given a place; give it
+    /// the next one and add it to the table.
+    fn place(reason: &NotAttachedReason) -> usize {
+        match reason {
+            NotAttachedReason::UnsupportedModel => 0,
+            NotAttachedReason::LinkFailed(failure) => match failure {
+                LinkFailure::InUseByAnotherProcess => 1,
+                LinkFailure::BluetoothPermissionDenied => 2,
+                LinkFailure::ServiceNotFound => 3,
+                LinkFailure::DeviceNotConnected => 4,
+                LinkFailure::BluetoothUnavailable => 5,
+                LinkFailure::TimedOut => 6,
+                LinkFailure::Busy => 7,
+                LinkFailure::BluetoothHandlingStopped => 8,
+                LinkFailure::Other(_) => 11,
+            },
+            NotAttachedReason::LinkDropped => 9,
+            NotAttachedReason::NoResponse => 10,
+        }
+    }
+
+    #[test]
+    fn every_reason_has_its_place_in_the_table() {
+        let places: Vec<_> = REASONS.iter().map(place).collect();
+        assert_eq!(places, (0..REASONS.len()).collect::<Vec<_>>());
+    }
+
     #[test]
     fn labels_every_reason_the_window_can_get() {
         let labels = to_value(all()).unwrap();
@@ -133,6 +169,10 @@ mod tests {
                 "bluetoothPermissionDenied",
                 "serviceNotFound",
                 "deviceNotConnected",
+                "bluetoothUnavailable",
+                "timedOut",
+                "busy",
+                "bluetoothHandlingStopped",
                 "linkDropped",
                 "noResponse",
                 "other",
@@ -140,6 +180,27 @@ mod tests {
         );
         for label in reasons {
             assert_ne!(label["text"], "", "{} has no label", label["reason"]);
+        }
+    }
+
+    #[test]
+    fn labels_the_named_link_failures_for_the_listener() {
+        for (failure, label) in [
+            (
+                LinkFailure::BluetoothUnavailable,
+                "Bluetooth is off or unavailable",
+            ),
+            (LinkFailure::TimedOut, "The Device didn't answer in time"),
+            (LinkFailure::Busy, "Bluetooth is busy with the Device"),
+            (
+                LinkFailure::BluetoothHandlingStopped,
+                "Something went wrong: restart the app",
+            ),
+        ] {
+            assert_eq!(
+                super::reason(&NotAttachedReason::LinkFailed(failure)),
+                label
+            );
         }
     }
 

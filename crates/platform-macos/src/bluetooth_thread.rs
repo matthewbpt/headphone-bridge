@@ -368,7 +368,7 @@ impl BluetoothThread {
                 delegate.close();
                 return Err(match last_error {
                     Some(status) => self.open_failure(status),
-                    None => LinkFailure::Other("timed out opening the control link".into()),
+                    None => LinkFailure::TimedOut,
                 });
             }
             pump();
@@ -439,6 +439,8 @@ impl BluetoothThread {
             0xE000_02C5 | 0xE000_02D5 | 0xE000_02BE => LinkFailure::InUseByAnotherProcess,
             0xE000_02E2 => LinkFailure::BluetoothPermissionDenied,
             0xE000_02C0 | 0xE000_02D9 => LinkFailure::DeviceNotConnected,
+            // kIOReturnTimeout.
+            0xE000_02D6 => LinkFailure::TimedOut,
             _ => LinkFailure::Other(format!("IOBluetooth error 0x{:08X}", status as u32)),
         }
     }

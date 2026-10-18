@@ -27,4 +27,20 @@ class LabelsTest {
 
     assertEquals("In use by another app", notAttachedText(list))
   }
+
+  @Test
+  fun theNamedLinkFailuresAreLabelledAsInTheShell() {
+    val labels =
+      mapOf(
+        "bluetoothUnavailable" to "Bluetooth is off or unavailable",
+        "timedOut" to "The Device didn't answer in time",
+        "busy" to "Bluetooth is busy with the Device",
+        "bluetoothHandlingStopped" to "Something went wrong: restart the app",
+      )
+    for ((kind, label) in labels) {
+      val list = deviceList(device("AA:BB", "WH-1000XM5", notAttached(kind)))
+
+      assertEquals(kind, label, notAttachedText(list))
+    }
+  }
 }

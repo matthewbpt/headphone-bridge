@@ -67,6 +67,11 @@ export type NotAttachedReason =
   | { kind: "bluetoothPermissionDenied" }
   | { kind: "serviceNotFound" }
   | { kind: "deviceNotConnected" }
+  | { kind: "bluetoothUnavailable" }
+  | { kind: "timedOut" }
+  | { kind: "busy" }
+  /** The app's Bluetooth handling stopped; only a restart helps. */
+  | { kind: "bluetoothHandlingStopped" }
   | { kind: "linkDropped" }
   | { kind: "noResponse" }
   /** A link failure without a cause, with the adapter's detail. */

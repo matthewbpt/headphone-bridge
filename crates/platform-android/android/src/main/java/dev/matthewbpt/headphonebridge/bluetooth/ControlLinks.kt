@@ -20,6 +20,7 @@ private const val READ_BUFFER_BYTES = 4096
 // Copies of LinkFailure's serde names, in crates/core/src/platform.rs, for
 // why a control link couldn't be opened. Keep them in step.
 private const val PERMISSION_DENIED = "bluetoothPermissionDenied"
+private const val BLUETOOTH_UNAVAILABLE = "bluetoothUnavailable"
 private const val OTHER = "other"
 
 /** The RFCOMM control links the core asks [Hub] to open, by link id. */
@@ -46,6 +47,7 @@ internal object ControlLinks {
     uuid: String,
   ) {
     if (!permitted) return openFailed(request, PERMISSION_DENIED)
+    if (adapter?.isEnabled != true) return openFailed(request, BLUETOOTH_UNAVAILABLE)
     Thread({ answerOpen(adapter, request, address, uuid) }, "rfcomm-open-$address").start()
   }
 

@@ -73,6 +73,7 @@ fn a_failed_open_says_why_by_its_link_failure_name() {
         ),
         ("serviceNotFound", LinkFailure::ServiceNotFound),
         ("deviceNotConnected", LinkFailure::DeviceNotConnected),
+        ("bluetoothUnavailable", LinkFailure::BluetoothUnavailable),
     ] {
         assert_eq!(
             parse_event(&format!(

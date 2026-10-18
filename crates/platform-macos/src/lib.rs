@@ -77,7 +77,10 @@ impl Platform for MacBluetooth {
         address: &DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let stopped = || LinkFailure::Other("the Bluetooth thread stopped".into());
+        let stopped = || {
+            eprintln!("can't open a control link: the Bluetooth thread stopped");
+            LinkFailure::BluetoothHandlingStopped
+        };
         let (reply, opened) = oneshot::channel();
         if !self.send(Command::Open {
             address: address.clone(),

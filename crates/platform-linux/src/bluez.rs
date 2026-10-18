@@ -19,7 +19,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot, Mutex, OnceCell};
 use uuid::Uuid;
 
-use crate::failure::{connect_profile_failure, ConnectProfileFailure};
+use crate::failure::connect_profile_failure;
 
 /// How long BlueZ gets to answer `ConnectProfile`. bluer's own D-Bus timeout
 /// is two minutes.
@@ -45,16 +45,17 @@ pub struct Bluez {
 /// Who is waiting for BlueZ to hand over a channel, by Device.
 type Waiters = Arc<std::sync::Mutex<HashMap<Address, oneshot::Sender<ConnectRequest>>>>;
 
-/// Connects to BlueZ once, for whoever asks first.
+/// Connects to BlueZ once, for whoever asks first. A failed connection isn't
+/// kept, so the next caller tries again once Bluetooth is ready.
 #[derive(Clone, Default)]
-pub struct Connection(Arc<OnceCell<Result<Bluez, String>>>);
+pub struct Connection(Arc<OnceCell<Bluez>>);
 
 impl Connection {
     pub async fn get(&self) -> Result<&Bluez, LinkFailure> {
         self.0
-            .get_or_init(|| async {
-                let session = Session::new().await.map_err(|e| e.to_string())?;
-                let adapter = session.default_adapter().await.map_err(|e| e.to_string())?;
+            .get_or_try_init(|| async {
+                let session = Session::new().await?;
+                let adapter = session.default_adapter().await?;
                 Ok(Bluez {
                     session,
                     adapter,
@@ -62,8 +63,10 @@ impl Connection {
                 })
             })
             .await
-            .as_ref()
-            .map_err(|e| LinkFailure::Other(format!("Bluetooth is unavailable: {e}")))
+            .map_err(|e: bluer::Error| {
+                eprintln!("Bluetooth is unavailable: {e}");
+                LinkFailure::BluetoothUnavailable
+            })
     }
 }
 
@@ -226,10 +229,11 @@ impl Bluez {
         address: &DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let address: Address = address
-            .0
-            .parse()
-            .map_err(|_| LinkFailure::Other(format!("not a Bluetooth address: {address}")))?;
+        // The core only passes addresses the OS reported, so this is a bug.
+        let address: Address = address.0.parse().map_err(|_| {
+            eprintln!("can't open a control link: not a Bluetooth address: {address}");
+            LinkFailure::BluetoothHandlingStopped
+        })?;
         let device = self.adapter.device(address).map_err(failure)?;
         // ConnectProfile would connect a disconnected Device, and the app
         // never connects Devices.
@@ -251,16 +255,11 @@ impl Bluez {
                 .remove(&address);
             match result {
                 Ok(stream) => break stream,
-                Err(ConnectProfileFailure::Busy) if busy < BUSY_RETRIES => {
+                Err(LinkFailure::Busy) if busy < BUSY_RETRIES => {
                     busy += 1;
                     tokio::time::sleep(BUSY_PAUSE).await;
                 }
-                Err(ConnectProfileFailure::Busy) => {
-                    return Err(LinkFailure::Other(
-                        "Bluetooth stayed busy connecting the Device".into(),
-                    ))
-                }
-                Err(ConnectProfileFailure::Fail(failure)) => return Err(failure),
+                Err(failure) => return Err(failure),
             }
         };
         Ok(spawn_link(device, service, stream))
@@ -317,15 +316,14 @@ async fn connect_profile(
     device: &Device,
     service: Uuid,
     mut request: oneshot::Receiver<ConnectRequest>,
-) -> Result<Stream, ConnectProfileFailure> {
-    let fail = ConnectProfileFailure::Fail;
-    let accept = |request: ConnectRequest| request.accept().map_err(|e| fail(failure(e)));
+) -> Result<Stream, LinkFailure> {
+    let accept = |request: ConnectRequest| request.accept().map_err(failure);
     let call = device.connect_profile(&service);
     tokio::pin!(call);
     let connecting = async {
         tokio::select! {
             arrived = &mut request => {
-                let stream = accept(arrived.map_err(|_| fail(router_stopped()))?)?;
+                let stream = accept(arrived.map_err(|_| router_stopped())?)?;
                 let _ = call.await;
                 Ok(stream)
             }
@@ -338,18 +336,14 @@ async fn connect_profile(
                 // it's already connected, through another process's Profile.
                 match tokio::time::timeout(NEW_CONNECTION_GRACE, request).await {
                     Ok(Ok(arrived)) => accept(arrived),
-                    _ => Err(fail(LinkFailure::InUseByAnotherProcess)),
+                    _ => Err(LinkFailure::InUseByAnotherProcess),
                 }
             }
         }
     };
     tokio::time::timeout(CONNECT_TIMEOUT, connecting)
         .await
-        .unwrap_or_else(|_| {
-            Err(fail(LinkFailure::Other(
-                "Bluetooth didn't open the link in time".into(),
-            )))
-        })
+        .unwrap_or(Err(LinkFailure::TimedOut))
 }
 
 /// Pumps the channel's bytes to and from the core. When the core drops the
@@ -386,7 +380,8 @@ fn spawn_link(device: Device, service: Uuid, stream: Stream) -> ControlLink {
 }
 
 fn router_stopped() -> LinkFailure {
-    LinkFailure::Other("Bluetooth stopped handing over links".into())
+    eprintln!("can't open a control link: BlueZ's channels stopped reaching our Profile");
+    LinkFailure::BluetoothHandlingStopped
 }
 
 /// The D-Bus error name and BlueZ message `error` came from.
@@ -404,8 +399,5 @@ fn dbus_error(error: &bluer::Error) -> (String, String) {
 
 fn failure(error: bluer::Error) -> LinkFailure {
     let (name, message) = dbus_error(&error);
-    match connect_profile_failure(&name, &message) {
-        ConnectProfileFailure::Fail(failure) => failure,
-        ConnectProfileFailure::Busy => LinkFailure::Other(error.to_string()),
-    }
+    connect_profile_failure(&name, &message)
 }
