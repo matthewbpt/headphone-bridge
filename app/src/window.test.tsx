@@ -906,6 +906,27 @@ describe("Equalizer", () => {
     ]);
   });
 
+  it("goes back to the Buds2's reported Preset when its ACK doesn't confirm within 10 s", async () => {
+    // A Buds2's ACK is a set's only confirmation, so one without the Preset
+    // leaves the snapshot unchanged.
+    const core = new FakeCore(
+      only(buds2({ equalizer: { preset: 3, bands: null, clearBass: null } })),
+    );
+    renderWindow(core);
+    const select = await preset();
+    freezeClock();
+
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(select).toHaveAttribute("aria-busy", "true");
+
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Bass boost Preset wasn't confirmed by the Device",
+    );
+    expect(select).toHaveDisplayValue("Dynamic");
+    expect(select).toHaveAttribute("aria-busy", "false");
+  });
+
   it("shows a Buds2 reporting 7 as Unrecognised, with no Custom to pick", async () => {
     renderWindow(
       new FakeCore(only(buds2({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
