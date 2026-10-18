@@ -803,6 +803,14 @@ describe("Equalizer", () => {
     expect(screen.getByRole("option", { name: "Normal" })).toBeEnabled();
   });
 
+  it("shows a Buds4 Pro reporting 7, upstream's old Custom, as Unrecognised", async () => {
+    renderWindow(
+      new FakeCore(only(buds4Pro({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
+    );
+
+    expect(await preset()).toHaveDisplayValue("Unrecognised Preset");
+  });
+
   it("keeps the newest Preset Pending until it lands, past the one picked before it", async () => {
     const core = new FakeCore(
       only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
