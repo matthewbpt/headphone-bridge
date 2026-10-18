@@ -157,3 +157,299 @@ pub(crate) async fn run_session<S: VendorSession>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+
+    use tokio::task::JoinHandle;
+
+    use super::*;
+    use crate::frame_log::FrameRecord;
+    use crate::model::Model;
+    use crate::sony::frame::DataType;
+    use crate::{samsung, sony};
+
+    const BUDS2_ATTACH: &str = include_str!("../tests/fixtures/galaxy-buds2/attach.frames");
+    const XM5_ATTACH: &str = include_str!("../tests/fixtures/wh-1000xm5/attach.frames");
+
+    /// `MANAGER_INFO`, the Samsung handshake.
+    const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
+
+    /// The WH-1000XM5 Attach up to the model name reply and what the app
+    /// writes in answer to it.
+    const XM5_IDENTIFYING: usize = 9;
+
+    /// Something the Device sees written, or the app is told, in the order
+    /// it happens.
+    #[derive(Debug, PartialEq)]
+    enum Event {
+        Written(Vec<u8>),
+        Reported(Update),
+    }
+
+    #[derive(Debug)]
+    struct Timeline {
+        written: mpsc::UnboundedReceiver<Vec<u8>>,
+        events: Vec<Event>,
+    }
+
+    impl Timeline {
+        /// Moves every frame written so far onto the timeline.
+        fn catch_up(&mut self) {
+            while let Ok(frame) = self.written.try_recv() {
+                self.events.push(Event::Written(frame));
+            }
+        }
+    }
+
+    /// The Device's end of an in-memory Control Link, with a session
+    /// running on the app's end.
+    struct Device {
+        to_app: mpsc::UnboundedSender<Vec<u8>>,
+        commands: mpsc::UnboundedSender<SessionCommand>,
+        timeline: Arc<Mutex<Timeline>>,
+        session: JoinHandle<NotAttachedReason>,
+    }
+
+    impl Device {
+        fn start<S>(session: S, frame_log: FrameLog) -> Device
+        where
+            S: VendorSession + Send + 'static,
+        {
+            let (to_app, incoming) = mpsc::unbounded_channel();
+            let (outgoing, written) = mpsc::unbounded_channel();
+            let (commands, commands_rx) = mpsc::unbounded_channel();
+            let timeline = Arc::new(Mutex::new(Timeline {
+                written,
+                events: Vec::new(),
+            }));
+            let reported = Arc::clone(&timeline);
+            let on_update = move |update| {
+                let mut timeline = reported.lock().unwrap();
+                timeline.catch_up();
+                timeline.events.push(Event::Reported(update));
+            };
+            let link = ControlLink { incoming, outgoing };
+            let session = tokio::spawn(run_session(
+                session,
+                link,
+                commands_rx,
+                frame_log,
+                on_update,
+            ));
+            Device {
+                to_app,
+                commands,
+                timeline,
+                session,
+            }
+        }
+
+        /// Sends `frames` to the app and lets the session handle them.
+        async fn send(&self, frames: Vec<Vec<u8>>) {
+            for frame in frames {
+                self.to_app.send(frame).unwrap();
+            }
+            settle().await;
+        }
+
+        async fn command(&self, command: SessionCommand) {
+            self.commands.send(command).unwrap();
+            settle().await;
+        }
+
+        /// Takes what has happened since last asked.
+        fn events(&self) -> Vec<Event> {
+            let mut timeline = self.timeline.lock().unwrap();
+            timeline.catch_up();
+            std::mem::take(&mut timeline.events)
+        }
+
+        /// Closes the link and returns why the session ended.
+        async fn close(self) -> NotAttachedReason {
+            drop(self.to_app);
+            self.session.await.unwrap()
+        }
+    }
+
+    /// Lets the session catch up, well within any timeout.
+    async fn settle() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    fn fixture(text: &str) -> Vec<FrameRecord> {
+        FrameRecord::parse_all(text).unwrap()
+    }
+
+    fn frames(records: &[FrameRecord], direction: Direction) -> Vec<Vec<u8>> {
+        records
+            .iter()
+            .filter(|record| record.direction == direction)
+            .map(|record| record.bytes.clone())
+            .collect()
+    }
+
+    fn written(records: &[FrameRecord]) -> Vec<Event> {
+        frames(records, Direction::Sent)
+            .into_iter()
+            .map(Event::Written)
+            .collect()
+    }
+
+    /// A fresh path for a test's frame log.
+    fn log_path(test: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "headphone-bridge-session-{}-{test}.frames",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
+    /// Runs `session` through the Device's side of `records`, then returns
+    /// the frame log as slug, direction and bytes.
+    async fn logged(
+        session: impl VendorSession + Send + 'static,
+        records: &[FrameRecord],
+        test: &str,
+    ) -> Vec<(String, Direction, Vec<u8>)> {
+        let path = log_path(test);
+        let frame_log = FrameLog::default();
+        frame_log.start(&path).unwrap();
+        let device = Device::start(session, frame_log.clone());
+        device.send(frames(records, Direction::Received)).await;
+        device.close().await;
+        frame_log.stop();
+        let log = fixture(&std::fs::read_to_string(&path).unwrap());
+        let _ = std::fs::remove_file(&path);
+        log.into_iter()
+            .map(|record| (record.model, record.direction, record.bytes))
+            .collect()
+    }
+
+    fn as_logged(records: &[FrameRecord]) -> Vec<(String, Direction, Vec<u8>)> {
+        records
+            .iter()
+            .map(|record| (record.model.clone(), record.direction, record.bytes.clone()))
+            .collect()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_received_frames_acks_are_written_before_its_updates_are_reported() {
+        let identifying = &fixture(XM5_ATTACH)[..XM5_IDENTIFYING];
+        let device = Device::start(sony::Session::new(), FrameLog::default());
+
+        device.send(frames(identifying, Direction::Received)).await;
+
+        let mut expected = written(identifying);
+        expected.push(Event::Reported(Update::Identified(Model::Wh1000Xm5)));
+        assert_eq!(device.events(), expected);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_sony_frame_revealing_an_unsupported_model_reports_it_alone_and_writes_nothing_more()
+    {
+        let records = fixture(XM5_ATTACH);
+        // Up to the model name reply, which names a WH-1000XM4 instead.
+        let asked_for_name = &records[..6];
+        let mut name = vec![0x05, 0x01, 0x0a];
+        name.extend_from_slice(b"WH-1000XM4");
+        let xm4 = sony::frame::encode(DataType::Mdr, 1, &name);
+        let device = Device::start(sony::Session::new(), FrameLog::default());
+
+        let mut from_device = frames(asked_for_name, Direction::Received);
+        from_device.push(xm4);
+        device.send(from_device).await;
+
+        let mut expected = written(asked_for_name);
+        expected.push(Event::Reported(Update::Unsupported));
+        assert_eq!(
+            device.session.is_finished().then(|| device.events()),
+            Some(expected),
+            "the session ends with nothing written after the name reply"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_samsung_frame_revealing_an_unsupported_model_reports_it_alone_and_writes_nothing_more(
+    ) {
+        // A Device named as a Buds4 Pro that reports a Buds2's device id,
+        // along with its battery and Noise Control Mode.
+        let records = fixture(BUDS2_ATTACH);
+        let device = Device::start(
+            samsung::Session::new(Model::GalaxyBuds4Pro),
+            FrameLog::default(),
+        );
+
+        device.send(frames(&records, Direction::Received)).await;
+
+        assert_eq!(
+            device.session.is_finished().then(|| device.events()),
+            Some(vec![
+                Event::Written(MANAGER_INFO.to_vec()),
+                Event::Reported(Update::Unsupported),
+            ])
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sony_frames_are_logged_under_the_vendor_until_the_identifying_frame() {
+        let identifying = &fixture(XM5_ATTACH)[..XM5_IDENTIFYING];
+
+        let log = logged(sony::Session::new(), identifying, "sony-slugs").await;
+
+        assert_eq!(log, as_logged(identifying));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn samsung_frames_are_logged_under_the_vendor_until_the_identifying_frame() {
+        let records = fixture(BUDS2_ATTACH);
+
+        let log = logged(
+            samsung::Session::new(Model::GalaxyBuds2),
+            &records,
+            "samsung-slugs",
+        )
+        .await;
+
+        assert_eq!(log, as_logged(&records));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_power_off_a_samsung_device_cant_carry_writes_nothing_and_keeps_the_session() {
+        let device = Device::start(
+            samsung::Session::new(Model::GalaxyBuds2),
+            FrameLog::default(),
+        );
+        device
+            .send(frames(&fixture(BUDS2_ATTACH), Direction::Received))
+            .await;
+        device.events();
+
+        device.command(SessionCommand::PowerOff).await;
+
+        assert_eq!(device.events(), Vec::new());
+        assert!(!device.session.is_finished());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_noise_cancelling_level_a_sony_device_cant_carry_writes_nothing_and_keeps_the_session(
+    ) {
+        let records = fixture(XM5_ATTACH);
+        // Identified, and with the support function request acknowledged,
+        // so nothing waits to go out.
+        let acknowledged = &records[..XM5_IDENTIFYING + 1];
+        let device = Device::start(sony::Session::new(), FrameLog::default());
+        device.send(frames(acknowledged, Direction::Received)).await;
+        device.events();
+
+        device
+            .command(SessionCommand::SetNoiseCancellingLevel(2))
+            .await;
+
+        assert_eq!(device.events(), Vec::new());
+        assert!(!device.session.is_finished());
+    }
+}
