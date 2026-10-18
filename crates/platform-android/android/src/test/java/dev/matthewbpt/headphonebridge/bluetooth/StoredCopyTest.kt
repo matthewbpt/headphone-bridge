@@ -122,7 +122,7 @@ class StoredCopyTest {
   fun aFailedActionOrARefreshLeavesNothingPending() {
     copy.onDeviceList(deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "off")))
     copy.actionStarted("ambient")
-    copy.actionFinished(LINK_DROPPED)
+    copy.actionFinished("The link dropped")
     assertEquals(false, copy.shown(hasPermission = true).pending)
 
     copy.actionStarted(null)

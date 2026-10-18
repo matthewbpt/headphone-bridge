@@ -33,6 +33,12 @@ interface CoreLink {
     timeoutMs: Long,
   ): String?
 
+  /**
+   * The shell's labels, as the window gets them from its `labels` command:
+   * the widget and tile take a Device's Not Attached reason from them.
+   */
+  val labels: JSONObject
+
   /** The latest Device list, or null before the first. */
   val deviceList: JSONObject?
 

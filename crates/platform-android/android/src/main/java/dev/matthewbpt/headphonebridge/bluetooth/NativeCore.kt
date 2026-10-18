@@ -27,6 +27,12 @@ object NativeCore {
     json: String,
   )
 
+  /**
+   * The shell's labels as JSON, as the window gets them, or null if they
+   * can't be handed across; see `app/src-tauri/src/labels.rs`.
+   */
+  @JvmStatic external fun labels(): String?
+
   /** Every message from the core, on a Rust thread. Must not block. */
   @JvmStatic
   fun fromCore(json: String) {

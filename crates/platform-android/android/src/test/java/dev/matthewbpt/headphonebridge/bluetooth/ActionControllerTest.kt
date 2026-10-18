@@ -56,12 +56,13 @@ class ActionControllerTest {
   @Test
   fun anActionGivesUpWhenTheDeviceIsntAttachedInTime() {
     link.attaches = false
+    link.labels = labels("linkDropped" to "Words for a dropped link")
 
     tapAndWait("ambient")
 
     assertEquals(listOf("holdPrimary", "endHoldPrimary"), link.sent)
     val shown = copy.shown(permitted)
-    assertEquals("Another app or device may be using it", shown.note)
+    assertEquals("Words for a dropped link", shown.note)
     assertEquals("off", shown.mode)
   }
 

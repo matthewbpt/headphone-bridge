@@ -1,6 +1,7 @@
 //! Every label the tray and the window show for a Device's state and
-//! settings. The window gets them from the `labels` command, so the two
-//! can't drift apart.
+//! settings. The window gets them from the `labels` command, and the
+//! Android widget and tile from `NativeCore.labels`, so they can't drift
+//! apart.
 
 use std::collections::HashMap;
 
@@ -32,6 +33,14 @@ pub fn hint(reason: EffectiveModeReason) -> &'static str {
     }
 }
 
+/// Where the listener grants the app Bluetooth, on Android the Nearby
+/// devices permission the widget and tile can't ask for themselves.
+#[cfg(not(target_os = "android"))]
+const PERMISSION_DENIED: &str =
+    "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth";
+#[cfg(target_os = "android")]
+const PERMISSION_DENIED: &str = "Open the app to allow Nearby devices";
+
 /// Why a Device isn't Attached. A link failure without a cause has one
 /// label; the window shows its detail beneath it.
 pub fn reason(reason: &NotAttachedReason) -> &'static str {
@@ -41,9 +50,7 @@ pub fn reason(reason: &NotAttachedReason) -> &'static str {
         NotAttachedReason::NoResponse => "The Device didn't respond",
         NotAttachedReason::LinkFailed(failure) => match failure {
             LinkFailure::InUseByAnotherProcess => "In use by another app",
-            LinkFailure::BluetoothPermissionDenied => {
-                "Bluetooth permission denied: enable it in System Settings › Privacy & Security › Bluetooth"
-            }
+            LinkFailure::BluetoothPermissionDenied => PERMISSION_DENIED,
             LinkFailure::ServiceNotFound => "Control service not found",
             LinkFailure::DeviceNotConnected => "Not Connected",
             LinkFailure::BluetoothUnavailable => "Bluetooth is off or unavailable",

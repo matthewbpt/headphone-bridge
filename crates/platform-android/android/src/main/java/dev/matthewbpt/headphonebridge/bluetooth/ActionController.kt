@@ -107,7 +107,7 @@ class ActionController(
     link.holdPrimary()
     try {
       val attached = link.awaitDeviceList(deadline - System.currentTimeMillis()) { attachedWithMode(it) }
-      return if (attached == null) notAttachedText(link.deviceList) else setTargets()
+      return if (attached == null) notAttachedText(link.deviceList, link.labels) else setTargets()
     } finally {
       link.endHoldPrimary()
     }

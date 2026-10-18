@@ -37,6 +37,9 @@ class FakeCoreLink(
   private val listeners = mutableListOf<(JSONObject) -> Unit>()
   private var held = false
 
+  /** The shell's labels, with a reason table of the test's own words. */
+  override var labels: JSONObject = labels()
+
   @Volatile override var deviceList: JSONObject? = null
     private set
 

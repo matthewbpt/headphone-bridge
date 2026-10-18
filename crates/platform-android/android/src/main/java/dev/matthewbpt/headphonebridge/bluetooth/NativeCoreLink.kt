@@ -28,6 +28,8 @@ internal object NativeCoreLink : CoreLink {
 
   override fun endHoldPrimary() = sendToCore(coreEvent("endHoldPrimary"))
 
+  override val labels: JSONObject by lazy { JSONObject(NativeCore.labels() ?: "{}") }
+
   // ---- the Device list ----
 
   private val listLock = Object()
