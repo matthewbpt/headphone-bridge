@@ -1,6 +1,6 @@
 [package]
 name = "headphone-bridge-platform-android"
-version = "0.3.0"
+version = "1.0.0"
 description = "Headphone Bridge's Android platform adapter: the core's host, talking JSON over JNI to a Kotlin side that owns Bluetooth"
 edition.workspace = true
 license.workspace = true

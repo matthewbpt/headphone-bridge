@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.3.0...v1.0.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* `MacBluetooth::start` returns `io::Result`, `Message::to_json` returns `serde_json::Result`, and `CommandError` gains `CoreStopped`, which the UI must handle.
+
+### Features
+
+* Equalizer Presets, Bands and Clear Bass ([#58](https://github.com/matthewbpt/headphone-bridge/issues/58)) ([8de2796](https://github.com/matthewbpt/headphone-bridge/commit/8de27966733eca72aa16a89711b6e62778ca0c58))
+
+
+### Bug Fixes
+
+* return errors instead of panicking in production code ([#96](https://github.com/matthewbpt/headphone-bridge/issues/96)) ([8024f25](https://github.com/matthewbpt/headphone-bridge/commit/8024f25201d950175545b545de689c3b6b1afe77))
+
 ## [0.3.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
