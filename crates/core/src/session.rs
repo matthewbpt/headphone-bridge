@@ -36,15 +36,17 @@ pub(crate) async fn run_samsung_session(
 ) -> NotAttachedReason {
     // Frames are logged under the vendor's slug until the Model is identified.
     let mut slug = "samsung";
-    // Every frame written goes through here, so all of them are logged.
-    let send = |slug: &str, frame: Vec<u8>| {
-        frame_log.record(slug, Direction::Sent, &frame);
-        link.outgoing.send(frame).is_ok()
+    let mut session = samsung::Session::new(candidate);
+    // Every frame the session sends goes out, and into the log, through here.
+    let write = |session: &mut samsung::Session, slug: &str| {
+        session.outgoing().into_iter().all(|frame| {
+            frame_log.record(slug, Direction::Sent, &frame);
+            link.outgoing.send(frame).is_ok()
+        })
     };
-    if !send(slug, samsung::Session::handshake()) {
+    if !write(&mut session, slug) {
         return NotAttachedReason::LinkDropped;
     }
-    let mut session = samsung::Session::new(candidate);
     loop {
         tokio::select! {
             bytes = link.incoming.recv() => {
@@ -70,7 +72,7 @@ pub(crate) async fn run_samsung_session(
                 }
             }
             Some(command) = commands.recv() => {
-                let frames = match command {
+                match command {
                     SessionCommand::SetNoiseControlMode(mode) => {
                         session.set_noise_control_mode(mode)
                     }
@@ -85,13 +87,10 @@ pub(crate) async fn run_samsung_session(
                     // rejected before it gets here.
                     SessionCommand::PowerOff => {
                         debug_assert!(false, "no Samsung Model can Power Off");
-                        Vec::new()
                     }
-                };
-                for frame in frames {
-                    if !send(slug, frame) {
-                        return NotAttachedReason::LinkDropped;
-                    }
+                }
+                if !write(&mut session, slug) {
+                    return NotAttachedReason::LinkDropped;
                 }
             }
         }

@@ -74,12 +74,14 @@ pub struct Session {
     pending_preset: Option<PresetId>,
     /// Whether a Chosen Mode has been reported yet.
     chosen_known: bool,
+    outgoing: Vec<Vec<u8>>,
 }
 
 impl Session {
-    /// A session with a Device whose name points to `candidate`.
+    /// A session with a Device whose name points to `candidate`, with the
+    /// handshake queued.
     pub fn new(candidate: Model) -> Session {
-        Session {
+        let mut session = Session {
             deframer: Deframer::default(),
             candidate,
             model: None,
@@ -89,63 +91,72 @@ impl Session {
             pending_noise_cancelling_level: None,
             pending_preset: None,
             chosen_known: false,
-        }
+            outgoing: Vec::new(),
+        };
+        session.handshake();
+        session
     }
 
-    /// The frames to send when the link opens: the `MANAGER_INFO` handshake,
-    /// introducing the app the way Samsung's own app does. The Device answers
-    /// with an extended status, which identifies the Model. A Buds2 sends an
-    /// extended status only for the Attach's; it answers a later one with a
-    /// bare `88 00` (real-noise-control).
-    pub fn handshake() -> Vec<u8> {
-        encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22])
+    /// Takes the frames to write to the Device, in order.
+    pub fn outgoing(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.outgoing)
     }
 
-    /// The frames that ask the Device to switch to `mode`, one per write. A
+    /// Queues the `MANAGER_INFO` handshake, introducing the app the way
+    /// Samsung's own app does. The Device answers with an extended status,
+    /// which identifies the Model. A Buds2 sends an extended status only for
+    /// the Attach's; it answers a later one with a bare `88 00`
+    /// (real-noise-control).
+    fn handshake(&mut self) {
+        self.outgoing
+            .push(encode(id::MANAGER_INFO, &[0x01, 0x01, 0x22]));
+    }
+
+    /// Queues `frame`, followed by `MANAGER_INFO` as a poll.
+    fn set(&mut self, frame: Vec<u8>) {
+        self.outgoing.push(frame);
+        self.handshake();
+    }
+
+    /// Asks the Device to switch to `mode`, one frame per write. A
     /// Buds4 Pro confirms with an ACK carrying the applied mode
     /// (real-noise-control). In capture-2 it sent no ACK, and confirmed with
     /// a `NOISE_CONTROLS_UPDATE` only after the next `MANAGER_INFO`, so a set
     /// is followed by one as a poll. A Buds2's ACK also carries the applied
     /// mode, and is its only confirmation: it answers the poll with no
     /// extended status (galaxy-buds2/real-noise-control).
-    pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) -> Vec<Vec<u8>> {
+    pub fn set_noise_control_mode(&mut self, mode: NoiseControlMode) {
         self.pending_mode = Some(mode);
-        vec![
-            encode(id::NOISE_CONTROLS, &[noise_control_value(mode)]),
-            Self::handshake(),
-        ]
+        self.set(encode(id::NOISE_CONTROLS, &[noise_control_value(mode)]));
     }
 
-    /// The frames that ask the Device to set the Ambient Level, in the
+    /// Asks the Device to set the Ambient Level, in the
     /// Model's own steps. A Buds4 Pro confirms with an ACK carrying the
     /// applied level, one per set even when sets arrive in quick succession
     /// (frame log, 2026-10-11), as does a Buds2 (real-ambient-level). Like a
     /// mode set it is followed by `MANAGER_INFO`, whose extended status, if
     /// any, also reports the level.
-    pub fn set_ambient_level(&mut self, level: u8) -> Vec<Vec<u8>> {
+    pub fn set_ambient_level(&mut self, level: u8) {
         self.pending_ambient_level = Some(level);
-        vec![encode(id::AMBIENT_VOLUME, &[level]), Self::handshake()]
+        self.set(encode(id::AMBIENT_VOLUME, &[level]));
     }
 
-    /// The frames that ask the Device to set the Noise Cancelling Level, in
+    /// Asks the Device to set the Noise Cancelling Level, in
     /// the Model's own steps. A hypothesis by analogy with the Ambient Level
     /// set, until confirmed on hardware: GalaxyBudsClient sends this message
     /// to the original Buds Pro, and treats its ACK as `83 <level>`.
-    pub fn set_noise_cancelling_level(&mut self, level: u8) -> Vec<Vec<u8>> {
+    pub fn set_noise_cancelling_level(&mut self, level: u8) {
         self.pending_noise_cancelling_level = Some(level);
-        vec![
-            encode(id::NOISE_REDUCTION_LEVEL, &[level]),
-            Self::handshake(),
-        ]
+        self.set(encode(id::NOISE_REDUCTION_LEVEL, &[level]));
     }
 
-    /// The frames that ask the Device to switch its Equalizer to `preset`.
+    /// Asks the Device to switch its Equalizer to `preset`.
     /// Confirmed by an ACK carrying the applied Preset, following the ACK
     /// rule of the other sets, and polled with `MANAGER_INFO` like them, as
     /// the extended status reports the Preset too (GalaxyBudsClient).
-    pub fn set_equalizer_preset(&mut self, preset: PresetId) -> Vec<Vec<u8>> {
+    pub fn set_equalizer_preset(&mut self, preset: PresetId) {
         self.pending_preset = Some(preset);
-        vec![encode(id::EQUALIZER, &[preset.0]), Self::handshake()]
+        self.set(encode(id::EQUALIZER, &[preset.0]));
     }
 
     /// The update for a mode the Device reports applying while the buds are
@@ -431,5 +442,46 @@ impl Buds {
                 None
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `MANAGER_INFO`, as a Buds4 Pro is sent it (capture-3).
+    const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
+
+    #[test]
+    fn a_new_session_queues_the_manager_info_handshake_once() {
+        let mut session = Session::new(Model::GalaxyBuds4Pro);
+
+        assert_eq!(session.outgoing(), vec![MANAGER_INFO.to_vec()]);
+        assert_eq!(session.outgoing(), Vec::<Vec<u8>>::new());
+    }
+
+    #[test]
+    fn each_set_queues_its_frame_then_a_manager_info_poll() {
+        let mut session = Session::new(Model::GalaxyBuds4Pro);
+        session.outgoing();
+
+        session.set_noise_control_mode(NoiseControlMode::Ambient);
+        session.set_ambient_level(3);
+        session.set_noise_cancelling_level(2);
+        session.set_equalizer_preset(PresetId(4));
+
+        assert_eq!(
+            session.outgoing(),
+            vec![
+                encode(id::NOISE_CONTROLS, &[2]),
+                MANAGER_INFO.to_vec(),
+                encode(id::AMBIENT_VOLUME, &[3]),
+                MANAGER_INFO.to_vec(),
+                encode(id::NOISE_REDUCTION_LEVEL, &[2]),
+                MANAGER_INFO.to_vec(),
+                encode(id::EQUALIZER, &[4]),
+                MANAGER_INFO.to_vec(),
+            ]
+        );
     }
 }
