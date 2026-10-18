@@ -232,9 +232,11 @@ async fn a_frame_log_that_cannot_be_opened_is_reported() {
     };
     assert_eq!(error.path(), path);
     assert_eq!(error.io_error().kind(), std::io::ErrorKind::NotFound);
+    // The OS words the I/O error, so ask it directly rather than assume Unix.
+    let why = std::fs::File::create(&path).unwrap_err().to_string();
     assert_eq!(
         serde_json::to_value(CommandError::FrameLogUnavailable(error)).unwrap(),
-        serde_json::json!({ "frameLogUnavailable": "No such file or directory (os error 2)" })
+        serde_json::json!({ "frameLogUnavailable": why })
     );
 }
 
