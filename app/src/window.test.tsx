@@ -1525,6 +1525,18 @@ describe("a Device that isn't Attached", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
   });
 
+  it("shows a link failure without a cause or detail as its label alone", async () => {
+    renderWindow(
+      new FakeCore(
+        only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "other", detail: "" } })),
+      ),
+    );
+
+    const label = await screen.findByText("Couldn't open the control link");
+    expect(label.parentElement?.children).toHaveLength(2);
+    expect(label.nextElementSibling).toBe(screen.getByRole("button", { name: "Retry" }));
+  });
+
   it("shows why the core rejected Retry", async () => {
     const core = new FakeCore(
       only(notAttached(xm5(), { kind: "notAttached", reason: { kind: "inUseByAnotherProcess" } })),

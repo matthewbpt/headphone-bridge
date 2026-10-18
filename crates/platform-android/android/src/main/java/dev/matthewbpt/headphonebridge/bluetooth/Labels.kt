@@ -54,7 +54,7 @@ private fun notAttachedReasonText(reason: JSONObject): String =
     "serviceNotFound" -> "Control service not found"
     "deviceNotConnected" -> "Not Connected"
     "noResponse" -> "The Device didn't respond"
-    "other" -> "$LINK_FAILED\n${reason.optString("detail")}"
+    "other" -> listOf(LINK_FAILED, reason.optString("detail")).filter { it.isNotEmpty() }.joinToString("\n")
     else -> LINK_DROPPED
   }
 

@@ -280,7 +280,7 @@ function Status({ device, labels }: { device: Device; labels: Labels }) {
       return (
         <div className="status status--column">
           <span className="muted">{reasonText(labels, device.state.reason)}</span>
-          {device.state.reason.kind === "other" && (
+          {device.state.reason.kind === "other" && device.state.reason.detail && (
             <span className="muted">{device.state.reason.detail}</span>
           )}
           {device.state.reason.kind !== "unsupportedModel" && (
