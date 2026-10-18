@@ -46,20 +46,16 @@ impl Model {
                 noise_cancelling_level: Some(LevelRange { min: 0, max: 4 }),
                 power_off: false,
                 equalizer: Some(EqualizerCapability {
-                    presets: vec![
-                        Preset::fixed(0, "Normal"),
-                        Preset::fixed(1, "Bass boost"),
-                        Preset::fixed(2, "Soft"),
-                        Preset::fixed(3, "Dynamic"),
-                        Preset::fixed(4, "Clear"),
-                        Preset::fixed(5, "Treble boost"),
+                    presets: [
+                        samsung_presets(),
                         // Set from Samsung's app, which keeps its curve: the
                         // app can report it, but not pick it.
-                        Preset {
+                        vec![Preset {
                             selectable: false,
                             ..Preset::fixed(7, "Custom")
-                        },
-                    ],
+                        }],
+                    ]
+                    .concat(),
                     bands: None,
                     clear_bass: None,
                 }),
@@ -76,17 +72,11 @@ impl Model {
                 noise_cancelling_level: None,
                 power_off: false,
                 // From GalaxyBudsClient, Gadgetbridge and Samsung's support
-                // pages, until a real capture shows a Buds2 off Normal. It
-                // has no custom EQ, so no Custom Preset.
+                // pages, until a real capture shows a Buds2 off Normal.
+                // Samsung's app can't set a custom curve on it, so it has no
+                // Custom Preset.
                 equalizer: Some(EqualizerCapability {
-                    presets: vec![
-                        Preset::fixed(0, "Normal"),
-                        Preset::fixed(1, "Bass boost"),
-                        Preset::fixed(2, "Soft"),
-                        Preset::fixed(3, "Dynamic"),
-                        Preset::fixed(4, "Clear"),
-                        Preset::fixed(5, "Treble boost"),
-                    ],
+                    presets: samsung_presets(),
                     bands: None,
                     clear_bass: None,
                 }),
@@ -126,6 +116,19 @@ impl Model {
             },
         }
     }
+}
+
+/// The fixed Presets the Galaxy Buds4 Pro and the Galaxy Buds2 share, by
+/// wire value.
+fn samsung_presets() -> Vec<Preset> {
+    vec![
+        Preset::fixed(0, "Normal"),
+        Preset::fixed(1, "Bass boost"),
+        Preset::fixed(2, "Soft"),
+        Preset::fixed(3, "Dynamic"),
+        Preset::fixed(4, "Clear"),
+        Preset::fixed(5, "Treble boost"),
+    ]
 }
 
 /// The WH-1000XM5's Bands, as their centre frequencies, lowest first.
