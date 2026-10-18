@@ -2,15 +2,15 @@ mod support;
 
 use std::time::Duration;
 
-use headphone_bridge_core::frame_log::Direction;
+use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
     Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, NoiseControlMode,
     Preset, PresetId, StepRange,
 };
 use support::{
-    fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for, xm5, DeviceLink,
-    FakeOs,
+    fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for,
+    without_capability_probe, xm5, DeviceLink, FakeOs,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -604,13 +604,8 @@ fn carried(data: &[u8]) -> Equalizer {
 /// its Preset picks, checking each Preset's curve as the Device reports it.
 /// It ends on Excited.
 async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(xm5()));
-    let mut link = os.next_link().await;
-    let records = fixture("wh-1000xm5/real-equalizer-presets");
     // Each Preset picked, with the Clear Bass and Bands the Device reported.
-    let picks: [(u8, i8, [i8; 5]); 12] = [
+    let picks = [
         (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
         (0x11, 8, [-1, 1, 0, 3, 5]),      // Excited
         (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
@@ -624,6 +619,20 @@ async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
         (0x10, -1, [0, 5, 7, 7, 9]),      // Bright
         (0x11, 8, [-1, 1, 0, 3, 5]),      // Excited
     ];
+    replay_preset_picks(fixture("wh-1000xm5/real-equalizer-presets"), &picks).await
+}
+
+/// Attaches a core to the real WH-1000XM5 of `records`, which reads the
+/// Equalizer as Off and flat, then picks each of `picks` and plays the
+/// Device's side from `records`, checking the curve the Device reports.
+async fn replay_preset_picks(
+    records: Vec<FrameRecord>,
+    picks: &[(u8, i8, [i8; 5])],
+) -> (Core, FakeOs, DeviceLink) {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
     // The capture split before each EQEBB_SET_PARAM the app sent.
     let set_at: Vec<usize> = records
         .iter()
@@ -641,7 +650,7 @@ async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
         list.devices[0].equalizer,
         Some(carried(&[0x57, 0x00, 0x00, 6, 10, 10, 10, 10, 10, 10]))
     );
-    for (i, (preset, clear_bass, bands)) in picks.into_iter().enumerate() {
+    for (i, &(preset, clear_bass, bands)) in picks.iter().enumerate() {
         core.command(Command::SetEqualizer(xm5().address, self::preset(preset)))
             .await
             .unwrap();
@@ -663,6 +672,51 @@ async fn real_xm5_after_its_preset_picks() -> (Core, FakeOs, DeviceLink) {
 #[tokio::test]
 async fn real_xm5_preset_picks_replay_from_their_frame_log() {
     real_xm5_after_its_preset_picks().await;
+}
+
+#[tokio::test]
+async fn real_xm5_picks_of_mellow_vocal_and_the_customs_replay_from_their_frame_log() {
+    let picks = [
+        (0x12, -3, [-1, -2, -3, -4, -6]), // Mellow
+        (0x14, 0, [6, 4, 2, 3, -1]),      // Vocal
+        (0xa1, 0, [0, 0, 0, 0, 0]),       // Custom 1
+        (0xa2, 0, [0, 0, 0, 0, 0]),       // Custom 2
+    ];
+    let records = without_capability_probe(&fixture("wh-1000xm5/real-equalizer-more-presets"));
+    replay_preset_picks(records, &picks).await;
+}
+
+#[tokio::test]
+async fn the_capabilities_list_the_presets_and_steps_a_real_xm5_advertises() {
+    let (core, _os, _link) = attached_xm5().await;
+    // The EQEBB_RET_CAPABILITY the probe drew: its type, the band count
+    // (Clear Bass and the Bands), the step count, then each Preset's id and
+    // name, length first.
+    let advertised = fixture("wh-1000xm5/real-equalizer-more-presets")
+        .iter()
+        .map(|r| sony_decode(&r.bytes).2)
+        .find(|data| data.first() == Some(&0x51))
+        .unwrap();
+    let [0x51, 0x00, bands, steps, count, ref presets @ ..] = advertised[..] else {
+        panic!("not a PRESET_EQ capability: {advertised:02x?}");
+    };
+    let mut ids = Vec::new();
+    let mut rest = presets;
+    while let [id, len, ref tail @ ..] = *rest {
+        ids.push(PresetId(id));
+        rest = &tail[len as usize..];
+    }
+    assert_eq!(ids.len(), count as usize);
+
+    let list = core.device_list();
+    let equalizer = list.devices[0].capabilities.equalizer.as_ref().unwrap();
+    let listed: Vec<PresetId> = equalizer.presets.iter().map(|p| p.id).collect();
+    assert_eq!(listed, ids);
+    let model_bands = equalizer.bands.as_ref().unwrap();
+    assert_eq!(1 + model_bands.frequencies.len(), bands as usize);
+    for range in [model_bands.range, equalizer.clear_bass.unwrap()] {
+        assert_eq!((range.max - range.min + 1) as u8, steps);
+    }
 }
 
 /// The next data frame the core writes, past any ACKs.
@@ -745,6 +799,30 @@ async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
                 preset: PresetId(0xa0),
                 bands: Some(vec![0, -2, 7, 7, 9]),
                 clear_bass: Some(3),
+            })
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_change_made_in_sonys_app_while_detached_appears_on_the_next_attach() {
+    // Sony's app can't Attach while this app is, so the listener changed
+    // the Equalizer between two Attaches: Custom 2 and flat before, then
+    // Custom 1 with Clear Bass +5.
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(xm5()));
+    let mut link = os.next_link().await;
+
+    let records = fixture("wh-1000xm5/real-equalizer-from-sonys-app");
+    replay(&mut link, &without_capability_probe(&records)).await;
+
+    wait_for(&core, |list| {
+        list.devices[0].equalizer
+            == Some(Equalizer {
+                preset: PresetId(0xa1),
+                bands: Some(vec![0, 0, 0, 0, 0]),
+                clear_bass: Some(5),
             })
     })
     .await;

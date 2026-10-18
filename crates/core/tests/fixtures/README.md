@@ -103,3 +103,16 @@ file.
     matching every frame the app sends.
   - `real-equalizer-kept`: the next Attach, two minutes later. The Device
     reports the last curve sent, which it had only ACKed.
+  - `real-equalizer-more-presets`: from the frame log on Linux, 2026-10-18,
+    firmware 2.5.1. An Attach, then Mellow, Vocal, Custom 1 and Custom 2
+    picked alone, each notified with its curve. A development build sent
+    `EQEBB_GET_CAPABILITY` for `PRESET_EQ` once after Attach; its
+    `EQEBB_RET_CAPABILITY` advertises Clear Bass and five Bands of 21 steps
+    and the twelve Presets the Model lists, with empty names. The app as it
+    ships never sends it, so replays drop the probe with
+    `support::without_capability_probe`, which re-sequences the frames after
+    it.
+  - `real-equalizer-from-sonys-app`: the next session, the same day. Sony's
+    app can't Attach while this app is, so the app was closed, the phone
+    moved the Device to Custom 1 with Clear Bass +5, and the app was opened
+    again. This Attach reads that change. It carries the same probe.

@@ -343,3 +343,46 @@ pub fn with_equalizer_read(records: &[FrameRecord], equalizer_reply: &[u8]) -> V
     rebased.extend_from_slice(&records[at..]);
     rebased
 }
+
+/// A real WH-1000XM5 capture with the temporary `EQEBB_GET_CAPABILITY`
+/// probe its development build sent after Attach, re-based onto the app as
+/// it ships. It drops the probe, the Device's ACK and `EQEBB_RET_CAPABILITY`
+/// reply, and the app's ACK of that, then flips the sequence number of every
+/// later frame the app sent and of the Device's ACKs of them, as the probe no
+/// longer takes one. The Device's own frames, and the app's ACKs of them,
+/// keep theirs.
+pub fn without_capability_probe(records: &[FrameRecord]) -> Vec<FrameRecord> {
+    let decoded = |r: &FrameRecord| sony_decode(&r.bytes);
+    let probe = records
+        .iter()
+        .position(|r| r.direction == Direction::Sent && decoded(r).2.first() == Some(&0x50))
+        .expect("the EQEBB_GET_CAPABILITY probe");
+    let probe_ack = probe
+        + records[probe..]
+            .iter()
+            .position(|r| r.direction == Direction::Received && decoded(r).0 == 0x01)
+            .expect("the Device's ACK of the probe");
+    let reply = probe
+        + records[probe..]
+            .iter()
+            .position(|r| r.direction == Direction::Received && decoded(r).2.first() == Some(&0x51))
+            .expect("the EQEBB_RET_CAPABILITY reply");
+    let reply_ack = reply + 1;
+    assert_eq!(records[reply_ack].direction, Direction::Sent);
+    assert_eq!(decoded(&records[reply_ack]).0, 0x01);
+    records
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| ![probe, probe_ack, reply, reply_ack].contains(i))
+        .map(|(i, r)| {
+            let (data_type, seq, data) = decoded(r);
+            let bytes = match (r.direction, data_type) {
+                _ if i < probe => return r.clone(),
+                (Direction::Sent, 0x0c) => sony_frame(1 - seq, &data),
+                (Direction::Received, 0x01) => sony_ack(1 - seq),
+                _ => return r.clone(),
+            };
+            FrameRecord { bytes, ..r.clone() }
+        })
+        .collect()
+}
