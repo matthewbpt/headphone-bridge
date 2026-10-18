@@ -83,6 +83,20 @@ pub enum LinkFailure {
     /// The Device stopped being Connected, or the OS doesn't know it.
     #[error("the Device isn't Connected")]
     DeviceNotConnected,
+    /// Bluetooth Unavailable: the OS's Bluetooth is off or not ready yet.
+    #[error("Bluetooth is unavailable")]
+    BluetoothUnavailable,
+    /// The Device didn't answer in time while the link was opening.
+    #[error("timed out opening the control link")]
+    TimedOut,
+    /// The OS is busy with the Device, e.g. still connecting its audio. An
+    /// adapter may ask again itself before reporting it.
+    #[error("Bluetooth stayed busy with the Device")]
+    Busy,
+    /// The app's own Bluetooth handling stopped, such as the thread or task
+    /// that opens links. The adapter logs the specifics where it fails.
+    #[error("the app's Bluetooth handling stopped")]
+    BluetoothHandlingStopped,
     /// A failure the adapter has no cause for, with its own detail.
     #[error("{0}")]
     Other(String),
@@ -90,12 +104,18 @@ pub enum LinkFailure {
 
 impl LinkFailure {
     /// Whether trying again by itself might open the link. Not when only the
-    /// listener can fix the cause, e.g. by quitting the app holding the link.
+    /// listener can fix the cause, e.g. by quitting the app holding the link,
+    /// or restarting the app whose Bluetooth handling stopped.
     pub(crate) fn is_transient(&self) -> bool {
         match self {
-            LinkFailure::InUseByAnotherProcess | LinkFailure::BluetoothPermissionDenied => false,
+            LinkFailure::InUseByAnotherProcess
+            | LinkFailure::BluetoothPermissionDenied
+            | LinkFailure::BluetoothHandlingStopped => false,
             LinkFailure::ServiceNotFound
             | LinkFailure::DeviceNotConnected
+            | LinkFailure::BluetoothUnavailable
+            | LinkFailure::TimedOut
+            | LinkFailure::Busy
             | LinkFailure::Other(_) => true,
         }
     }

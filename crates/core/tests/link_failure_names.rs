@@ -13,6 +13,10 @@ fn a_link_failure_is_read_by_the_name_the_ui_is_sent() {
         LinkFailure::BluetoothPermissionDenied,
         LinkFailure::ServiceNotFound,
         LinkFailure::DeviceNotConnected,
+        LinkFailure::BluetoothUnavailable,
+        LinkFailure::TimedOut,
+        LinkFailure::Busy,
+        LinkFailure::BluetoothHandlingStopped,
         LinkFailure::Other("timed out".into()),
     ] {
         let sent = to_value(NotAttachedReason::LinkFailed(failure.clone())).unwrap();

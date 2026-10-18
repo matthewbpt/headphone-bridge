@@ -26,6 +26,19 @@ fn every_reason_reaches_the_ui_as_a_flat_kind() {
             NotAttachedReason::LinkFailed(LinkFailure::DeviceNotConnected),
             "deviceNotConnected",
         ),
+        (
+            NotAttachedReason::LinkFailed(LinkFailure::BluetoothUnavailable),
+            "bluetoothUnavailable",
+        ),
+        (
+            NotAttachedReason::LinkFailed(LinkFailure::TimedOut),
+            "timedOut",
+        ),
+        (NotAttachedReason::LinkFailed(LinkFailure::Busy), "busy"),
+        (
+            NotAttachedReason::LinkFailed(LinkFailure::BluetoothHandlingStopped),
+            "bluetoothHandlingStopped",
+        ),
     ] {
         assert_eq!(to_value(&reason).unwrap(), json!({ "kind": kind }));
     }

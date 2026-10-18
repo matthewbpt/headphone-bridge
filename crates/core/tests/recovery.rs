@@ -144,21 +144,46 @@ async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button(
     wait_for(&core, |list| is(list, DeviceState::Attached)).await;
 }
 
+/// Whether the core tries again by itself after `failure`. Written out cause
+/// by cause, so a new cause can't build until its retry rule is decided.
+fn retried(failure: &LinkFailure) -> bool {
+    match failure {
+        LinkFailure::InUseByAnotherProcess
+        | LinkFailure::BluetoothPermissionDenied
+        | LinkFailure::BluetoothHandlingStopped => false,
+        LinkFailure::ServiceNotFound
+        | LinkFailure::DeviceNotConnected
+        | LinkFailure::BluetoothUnavailable
+        | LinkFailure::TimedOut
+        | LinkFailure::Busy
+        | LinkFailure::Other(_) => true,
+    }
+}
+
 #[tokio::test(start_paused = true)]
-async fn failures_only_the_listener_can_fix_are_not_retried_automatically() {
+async fn each_link_failure_is_retried_unless_only_the_listener_or_a_restart_can_fix_it() {
     for failure in [
         LinkFailure::InUseByAnotherProcess,
         LinkFailure::BluetoothPermissionDenied,
+        LinkFailure::ServiceNotFound,
+        LinkFailure::DeviceNotConnected,
+        LinkFailure::BluetoothUnavailable,
+        LinkFailure::TimedOut,
+        LinkFailure::Busy,
+        LinkFailure::BluetoothHandlingStopped,
+        LinkFailure::Other("IOBluetooth error 0xE00002BC".into()),
     ] {
         let (platform, mut os) = fake_platform();
         let _core = Core::start(platform);
         os.fail_links(&buds4pro().address, failure.clone());
         os.observe(Observation::DeviceConnected(buds4pro()));
         os.next_attempt().await;
+        os.allow_links(&buds4pro().address);
 
-        assert!(
-            !os.attempts_within(Duration::from_secs(600)).await,
-            "{failure:?} was retried"
+        assert_eq!(
+            os.attempts_within(Duration::from_secs(600)).await,
+            retried(&failure),
+            "{failure:?}"
         );
     }
 }

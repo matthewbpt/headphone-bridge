@@ -193,6 +193,10 @@ impl Serialize for NotAttachedReason {
                 LinkFailure::BluetoothPermissionDenied => ("bluetoothPermissionDenied", None),
                 LinkFailure::ServiceNotFound => ("serviceNotFound", None),
                 LinkFailure::DeviceNotConnected => ("deviceNotConnected", None),
+                LinkFailure::BluetoothUnavailable => ("bluetoothUnavailable", None),
+                LinkFailure::TimedOut => ("timedOut", None),
+                LinkFailure::Busy => ("busy", None),
+                LinkFailure::BluetoothHandlingStopped => ("bluetoothHandlingStopped", None),
                 LinkFailure::Other(detail) => ("other", Some(detail)),
             },
         };
