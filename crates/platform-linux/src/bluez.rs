@@ -6,7 +6,7 @@
 //! more on the Device's existing connection, alongside A2DP.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use bluer::rfcomm::{ConnectRequest, Profile, ReqError, Role, Stream};
@@ -240,9 +240,15 @@ impl Bluez {
         let mut busy = 0;
         let stream = loop {
             let (tx, rx) = oneshot::channel();
-            waiters.lock().unwrap().insert(address, tx);
+            waiters
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(address, tx);
             let result = connect_profile(&device, service, rx).await;
-            waiters.lock().unwrap().remove(&address);
+            waiters
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&address);
             match result {
                 Ok(stream) => break stream,
                 Err(ConnectProfileFailure::Busy) if busy < BUSY_RETRIES => {
@@ -286,7 +292,10 @@ impl Bluez {
         let router = waiters.clone();
         tokio::spawn(async move {
             while let Some(request) = handle.next().await {
-                let waiter = router.lock().unwrap().remove(&request.device());
+                let waiter = router
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(&request.device());
                 match waiter {
                     Some(waiter) => {
                         if let Err(oneshot_request) = waiter.send(request) {

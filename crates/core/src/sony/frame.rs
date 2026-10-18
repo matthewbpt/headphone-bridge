@@ -98,11 +98,10 @@ impl Deframer {
             let end = start + end;
             // A start byte inside the candidate means the earlier one was
             // garbage: decode from the last one.
-            let last_start = start
-                + self.buffer[start..end]
-                    .iter()
-                    .rposition(|&b| b == START)
-                    .unwrap();
+            let last_start = self.buffer[start..end]
+                .iter()
+                .rposition(|&b| b == START)
+                .map_or(start, |offset| start + offset);
             frames.extend(decode(&self.buffer[last_start..=end]));
             consumed = end + 1;
         }

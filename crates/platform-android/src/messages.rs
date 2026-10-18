@@ -190,8 +190,8 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("a message always serializes")
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(self)
     }
 }
 

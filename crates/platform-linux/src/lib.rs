@@ -21,7 +21,7 @@ pub use linux::LinuxBluetooth;
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use std::sync::Mutex;
+    use std::sync::{Mutex, PoisonError};
 
     use headphone_bridge_core::platform::{
         ControlLink, DeviceAddress, LinkFailure, Observations, Platform,
@@ -56,9 +56,9 @@ mod linux {
         fn observations(&self) -> Observations {
             self.observations
                 .lock()
-                .unwrap()
+                .unwrap_or_else(PoisonError::into_inner)
                 .take()
-                .expect("observations taken twice")
+                .unwrap_or_else(|| mpsc::unbounded_channel().1)
         }
 
         async fn open_control_link(

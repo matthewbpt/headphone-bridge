@@ -7,7 +7,10 @@ use uuid::Uuid;
 /// The platform adapter for this OS.
 #[cfg(target_os = "macos")]
 pub fn start() -> headphone_bridge_platform_macos::MacBluetooth {
-    headphone_bridge_platform_macos::MacBluetooth::start()
+    headphone_bridge_platform_macos::MacBluetooth::start().unwrap_or_else(|error| {
+        eprintln!("Headphone Bridge couldn't start Bluetooth: {error}");
+        std::process::exit(1)
+    })
 }
 
 #[cfg(target_os = "linux")]

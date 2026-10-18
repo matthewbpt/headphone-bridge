@@ -58,6 +58,8 @@ pub enum CommandError {
     EqualizerUnavailable,
     /// The frame log file couldn't be opened.
     FrameLogUnavailable(String),
+    /// The core has stopped, so it takes no more commands.
+    CoreStopped,
 }
 
 impl CommandError {

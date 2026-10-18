@@ -6,7 +6,7 @@
 //! Tray actions only use menu items, never tray click events, because Linux
 //! doesn't emit them.
 
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
@@ -64,7 +64,7 @@ pub fn update(app: &AppHandle, list: &DeviceList) {
     let tray = app.state::<Tray>();
     let menu = TrayMenu::new(list);
     {
-        let mut shown = tray.menu.lock().unwrap();
+        let mut shown = tray.menu.lock().unwrap_or_else(PoisonError::into_inner);
         if *shown == menu {
             return;
         }
@@ -114,7 +114,11 @@ fn build(app: &AppHandle, menu: &TrayMenu) -> tauri::Result<Menu<tauri::Wry>> {
 
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     let tray = app.state::<Tray>();
-    let shown = tray.menu.lock().unwrap().clone();
+    let shown = tray
+        .menu
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
     match shown.click(event.id().as_ref()) {
         Some(Click::Open) => crate::show_window(app),
         Some(Click::Quit) => app.exit(0),

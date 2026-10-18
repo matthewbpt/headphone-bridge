@@ -16,8 +16,9 @@ mod audio_output;
 mod bluetooth_thread;
 mod delegates;
 
+use std::io;
 use std::sync::mpsc as std_mpsc;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::{
     ControlLink, DeviceAddress, LinkFailure, Observations, Platform,
@@ -36,23 +37,23 @@ pub struct MacBluetooth {
 }
 
 impl MacBluetooth {
-    pub fn start() -> MacBluetooth {
+    pub fn start() -> io::Result<MacBluetooth> {
         let (observations_tx, observations) = mpsc::unbounded_channel();
-        let (commands, waker) = bluetooth_thread::spawn(observations_tx);
+        let (commands, waker) = bluetooth_thread::spawn(observations_tx)?;
         let audio_changes = Mutex::new(commands.clone());
         let audio_waker = waker.clone();
         audio_output::watch(move || {
             let _ = audio_changes
                 .lock()
-                .unwrap()
+                .unwrap_or_else(PoisonError::into_inner)
                 .send(Command::CheckAudioOutput);
             audio_waker.wake();
         });
-        MacBluetooth {
+        Ok(MacBluetooth {
             commands,
             waker,
             observations: Mutex::new(Some(observations)),
-        }
+        })
     }
 
     fn send(&self, command: Command) -> bool {
@@ -66,9 +67,9 @@ impl Platform for MacBluetooth {
     fn observations(&self) -> Observations {
         self.observations
             .lock()
-            .unwrap()
+            .unwrap_or_else(PoisonError::into_inner)
             .take()
-            .expect("observations taken twice")
+            .unwrap_or_else(|| mpsc::unbounded_channel().1)
     }
 
     async fn open_control_link(

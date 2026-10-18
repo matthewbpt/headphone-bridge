@@ -63,7 +63,8 @@ export type CommandError =
   | "incompleteEqualizer"
   | "settingsNotReported"
   | "equalizerUnavailable"
-  | { frameLogUnavailable: string };
+  | { frameLogUnavailable: string }
+  | "coreStopped";
 
 /** Why the shell couldn't hand the frame log to Android's share sheet. */
 export type ShareError = "frameLogOff" | "frameLogEmpty" | { shareFailed: string };
@@ -95,6 +96,7 @@ const WORDS: {
   settingsNotReported: "the Device hasn't reported its settings yet",
   equalizerUnavailable: "the Device isn't taking Equalizer changes right now",
   frameLogUnavailable: (message) => message,
+  coreStopped: "the app has stopped working; restart it",
   frameLogOff: "the frame log is off",
   frameLogEmpty: "it's empty until a Device is Attached",
   shareFailed: (message) => message,

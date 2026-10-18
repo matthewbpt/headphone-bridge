@@ -12,7 +12,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub trait Platform: Send + Sync + 'static {
-    /// The stream of OS observations. The core calls this once, at start.
+    /// The stream of OS observations. The core calls this once, at start; a
+    /// later call may get a stream that never yields.
     fn observations(&self) -> Observations;
 
     /// Opens a control link to the vendor service `service` of the Connected

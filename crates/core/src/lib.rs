@@ -142,8 +142,8 @@ impl Core {
         let (reply, response) = oneshot::channel();
         self.requests
             .send(Request::Command(command, reply))
-            .expect("core task stopped");
-        response.await.expect("core task stopped")
+            .map_err(|_| CommandError::CoreStopped)?;
+        response.await.unwrap_or(Err(CommandError::CoreStopped))
     }
 
     /// Holds every Connected Device, now and as they Connect, until the
@@ -162,9 +162,8 @@ impl Core {
 
     fn hold(&self, device: Option<DeviceAddress>) -> Hold {
         let id = self.next_hold.fetch_add(1, Ordering::Relaxed);
-        self.requests
-            .send(Request::Hold(id, device.clone()))
-            .expect("core task stopped");
+        // A stopped core holds nothing.
+        let _ = self.requests.send(Request::Hold(id, device.clone()));
         Hold {
             id,
             device,
@@ -510,8 +509,9 @@ impl<P: Platform> State<P> {
             return;
         };
         let session = self.attach(address, vendor, delay);
-        let tracked = self.devices.get_mut(address).expect("tracked above");
-        tracked.session = Some(session);
+        if let Some(tracked) = self.devices.get_mut(address) {
+            tracked.session = Some(session);
+        }
     }
 
     /// Starts a session that opens the control link after `delay`.
@@ -707,7 +707,10 @@ impl<P: Platform> State<P> {
                     return Err(CommandError::MissingCapability);
                 }
                 session.send(SessionCommand::PowerOff)?;
-                let tracked = self.devices.get_mut(&address).expect("checked above");
+                let tracked = self
+                    .devices
+                    .get_mut(&address)
+                    .ok_or(CommandError::UnknownDevice)?;
                 tracked.device.state = DeviceState::PoweringOff;
                 tracked.device.power_off_failed = false;
                 Ok(())
@@ -718,7 +721,10 @@ impl<P: Platform> State<P> {
                     return Ok(());
                 }
                 // Retrying by hand starts over, straight away.
-                let tracked = self.devices.get_mut(&address).expect("checked above");
+                let tracked = self
+                    .devices
+                    .get_mut(&address)
+                    .ok_or(CommandError::UnknownDevice)?;
                 tracked.device.state = DeviceState::Attaching;
                 tracked.retries = 0;
                 self.reattach(&address, Duration::ZERO);
@@ -799,7 +805,9 @@ impl<P: Platform> State<P> {
             .collect();
         for address in timed_out {
             let wanted = self.wants_attached(&address);
-            let tracked = self.devices.get_mut(&address).expect("listed above");
+            let Some(tracked) = self.devices.get_mut(&address) else {
+                continue;
+            };
             let link_open = tracked.session.is_some();
             let reattach = wanted && !link_open;
             if !wanted {

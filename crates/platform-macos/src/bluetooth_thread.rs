@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::ffi::c_void;
+use std::io;
 use std::sync::{mpsc as std_mpsc, Arc};
 use std::time::{Duration, Instant};
 
@@ -85,19 +86,23 @@ const SDP_TYPE_ALTERNATIVE: u8 = 7;
 
 pub fn spawn(
     observations: mpsc::UnboundedSender<Observation>,
-) -> (std_mpsc::Sender<Command>, Waker) {
+) -> io::Result<(std_mpsc::Sender<Command>, Waker)> {
     let (commands_tx, commands) = std_mpsc::channel();
     let (waker_tx, waker_rx) = std_mpsc::channel();
     std::thread::Builder::new()
         .name("hb-iobluetooth".into())
         .spawn(move || {
-            let run_loop = CFRunLoop::current().expect("thread has no run loop");
+            // Without a run loop the thread ends, dropping `waker_tx`.
+            let Some(run_loop) = CFRunLoop::current() else {
+                return;
+            };
             let _ = waker_tx.send(Waker(Arc::new(RunLoopHandle(run_loop))));
             BluetoothThread::new(observations).run(commands);
-        })
-        .expect("couldn't spawn the Bluetooth thread");
-    let waker = waker_rx.recv().expect("Bluetooth thread failed to start");
-    (commands_tx, waker)
+        })?;
+    let waker = waker_rx
+        .recv()
+        .map_err(|_| io::Error::other("the Bluetooth thread has no run loop"))?;
+    Ok((commands_tx, waker))
 }
 
 struct BluetoothThread {

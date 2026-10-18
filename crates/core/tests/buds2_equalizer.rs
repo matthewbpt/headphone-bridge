@@ -2,6 +2,8 @@
 //! Gadgetbridge and Samsung's support pages, confirmed by real captures of
 //! Preset picks and of an Attach after Samsung's app changed the Preset.
 
+#![cfg(test)]
+
 mod support;
 
 use headphone_bridge_core::platform::Observation;
