@@ -172,7 +172,7 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
 }
 
 #[tokio::test]
-async fn custom_is_rejected_as_the_buds2_has_no_custom_eq() {
+async fn custom_is_rejected_as_the_buds2_has_no_custom_preset() {
     rejected(preset(7), CommandError::UnavailablePreset).await;
 }
 
