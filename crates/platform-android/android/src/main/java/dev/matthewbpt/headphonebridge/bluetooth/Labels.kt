@@ -53,6 +53,10 @@ private fun notAttachedReasonText(reason: JSONObject): String =
     "bluetoothPermissionDenied" -> ALLOW_NEARBY_DEVICES
     "serviceNotFound" -> "Control service not found"
     "deviceNotConnected" -> "Not Connected"
+    "bluetoothUnavailable" -> "Bluetooth is off or unavailable"
+    "timedOut" -> "The Device didn't answer in time"
+    "busy" -> "Bluetooth is busy with the Device"
+    "bluetoothHandlingStopped" -> "Something went wrong: restart the app"
     "noResponse" -> "The Device didn't respond"
     "other" -> listOf(LINK_FAILED, reason.optString("detail")).filter { it.isNotEmpty() }.joinToString("\n")
     else -> LINK_DROPPED
