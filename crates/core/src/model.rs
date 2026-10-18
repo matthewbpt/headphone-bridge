@@ -156,13 +156,13 @@ impl Capabilities {
     /// Rejects `level` unless a Device with these Capabilities has that
     /// Ambient Level.
     pub(crate) fn check_ambient_level(&self, level: u8) -> Result<(), CommandError> {
-        check_level(self.ambient_level, level)
+        Capabilities::check_level(self.ambient_level, level)
     }
 
     /// Rejects `level` unless a Device with these Capabilities has that
     /// Noise Cancelling Level.
     pub(crate) fn check_noise_cancelling_level(&self, level: u8) -> Result<(), CommandError> {
-        check_level(self.noise_cancelling_level, level)
+        Capabilities::check_level(self.noise_cancelling_level, level)
     }
 
     /// Rejects `equalizer` unless a Device with these Capabilities can be set
@@ -184,10 +184,10 @@ impl Capabilities {
             if bands.len() != shape.frequencies.len() {
                 return Err(CommandError::OutOfRange);
             }
-            check_steps(Some(shape.range), preset, bands)?;
+            Capabilities::check_steps(Some(shape.range), preset, bands)?;
         }
         if let Some(clear_bass) = equalizer.clear_bass {
-            check_steps(capability.clear_bass, preset, &[clear_bass])?;
+            Capabilities::check_steps(capability.clear_bass, preset, &[clear_bass])?;
         }
         // A Model with both takes them together.
         if capability.bands.is_some()
@@ -198,32 +198,32 @@ impl Capabilities {
         }
         Ok(())
     }
-}
 
-/// Rejects `level` unless a Device with the level Capability `range` has it.
-fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError> {
-    let range = range.ok_or(CommandError::MissingCapability)?;
-    if !range.contains(level) {
-        return Err(CommandError::OutOfRange);
+    /// Rejects `level` unless a Device with the level Capability `range` has it.
+    fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError> {
+        let range = range.ok_or(CommandError::MissingCapability)?;
+        if !range.contains(level) {
+            return Err(CommandError::OutOfRange);
+        }
+        Ok(())
     }
-    Ok(())
-}
 
-/// Rejects `steps` unless a Device with the step Capability `range` can set
-/// them on `preset`.
-fn check_steps(
-    range: Option<StepRange>,
-    preset: &Preset,
-    steps: &[i8],
-) -> Result<(), CommandError> {
-    let range = range.ok_or(CommandError::MissingCapability)?;
-    if !preset.editable {
-        return Err(CommandError::FixedPreset);
+    /// Rejects `steps` unless a Device with the step Capability `range` can set
+    /// them on `preset`.
+    fn check_steps(
+        range: Option<StepRange>,
+        preset: &Preset,
+        steps: &[i8],
+    ) -> Result<(), CommandError> {
+        let range = range.ok_or(CommandError::MissingCapability)?;
+        if !preset.editable {
+            return Err(CommandError::FixedPreset);
+        }
+        if !steps.iter().all(|&step| range.contains(step)) {
+            return Err(CommandError::OutOfRange);
+        }
+        Ok(())
     }
-    if !steps.iter().all(|&step| range.contains(step)) {
-        return Err(CommandError::OutOfRange);
-    }
-    Ok(())
 }
 
 /// What a Model's Equalizer offers.
