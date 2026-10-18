@@ -69,9 +69,9 @@ file.
   - `real-equalizer-custom`: the session after, the same way, with a custom
     curve set in Samsung's app. This Attach reports Preset 6: the Buds4 Pro's
     Custom is 6 on the wire, not the 7 the upstream-derived protocol gave.
-- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314,
-  from the frame log on macOS, on 2026-10-17. Two link sessions, cut into the
-  `real-*` files.
+- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314.
+  The `real-*` files are from the frame log: two link sessions on macOS, on
+  2026-10-17, and the `real-equalizer*` sessions on Linux, on 2026-10-18.
   - `real-attach`: the Attach, answered with an extended status, then the
     Device's own traffic.
   - `real-noise-control`: Attach, then four mode sets, each confirmed only
@@ -85,6 +85,18 @@ file.
     1 (gesture) at byte 4, and nothing sent to the Device.
   - `real-ambient-level`: Attach, then six Ambient Level sets down to 0,
     each confirmed only by an ACK carrying the applied level.
+  - `real-equalizer`: from the frame log on Linux, 2026-10-18, firmware
+    revision 11 (extended status byte 0). Attach on Normal, then Bass boost,
+    Soft, Dynamic, Clear, Treble boost and Normal picked from the app. Each
+    `EQUALIZER` set is confirmed only by an ACK carrying the applied Preset:
+    its `MANAGER_INFO` gets a bare `88 00`. A Noise Control Mode set between
+    the last two picks is left out.
+  - `real-equalizer-from-samsungs-app`: the next session, the same day.
+    Galaxy Wearable can't connect while this app is Attached, so the Device
+    was disconnected from the laptop, Galaxy Wearable moved it to Treble
+    boost, and it was connected again. This Attach reports Preset 5 at byte
+    9. Then Clear, Normal and Soft are picked from the app. Galaxy Wearable
+    offers the Buds2 no custom curve.
   - `attach`: synthesised. The app's `MANAGER_INFO`, answered by the real
     revision-10 extended status in GalaxyBudsClient's tests
     (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,
