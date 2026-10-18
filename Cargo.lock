@@ -1570,6 +1570,7 @@ dependencies = [
  "headphone-bridge-platform-android",
  "headphone-bridge-platform-linux",
  "headphone-bridge-platform-macos",
+ "headphone-bridge-simulated",
  "jni",
  "serde",
  "serde_json",

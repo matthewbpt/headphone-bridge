@@ -9,6 +9,8 @@ mod labels;
 #[cfg(not(target_os = "android"))]
 mod platform;
 mod share;
+#[cfg(debug_assertions)]
+mod simulated;
 #[cfg(desktop)]
 mod tray;
 
@@ -100,12 +102,20 @@ fn frame_log_wanted(app: &AppHandle) -> bool {
 }
 
 /// Starts the core, with the frame log on if wanted. Returns the log file
-/// while it's on.
+/// while it's on. In debug builds the platform adapter is wrapped in the
+/// Simulated Device, whose `Simulator` goes into the app's state.
 #[cfg(not(target_os = "android"))]
 fn start_core(app: &AppHandle) -> anyhow::Result<(Core, Option<PathBuf>)> {
     let mut core = Core::builder();
     let path = start_frame_log(app, &mut core);
     let (platform, observations) = platform::start()?;
+    #[cfg(debug_assertions)]
+    let (platform, observations) = {
+        let (platform, observations, simulator) =
+            headphone_bridge_simulated::wrap(platform, observations);
+        app.manage(simulator);
+        (platform, observations)
+    };
     Ok((core.start(platform, observations), path))
 }
 
@@ -220,21 +230,6 @@ async fn set_frame_log(
     save_frame_log_setting(&app, enabled);
     *frame_log.0.lock().unwrap_or_else(PoisonError::into_inner) = path.clone();
     Ok(path)
-}
-
-/// The Simulated Device's Model while it's switched on. Debug Android builds
-/// alone have it, for the emulator.
-#[cfg(all(target_os = "android", debug_assertions))]
-#[tauri::command]
-fn simulated_device() -> Option<headphone_bridge_core::Model> {
-    headphone_bridge_platform_android::android::simulated()
-}
-
-/// Switches the Simulated Device on as `model`, or off with `None`.
-#[cfg(all(target_os = "android", debug_assertions))]
-#[tauri::command]
-fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
-    headphone_bridge_platform_android::android::simulate(model);
 }
 
 /// Whether Android lets the app use Bluetooth: the Nearby devices permission,
@@ -449,10 +444,10 @@ pub fn run() {
             nearby_devices_permission,
             open_app_settings,
             share_frame_log,
-            #[cfg(all(target_os = "android", debug_assertions))]
-            simulated_device,
-            #[cfg(all(target_os = "android", debug_assertions))]
-            set_simulated_device
+            #[cfg(debug_assertions)]
+            simulated::simulated_device,
+            #[cfg(debug_assertions)]
+            simulated::set_simulated_device
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
