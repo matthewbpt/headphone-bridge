@@ -164,6 +164,6 @@ pub enum AttachPolicy {
     /// For as long as it's Connected.
     Always,
     /// Only while a hold asks for it; otherwise it stays Detached, so another
-    /// app or device can have its control link.
+    /// app or device can have its Control Link.
     OnRequest,
 }

@@ -74,7 +74,7 @@ struct State<P> {
     holds: BTreeMap<u64, Option<DeviceAddress>>,
 }
 
-/// A Connected Device and its control link session, if any.
+/// A Connected Device and its Control Link session, if any.
 struct Tracked {
     device: Device,
     /// `None` for an unsupported Model, which no session runs with.
@@ -89,12 +89,12 @@ struct Tracked {
     /// Unix epoch. `None` once what it reported is dropped.
     last_report: Option<u64>,
     /// When a Device that is Powering Off, and acknowledged it or closed its
-    /// control link, is given up on if it is still Connected.
+    /// Control Link, is given up on if it is still Connected.
     power_off_deadline: Option<Instant>,
 }
 
 impl Tracked {
-    /// Detaches the Device on purpose, closing its control link. It keeps
+    /// Detaches the Device on purpose, closing its Control Link. It keeps
     /// what it last reported, for the rest of its Connected spell, marked
     /// with when it reported it.
     fn detach(&mut self) {
@@ -103,7 +103,7 @@ impl Tracked {
         self.end_session();
     }
 
-    /// Closes the Device's control link, or forgets it after it dropped, and
+    /// Closes the Device's Control Link, or forgets it after it dropped, and
     /// puts the Device in `state`, dropping what it reported.
     fn lose_link(&mut self, state: DeviceState) {
         self.device = self.device.detached(state);
@@ -156,7 +156,7 @@ impl NotAttachedReason {
     }
 }
 
-/// A running control link session task.
+/// A running Control Link session task.
 struct LinkSession {
     attempt: u64,
     task: JoinHandle<()>,
@@ -286,7 +286,7 @@ impl<P: Platform> State<P> {
     }
 
     /// Starts a new session for the tracked Device at `address` that opens
-    /// the control link after `delay`, in place of any session it had.
+    /// the Control Link after `delay`, in place of any session it had.
     fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
         let Some(vendor) = self.devices.get(address).and_then(|tracked| tracked.vendor) else {
             return;
@@ -297,7 +297,7 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// Starts a session that opens the control link after `delay`.
+    /// Starts a session that opens the Control Link after `delay`.
     fn attach(&mut self, address: &DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
@@ -396,7 +396,7 @@ impl<P: Platform> State<P> {
                     tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
                 }
             }
-            // The control link closing is part of switching off: the Device
+            // The Control Link closing is part of switching off: the Device
             // stays Powering Off until it stops being Connected, or until the
             // deadline: a link that closes before the ACK stands in for it.
             // A Power Off the Device never acknowledged fails like any other
@@ -547,7 +547,7 @@ impl<P: Platform> State<P> {
 
     /// Ends Powering Off for every Device still Connected past its deadline,
     /// and reports that it didn't Power Off.
-    /// A Device whose control link is still open is Attached again; one
+    /// A Device whose Control Link is still open is Attached again; one
     /// whose link closed is Attached afresh, as a newly Connected Device is.
     /// Either is Detached instead if nothing asks for it to be Attached now.
     fn power_off_timed_out(&mut self) {
@@ -597,7 +597,7 @@ impl<P: Platform> State<P> {
         }
     }
 
-    /// The Attached Device at `address` and its control link session.
+    /// The Attached Device at `address` and its Control Link session.
     fn attached(&self, address: &DeviceAddress) -> Result<(&Device, &LinkSession), CommandError> {
         let tracked = self.supported(address)?;
         match (&tracked.device.state, &tracked.session) {
