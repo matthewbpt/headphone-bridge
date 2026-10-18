@@ -6,7 +6,7 @@ use headphone_bridge_core::{
     PresetId,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds4 Pro Attached through capture-3's first extended
@@ -55,7 +55,7 @@ async fn the_snapshot_carries_the_models_presets_and_the_reported_one() {
         (3, "Dynamic", true),
         (4, "Clear", true),
         (5, "Treble boost", true),
-        (7, "Custom", false),
+        (6, "Custom", false),
     ];
     assert_eq!(
         list.devices[0].capabilities.equalizer,
@@ -176,12 +176,12 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
 
 #[tokio::test]
 async fn a_preset_the_model_does_not_list_is_rejected_before_anything_is_sent() {
-    rejected(preset(6), CommandError::UnavailablePreset).await;
+    rejected(preset(7), CommandError::UnavailablePreset).await;
 }
 
 #[tokio::test]
 async fn custom_is_rejected_as_only_samsungs_app_can_pick_it() {
-    rejected(preset(7), CommandError::UnavailablePreset).await;
+    rejected(preset(6), CommandError::UnavailablePreset).await;
 }
 
 #[tokio::test]
@@ -217,4 +217,40 @@ async fn a_preset_is_not_sent_before_the_device_is_attached() {
     assert_eq!(result, Err(CommandError::NotAttached));
     drop(core);
     assert_eq!(link.written.recv().await, None, "nothing else written");
+}
+
+/// Starts a core and plays a recorded Buds4 Pro session's Attach and
+/// everything after it, keeping the link open.
+async fn replayed(name: &str) -> (Core, DeviceLink) {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let mut link = os.next_link().await;
+    replay(&mut link, &fixture(name)).await;
+    (core, link)
+}
+
+#[tokio::test]
+async fn a_real_attach_on_a_custom_curve_reports_custom() {
+    // Samsung's app set a custom curve before this Attach; the Device
+    // reports Preset 6.
+    let (core, _link) = replayed("galaxy-buds4-pro/real-equalizer-custom").await;
+
+    let list = wait_for(&core, |list| list.devices[0].equalizer.is_some()).await;
+
+    assert_eq!(list.devices[0].equalizer, Some(preset(6)));
+    let custom = list.devices[0]
+        .capabilities
+        .equalizer
+        .as_ref()
+        .and_then(|equalizer| equalizer.presets.iter().find(|p| p.id == PresetId(6)));
+    assert_eq!(
+        custom,
+        Some(&Preset {
+            id: PresetId(6),
+            name: "Custom",
+            editable: false,
+            selectable: false,
+        })
+    );
 }

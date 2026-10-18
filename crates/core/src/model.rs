@@ -49,10 +49,12 @@ impl Model {
                     presets: [
                         samsung_presets(),
                         // Set from Samsung's app, which keeps its curve: the
-                        // app can report it, but not pick it.
+                        // app can report it, but not pick it. 6 on the wire
+                        // (galaxy-buds4-pro/real-equalizer-custom), not the 7
+                        // upstream gave.
                         vec![Preset {
                             selectable: false,
-                            ..Preset::fixed(7, "Custom")
+                            ..Preset::fixed(6, "Custom")
                         }],
                     ]
                     .concat(),
