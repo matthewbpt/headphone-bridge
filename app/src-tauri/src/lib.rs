@@ -17,6 +17,8 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::{Mutex, PoisonError};
 
+#[cfg(not(target_os = "android"))]
+use anyhow::Context;
 use headphone_bridge_core::platform::DeviceAddress;
 #[cfg(not(target_os = "android"))]
 use headphone_bridge_core::CoreBuilder;
@@ -103,10 +105,11 @@ fn frame_log_wanted(app: &AppHandle) -> bool {
 /// Starts the core, with the frame log on if wanted. Returns the log file
 /// while it's on.
 #[cfg(not(target_os = "android"))]
-fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
+fn start_core(app: &AppHandle) -> anyhow::Result<(Core, Option<PathBuf>)> {
     let mut core = Core::builder();
     let path = start_frame_log(app, &mut core);
-    (core.start(platform::start()), path)
+    let platform = platform::start().context("couldn't start the core")?;
+    Ok((core.start(platform), path))
 }
 
 /// Switches the frame log on for the core `core` starts, if wanted. Returns
@@ -360,6 +363,24 @@ async fn share_frame_log(
     }
 }
 
+/// `error` for the setup hook to return. Tauri keeps only the Display of
+/// what the hook returns, so the context chain goes into it here.
+#[cfg_attr(
+    target_os = "android",
+    expect(dead_code, reason = "Android's core is started by its adapter")
+)]
+fn through_setup_hook(error: &anyhow::Error) -> Box<dyn std::error::Error> {
+    format!("{error:#}").into()
+}
+
+/// The one message a startup failure prints, with its context chain.
+fn startup_failure(error: tauri::Error) -> String {
+    format!(
+        "{:#}",
+        anyhow::Error::from(error).context("Headphone Bridge couldn't start")
+    )
+}
+
 /// Passed by "Launch at login", so the app starts in the tray.
 #[cfg(desktop)]
 const HIDDEN: &str = "--hidden";
@@ -391,22 +412,19 @@ pub fn run() {
             show_window(app)
         }))
         .plugin(tauri_plugin_autostart::Builder::new().arg(HIDDEN).build());
-    builder
+    let app = builder
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             #[cfg(desktop)]
             tray::install(app.handle())?;
+            // The setup hook runs once, so this is the only core started.
             #[cfg(not(target_os = "android"))]
             let (core, frame_log) = {
-                let mut frame_log = None;
-                let core = CORE.get_or_init(|| {
-                    let (core, log) =
-                        tauri::async_runtime::block_on(async { start_core(app.handle()) });
-                    frame_log = log;
-                    core
-                });
-                (core, frame_log)
+                let (core, frame_log) =
+                    tauri::async_runtime::block_on(async { start_core(app.handle()) })
+                        .map_err(|error| through_setup_hook(&error))?;
+                (CORE.get_or_init(|| core), frame_log)
             };
             #[cfg(target_os = "android")]
             let (core, frame_log) = android_core(app.handle())?;
@@ -474,23 +492,26 @@ pub fn run() {
             #[cfg(all(target_os = "android", debug_assertions))]
             set_simulated_device
         ])
-        .build(tauri::generate_context!())
-        .unwrap_or_else(|error| {
-            eprintln!("Headphone Bridge couldn't start: {error}");
+        .build(tauri::generate_context!());
+    let app = match app {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("{}", startup_failure(error));
             std::process::exit(1)
-        })
-        .run(|app, event| {
-            // Clicking the Dock icon while the window is hidden.
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen {
-                has_visible_windows: false,
-                ..
-            } = event
-            {
-                show_window(app);
-            }
-            let _ = (app, event);
-        });
+        }
+    };
+    app.run(|app, event| {
+        // Clicking the Dock icon while the window is hidden.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } = event
+        {
+            show_window(app);
+        }
+        let _ = (app, event);
+    });
 }
 
 #[cfg(test)]
@@ -509,6 +530,17 @@ mod tests {
         assert_eq!(
             json(SetFrameLogError::Core(CommandError::CoreStopped)),
             r#""coreStopped""#
+        );
+    }
+
+    #[test]
+    fn reports_a_startup_failure_in_one_message_with_its_context_chain() {
+        let failure = anyhow::anyhow!("Bluetooth is off").context("couldn't start Bluetooth");
+        let error = tauri::Error::Setup(through_setup_hook(&failure).into());
+        assert_eq!(
+            startup_failure(error),
+            "Headphone Bridge couldn't start: error encountered during setup hook: \
+             couldn't start Bluetooth: Bluetooth is off"
         );
     }
 }
