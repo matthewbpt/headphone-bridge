@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::LinkFailure;
-use headphone_bridge_core::{Command, CommandError, DeviceList, DeviceState, NotAttachedReason};
+use headphone_bridge_core::{
+    Command, CommandError, Core, DeviceList, DeviceState, NotAttachedReason,
+};
 use headphone_bridge_platform_android::messages::{CommandFailure, Message};
 use headphone_bridge_platform_android::Host;
 use tokio::sync::mpsc;
@@ -23,7 +25,7 @@ struct Kotlin {
 
 fn start() -> (Host, Kotlin) {
     let (sink, messages) = mpsc::unbounded_channel();
-    let host = Host::start(move |message| sink.send(message).is_ok());
+    let host = Host::start(move |message| sink.send(message).is_ok(), Core::builder());
     (host, Kotlin { messages })
 }
 
@@ -298,10 +300,13 @@ async fn a_command_the_core_refuses_or_cannot_read_says_why() {
 async fn an_open_kotlin_never_got_fails_as_bluetooth_unavailable_instead_of_waiting_for_ever() {
     // Kotlin hasn't connected: nothing reaches it, but the test still sees it.
     let (sink, messages) = mpsc::unbounded_channel();
-    let host = Host::start(move |message| {
-        let _ = sink.send(message);
-        false
-    });
+    let host = Host::start(
+        move |message| {
+            let _ = sink.send(message);
+            false
+        },
+        Core::builder(),
+    );
     let mut kotlin = Kotlin { messages };
     connect_xm5(&host);
     host.event(r#"{"type":"holdAll"}"#).unwrap();
@@ -327,9 +332,9 @@ async fn a_host_started_with_the_frame_log_on_logs_the_first_attach() {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("host_first_attach.frames");
     let _ = std::fs::remove_file(&path);
     let (sink, messages) = mpsc::unbounded_channel();
-    let (host, started) =
-        Host::start_with_frame_log(move |message| sink.send(message).is_ok(), &path);
-    started.unwrap();
+    let mut builder = Core::builder();
+    builder.frame_log(&path).unwrap();
+    let host = Host::start(move |message| sink.send(message).is_ok(), builder);
     let mut kotlin = Kotlin { messages };
 
     connect_xm5(&host);

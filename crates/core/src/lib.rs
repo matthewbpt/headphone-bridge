@@ -25,7 +25,7 @@ pub use command::{Command, CommandError, Equalizer, NoiseControlMode};
 pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
-use frame_log::FrameLog;
+use frame_log::{FrameLog, FrameLogError};
 pub use model::{
     Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, PresetId, StepRange, Steps,
 };
@@ -64,43 +64,33 @@ impl Drop for Hold {
     }
 }
 
-impl Core {
-    /// Starts the core on the current Tokio runtime, Attaching every
-    /// Connected Device.
-    pub fn start(platform: impl Platform) -> Core {
-        Core::start_with(platform, AttachPolicy::Always)
+/// Starts a [`Core`]: Attaching every Connected Device with the frame log off,
+/// unless told otherwise.
+#[derive(Default)]
+pub struct CoreBuilder {
+    policy: AttachPolicy,
+    frame_log: FrameLog,
+}
+
+impl CoreBuilder {
+    /// Attaches the Devices `policy` asks for.
+    pub fn attach_policy(mut self, policy: AttachPolicy) -> CoreBuilder {
+        self.policy = policy;
+        self
     }
 
-    /// Starts the core on the current Tokio runtime with `policy`.
-    pub fn start_with(platform: impl Platform, policy: AttachPolicy) -> Core {
-        Core::start_logging(platform, policy, FrameLog::default())
+    /// Switches the frame log on now, appending to `path`, so Devices Attached
+    /// at startup are logged too. If the file can't be opened, the frame log
+    /// stays off and the core still starts. It's the one option that doesn't
+    /// chain, so the error comes back beside the path that caused it while
+    /// [`CoreBuilder::start`] stays infallible.
+    pub fn frame_log(&mut self, path: &Path) -> Result<(), FrameLogError> {
+        self.frame_log.start(path)
     }
 
-    /// Starts the core like [`Core::start`], with the frame log already on, appending to `path`,
-    /// so Devices Attached at startup are logged too. The core starts even if
-    /// the file can't be opened, with the frame log off.
-    pub fn start_with_frame_log(
-        platform: impl Platform,
-        path: &Path,
-    ) -> (Core, Result<(), CommandError>) {
-        Core::start_with_policy_and_frame_log(platform, AttachPolicy::Always, path)
-    }
-
-    /// Starts the core like [`Core::start_with`], with the frame log already
-    /// on, like [`Core::start_with_frame_log`].
-    pub fn start_with_policy_and_frame_log(
-        platform: impl Platform,
-        policy: AttachPolicy,
-        path: &Path,
-    ) -> (Core, Result<(), CommandError>) {
-        let frame_log = FrameLog::default();
-        let started = frame_log
-            .start(path)
-            .map_err(CommandError::frame_log_unavailable);
-        (Core::start_logging(platform, policy, frame_log), started)
-    }
-
-    fn start_logging(platform: impl Platform, policy: AttachPolicy, frame_log: FrameLog) -> Core {
+    /// Starts the core on the current Tokio runtime.
+    pub fn start(self, platform: impl Platform) -> Core {
+        let CoreBuilder { policy, frame_log } = self;
         let (requests, requests_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
         state::spawn(platform, policy, device_list_tx, frame_log, requests_rx);
@@ -109,6 +99,13 @@ impl Core {
             device_list,
             next_hold: AtomicU64::new(0),
         }
+    }
+}
+
+impl Core {
+    /// A builder for a core: [`CoreBuilder::start`] starts it.
+    pub fn builder() -> CoreBuilder {
+        CoreBuilder::default()
     }
 
     /// Sends `command` to the core. Resolves once the command has been
@@ -159,9 +156,10 @@ impl Core {
 }
 
 /// When the core Attaches a Connected Device.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AttachPolicy {
     /// For as long as it's Connected.
+    #[default]
     Always,
     /// Only while a hold asks for it; otherwise it stays Detached, so another
     /// app or device can have its Control Link.

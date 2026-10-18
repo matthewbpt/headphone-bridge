@@ -482,7 +482,7 @@ impl<P: Platform> State<P> {
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
-                .map_err(CommandError::frame_log_unavailable),
+                .map_err(CommandError::FrameLogUnavailable),
             Command::SetFrameLog(None) => {
                 self.frame_log.stop();
                 Ok(())

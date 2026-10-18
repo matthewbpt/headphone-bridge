@@ -24,7 +24,7 @@ const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 
 /// handshake has been written.
 async fn connected_buds2() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
@@ -108,7 +108,7 @@ async fn a_buds2_named_device_reporting_another_models_device_id_is_unsupported(
 #[tokio::test(start_paused = true)]
 async fn a_galaxy_buds2_pro_is_listed_as_unsupported_and_sent_nothing() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
         address: DeviceAddress("10:20:30:40:50:60".into()),
         name: "Galaxy Buds2 Pro (9F3C)".into(),
@@ -422,7 +422,7 @@ async fn frame_logs_label_the_buds2s_frames_galaxy_buds2() {
     let path = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("buds2.frames");
     let _ = std::fs::remove_file(&path);
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     core.command(Command::SetFrameLog(Some(path.clone())))
         .await
         .unwrap();
@@ -443,7 +443,7 @@ async fn frame_logs_label_the_buds2s_frames_galaxy_buds2() {
 #[tokio::test]
 async fn a_real_buds2_attach_reports_its_mode_level_and_battery() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
 
@@ -484,7 +484,7 @@ fn sets_in(records: &[FrameRecord], id: u8) -> Vec<usize> {
 async fn real_buds2_mode_sets_are_confirmed_by_their_acks_and_a_bud_out_only_pauses_the_mode() {
     use NoiseControlMode::*;
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
     // The Device ACKs each set with `78 <applied mode>` and answers the poll
@@ -532,7 +532,7 @@ async fn real_buds2_mode_sets_are_confirmed_by_their_acks_and_a_bud_out_only_pau
 #[tokio::test]
 async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
     // The Device ACKs each set with `84 <applied level>` and answers the poll
@@ -560,7 +560,7 @@ async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
 async fn real_buds2_long_presses_each_set_the_chosen_mode_and_nothing_is_written() {
     use NoiseControlMode::*;
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
     let records = fixture("galaxy-buds2/real-gesture");

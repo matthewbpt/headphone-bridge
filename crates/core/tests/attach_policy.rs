@@ -43,7 +43,9 @@ async fn closed(link: &mut DeviceLink) -> bool {
 #[tokio::test(start_paused = true)]
 async fn on_request_a_connected_device_stays_detached_with_no_control_link() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
 
     os.observe(Observation::DeviceConnected(buds4pro()));
 
@@ -54,7 +56,9 @@ async fn on_request_a_connected_device_stays_detached_with_no_control_link() {
 #[tokio::test(start_paused = true)]
 async fn holding_all_attaches_every_connected_device_until_the_hold_ends() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
     wait_for(&core, |list| {
@@ -79,7 +83,9 @@ async fn holding_all_attaches_every_connected_device_until_the_hold_ends() {
 #[tokio::test(start_paused = true)]
 async fn overlapping_holds_keep_devices_attached_until_the_last_ends() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let first = core.hold_all();
     os.next_attempt().await;
@@ -100,7 +106,9 @@ async fn overlapping_holds_keep_devices_attached_until_the_last_ends() {
 #[tokio::test(start_paused = true)]
 async fn a_device_that_connects_during_a_hold_is_attached() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     let _hold = core.hold_all();
 
     os.observe(Observation::DeviceConnected(xm5()));
@@ -113,7 +121,9 @@ async fn a_device_that_connects_during_a_hold_is_attached() {
 #[tokio::test(start_paused = true)]
 async fn a_device_detached_after_its_link_dropped_is_never_retried() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let hold = core.hold_all();
     os.next_attempt().await;
@@ -141,7 +151,9 @@ async fn a_device_detached_after_its_link_dropped_is_never_retried() {
 #[tokio::test(start_paused = true)]
 async fn commands_to_a_detached_device_are_refused() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let hold = core.hold_all();
     let mut link = os.next_link().await;
@@ -169,7 +181,9 @@ async fn commands_to_a_detached_device_are_refused() {
 #[tokio::test(start_paused = true)]
 async fn ending_the_hold_leaves_a_power_off_to_finish_then_detaches_a_device_that_stayed() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start_with(platform, AttachPolicy::OnRequest);
+    let core = Core::builder()
+        .attach_policy(AttachPolicy::OnRequest)
+        .start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let hold = core.hold_all();
     os.next_attempt().await;

@@ -22,7 +22,7 @@ const GET_PROTOCOL_INFO: [u8; 11] = [
 #[tokio::test]
 async fn a_connected_xm5_is_attached_on_the_v2_service_by_asking_for_its_protocol_info() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
 
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
@@ -39,7 +39,7 @@ async fn a_connected_xm5_is_attached_on_the_v2_service_by_asking_for_its_protoco
 #[tokio::test]
 async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
 
@@ -72,7 +72,7 @@ async fn the_model_name_identifies_the_xm5_and_its_battery_is_read() {
 #[tokio::test]
 async fn battery_follows_notifications() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
 
@@ -88,7 +88,7 @@ async fn battery_follows_notifications() {
 #[tokio::test]
 async fn a_real_xm5_attach_replays_from_its_frame_log() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
 
@@ -105,7 +105,7 @@ async fn a_real_xm5_attach_replays_from_its_frame_log() {
 #[tokio::test]
 async fn another_sony_model_is_detached_having_been_sent_only_reads() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     let wh1000xm6 = DeviceIdentity {
         address: DeviceAddress("AC:80:0A:44:55:66".into()),
         name: "WH-1000XM6".into(),
@@ -142,7 +142,7 @@ async fn another_sony_model_is_detached_having_been_sent_only_reads() {
 #[tokio::test]
 async fn a_battery_level_that_needs_escaping_is_read() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -161,7 +161,7 @@ async fn a_battery_level_that_needs_escaping_is_read() {
 #[tokio::test]
 async fn a_device_that_only_lists_the_battery_with_threshold_is_asked_for_that() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")[..9]).await;
@@ -192,7 +192,7 @@ async fn a_device_that_only_lists_the_battery_with_threshold_is_asked_for_that()
 #[tokio::test]
 async fn a_frame_that_fails_its_checksum_is_ignored() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     let records = fixture("wh-1000xm5/attach");
@@ -220,7 +220,7 @@ async fn frames_are_reassembled_from_any_fragmentation() {
     }
     for chunk_size in [1, 2, 7, 64, stream.len()] {
         let (platform, mut os) = fake_platform();
-        let core = Core::start(platform);
+        let core = Core::builder().start(platform);
         os.observe(Observation::DeviceConnected(xm5()));
         let mut link = os.next_link().await;
 
@@ -250,7 +250,7 @@ async fn frames_are_reassembled_from_any_fragmentation() {
 #[tokio::test]
 async fn a_dropped_link_detaches_the_xm5() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -276,7 +276,7 @@ async fn every_frame_of_an_attach_is_frame_logged_like_the_fixture() {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("xm5_attach.frames");
     let _ = std::fs::remove_file(&path);
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     core.command(Command::SetFrameLog(Some(path.clone())))
         .await
         .unwrap();
@@ -308,8 +308,9 @@ async fn a_frame_log_on_from_the_start_logs_an_attach_at_startup() {
     let (platform, mut os) = fake_platform();
     // The Device is already Connected when the core starts.
     os.observe(Observation::DeviceConnected(xm5()));
-    let (core, frame_log) = Core::start_with_frame_log(platform, &path);
-    frame_log.unwrap();
+    let mut builder = Core::builder();
+    builder.frame_log(&path).unwrap();
+    let core = builder.start(platform);
     let mut link = os.next_link().await;
     let records = fixture("wh-1000xm5/attach");
 

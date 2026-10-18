@@ -16,7 +16,7 @@ use support::{
 /// fixture, which reports Ambient, Focus on Voice on and Ambient Level 10.
 async fn attached_xm5() -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -211,7 +211,7 @@ async fn a_reported_level_outside_1_to_20_is_ignored() {
 async fn real_xm5_sets_replay_from_their_frame_log() {
     use NoiseControlMode::*;
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     // Recorded before the Equalizer was read on Attach, so re-based onto an
@@ -287,7 +287,7 @@ const ACK_SEQ_0: [u8; 9] = [0x3e, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x3c
 #[tokio::test]
 async fn sets_before_the_device_reports_its_noise_control_are_rejected() {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     // Identified and battery read, but its NCASM params not yet asked for.

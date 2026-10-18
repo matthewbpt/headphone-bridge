@@ -227,7 +227,7 @@ pub async fn replay(link: &mut DeviceLink, records: &[FrameRecord]) {
 /// core opens to it.
 pub async fn linked_core(device: DeviceIdentity) -> (Core, FakeOs, DeviceLink) {
     let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
+    let core = Core::builder().start(platform);
     os.observe(Observation::DeviceConnected(device));
     let link = os.next_link().await;
     (core, os, link)
