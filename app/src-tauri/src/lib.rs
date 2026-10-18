@@ -139,12 +139,19 @@ fn start_frame_log(app: &AppHandle, core: &mut CoreBuilder) -> Option<PathBuf> {
 /// The process's one core, started here unless Kotlin got there first (with
 /// the frame log on if the setting is), with the frame log switched on if
 /// wanted. Devices stay Detached until the App Screen holds them, so no
-/// Attach goes unlogged. Returns the log file while it's on.
+/// Attach goes unlogged. Returns the log file while it's on. In debug builds
+/// the host's `Simulator` goes into the app's state, as on desktop.
 #[cfg(target_os = "android")]
 fn android_core(app: &AppHandle) -> anyhow::Result<(&'static Core, Option<PathBuf>)> {
     use anyhow::Context;
     let core =
         headphone_bridge_platform_android::android::core().context("couldn't start the core")?;
+    #[cfg(debug_assertions)]
+    app.manage(
+        headphone_bridge_platform_android::android::simulator()
+            .context("couldn't start the core")?
+            .clone(),
+    );
     if !frame_log_wanted(app) {
         return Ok((core, None));
     }
