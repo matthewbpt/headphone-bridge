@@ -169,6 +169,35 @@ async fn the_case_level_is_only_read_while_a_bud_is_docked() {
 }
 
 #[tokio::test]
+async fn a_seven_byte_status_update_without_the_charging_byte_updates_battery() {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(buds4pro()));
+    let link = os.next_link().await;
+    link.send
+        .send(received(&fixture("galaxy-buds4-pro/capture-3"))[0].clone())
+        .unwrap();
+
+    // L 80 %, R 70 %, both in the ear (0x11), so the case byte isn't live.
+    link.send
+        .send(samsung_frame(
+            0x60,
+            &[0x01, 0x50, 0x46, 0x01, 0x01, 0x11, 0x40],
+        ))
+        .unwrap();
+
+    wait_for(&core, |list| {
+        list.devices[0].battery
+            == Some(Battery::Buds {
+                left: Some(80),
+                right: Some(70),
+                case: None,
+            })
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn a_device_without_a_supported_vendor_service_is_ignored() {
     let (platform, mut os) = fake_platform();
     let core = Core::start(platform);

@@ -1,0 +1,8 @@
+# Synthesised, not captured: a Galaxy Buds2 Attach, until a real frame log
+# exists. The handshake is the app's own; the reply is the real extended
+# status in GalaxyBudsClient's tests (TestData/ExtendedStatusUpdate/
+# Buds2_rev10.bin, timschneeb/GalaxyBudsClient 754b6fd), wire bytes verbatim:
+# revision 10, L 100 %, R 100 %, both in the ear, case 51 %, Noise
+# Cancelling, Ambient Level 1, device id 316 (Green) on both buds.
+2026-10-17T09:00:00.000Z samsung >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-17T09:00:00.080Z galaxy-buds2 << fd 28 10 61 0a 03 64 64 01 01 11 33 00 03 3f 22 01 00 3c 01 3c 01 02 00 03 66 00 01 00 10 00 00 00 00 11 02 01 01 00 00 00 be a3 dd

@@ -4,4 +4,11 @@
     <string name="hb_widget_description">Switch your headphones\' Noise Control Mode</string>
     <string name="hb_no_device">No Device</string>
     <string name="hb_open">Open</string>
+    <!-- The modes the widget picker's preview shows; the widget itself labels them with modeLabel. -->
+    <string name="hb_preview_off">Off</string>
+    <!-- The chosen mode's label is bold. A span, not textStyle, so the widget can drop it. -->
+    <string name="hb_preview_off_chosen"><b>Off</b></string>
+    <string name="hb_preview_ambient">Ambient</string>
+    <string name="hb_preview_adaptive">Adaptive</string>
+    <string name="hb_preview_noise_cancelling">Noise Cancelling</string>
 </resources>

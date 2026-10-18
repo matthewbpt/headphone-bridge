@@ -4,7 +4,7 @@ import type { Model } from "./deviceList";
 
 /**
  * The Simulated Device developer setting, in debug Android builds alone: a
- * Buds4 Pro or an XM5 that answers the core without Bluetooth, so the app
+ * Buds4 Pro, a Buds2 or an XM5 that answers the core without Bluetooth, so the app
  * can be tried on the emulator. It's Attached and Detached like a real
  * Device. Shown only where the shell has one, and left out of release
  * bundles.

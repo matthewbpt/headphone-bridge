@@ -1,5 +1,5 @@
-//! The Simulated Device, in debug builds: a Buds4 Pro or an XM5 answering the
-//! core in-process, for the emulator, which has no headphones.
+//! The Simulated Device, in debug builds: a Buds4 Pro, a Buds2 or an XM5
+//! answering the core in-process, for the emulator, which has no headphones.
 #![cfg(debug_assertions)]
 
 use std::collections::VecDeque;
@@ -124,6 +124,43 @@ async fn attached(host: &Host, kotlin: &mut Kotlin, model: Model) -> String {
         .await
         .address
         .0
+}
+
+#[tokio::test]
+async fn a_simulated_buds2_is_identified_as_one_and_answers_sets_within_its_range() {
+    let (host, mut kotlin) = start();
+    host.simulate(Some(Model::GalaxyBuds2));
+    host.event(r#"{"type":"holdAll"}"#).unwrap();
+    let device = kotlin
+        .simulated(|device| device.state == DeviceState::Attached && device.chosen_mode.is_some())
+        .await;
+    assert_eq!(device.model, Some(Model::GalaxyBuds2));
+    assert_eq!(device.capabilities, Model::GalaxyBuds2.capabilities());
+    let address = device.address.0;
+
+    for (request, mode, chosen) in [
+        (1, "ambient", NoiseControlMode::Ambient),
+        (2, "off", NoiseControlMode::Off),
+    ] {
+        host.command(
+            request,
+            &format!(r#"{{"kind":"setNoiseControlMode","address":"{address}","mode":"{mode}"}}"#),
+        );
+        kotlin.accepted(request).await;
+        kotlin
+            .simulated(|device| device.chosen_mode == Some(chosen))
+            .await;
+    }
+    for (request, level) in [(3, 2), (4, 0)] {
+        host.command(
+            request,
+            &format!(r#"{{"kind":"setAmbientLevel","address":"{address}","level":{level}}}"#),
+        );
+        kotlin.accepted(request).await;
+        kotlin
+            .simulated(|device| device.ambient_level == Some(level))
+            .await;
+    }
 }
 
 #[tokio::test]

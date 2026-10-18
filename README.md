@@ -1,8 +1,8 @@
 # Headphone Bridge
 
 An app for desktop (macOS and Linux) and Android that changes the Noise
-Control Mode and Ambient Level of a Galaxy Buds4 Pro or WH-1000XM5, and shows
-their Status.
+Control Mode and Ambient Level of a Galaxy Buds4 Pro, Galaxy Buds2 or
+WH-1000XM5, and shows their Status.
 Vocabulary follows [GLOSSARY.md](GLOSSARY.md); decisions are in
 [docs/adr](docs/adr).
 

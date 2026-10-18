@@ -157,6 +157,15 @@ pub fn buds4pro() -> DeviceIdentity {
     }
 }
 
+/// A Galaxy Buds2 as the OS reports it: the owner's, as macOS names it.
+pub fn buds2() -> DeviceIdentity {
+    DeviceIdentity {
+        address: DeviceAddress("B1:BD:C3:D4:E5:F6".into()),
+        name: "Galaxy Buds2 (B1BD)".into(),
+        service_uuids: vec![SAMSUNG_SERVICE],
+    }
+}
+
 /// A WH-1000XM5 as the OS reports it.
 pub fn xm5() -> DeviceIdentity {
     DeviceIdentity {

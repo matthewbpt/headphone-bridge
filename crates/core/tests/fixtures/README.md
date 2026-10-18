@@ -18,7 +18,7 @@ record, a comment or blank:
 The fields of a record are separated by single spaces:
 
 1. **Timestamp**: RFC 3339, UTC, millisecond precision (`YYYY-MM-DDTHH:MM:SS.mmmZ`).
-2. **Device Model**: its slug (`galaxy-buds4-pro`, `wh-1000xm5`). If the Model
+2. **Device Model**: its slug (`galaxy-buds4-pro`, `galaxy-buds2`, `wh-1000xm5`). If the Model
    isn't identified yet, the vendor's slug (`samsung`, `sony`).
 3. **Direction**: `>>` for a frame the app sent to the Device, `<<` for a frame
    received from it.
@@ -57,6 +57,27 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
+- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314,
+  from the frame log on macOS, on 2026-10-17. Two link sessions, cut into the
+  `real-*` files.
+  - `real-attach`: the Attach, answered with an extended status, then the
+    Device's own traffic.
+  - `real-noise-control`: Attach, then four mode sets, each confirmed only
+    by an ACK carrying the applied mode: the set's `MANAGER_INFO` gets only
+    a bare `88 00`, never an extended status. Then a bud leaves the ear and goes
+    back in: a 5-byte `NOISE_CONTROLS_UPDATE` with cause 2 (placement
+    change) at byte 4 pauses Ambient to Off, then resumes it.
+  - `real-gesture`: the second session, with long-press set
+    to Noise Controls. Attach, then four long-presses between Noise
+    Cancelling and Ambient, each a 5-byte `NOISE_CONTROLS_UPDATE` with cause
+    1 (gesture) at byte 4, and nothing sent to the Device.
+  - `real-ambient-level`: Attach, then six Ambient Level sets down to 0,
+    each confirmed only by an ACK carrying the applied level.
+  - `attach`: synthesised. The app's `MANAGER_INFO`, answered by the real
+    revision-10 extended status in GalaxyBudsClient's tests
+    (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,
+    timschneeb/GalaxyBudsClient at 754b6fd), wire bytes verbatim. Device id
+    316 (Green), Noise Cancelling, Ambient Level 1.
 - `wh-1000xm5/`: `attach` is synthesised from libmdr's protocol definitions
   (MIT, mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`. The `real-`
   fixtures are from the frame log.

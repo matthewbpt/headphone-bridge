@@ -18,6 +18,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
+    // Robolectric reads the merged manifest and resources.
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 kotlin {
@@ -33,4 +36,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // Android's org.json is a stub in JVM tests.
     testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core:1.7.0")
 }

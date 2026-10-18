@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Features
+
+* support the Galaxy Buds2 ([#91](https://github.com/matthewbpt/headphone-bridge/issues/91)) ([df36c2b](https://github.com/matthewbpt/headphone-bridge/commit/df36c2bd462cb8aa568aebb5753437e25f7ac345))
+
+
+### Bug Fixes
+
+* share the frame log on Android through the provider's meta-data ([#92](https://github.com/matthewbpt/headphone-bridge/issues/92)) ([d5765d4](https://github.com/matthewbpt/headphone-bridge/commit/d5765d45f36365d3629e8a026c49d32b4e5d1f3e))
+
+## [0.2.0](https://github.com/matthewbpt/headphone-bridge/compare/v0.1.0...v0.2.0) (2026-10-15)
+
+
+### Features
+
+* make the widget's modes look like the App Screen's Modes card ([#85](https://github.com/matthewbpt/headphone-bridge/issues/85)) ([1db87f3](https://github.com/matthewbpt/headphone-bridge/commit/1db87f30c1c33ca80eb422a6a97ef0e6f28561bb))
+
+
+### Bug Fixes
+
+* **ci:** attach the Linux bundles, not their folders, to the Release ([#83](https://github.com/matthewbpt/headphone-bridge/issues/83)) ([b18432a](https://github.com/matthewbpt/headphone-bridge/commit/b18432a60d4bc1f38065ec28ccbc461b83d21ca2))
+
 ## 0.1.0 (2026-10-15)
 
 

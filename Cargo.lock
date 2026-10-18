@@ -1563,7 +1563,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "headphone-bridge"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "headphone-bridge-core",
  "headphone-bridge-platform-android",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "headphone-bridge-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "tokio",
@@ -1591,7 +1591,7 @@ dependencies = [
 
 [[package]]
 name = "headphone-bridge-platform-android"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "headphone-bridge-core",
  "jni",
@@ -1605,7 +1605,7 @@ dependencies = [
 
 [[package]]
 name = "headphone-bridge-platform-linux"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bluer",
  "futures",
@@ -1617,7 +1617,7 @@ dependencies = [
 
 [[package]]
 name = "headphone-bridge-platform-macos"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "headphone-bridge-core",
  "objc2",

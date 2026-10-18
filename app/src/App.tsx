@@ -228,7 +228,9 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
 
 /**
  * The window's mode order, from hearing everything to hearing nothing. The
- * core's Capability order is its own; the window shows this one.
+ * core's Capability order is its own; the window shows this one. The Android
+ * widget keeps a copy, MODE_ORDER in
+ * crates/platform-android/android/src/main/java/dev/matthewbpt/headphonebridge/bluetooth/Labels.kt.
  */
 const MODE_ORDER: NoiseControlMode[] = ["off", "ambient", "adaptive", "noiseCancelling"];
 

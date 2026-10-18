@@ -7,6 +7,7 @@ import type { Labels, Model, NoiseControlMode } from "./deviceList";
 /** A picture per Model. Adding a Model means adding its picture here. */
 const PICTURES: Record<Model, ComponentType> = {
   galaxyBuds4Pro: Buds4Pro,
+  galaxyBuds2: Buds2,
   wh1000xm5: Wh1000Xm5,
 };
 
@@ -60,6 +61,33 @@ function Earbud() {
       <rect x="1" y="12" width="7" height="58" rx="3.5" fill="var(--art-metal-shade)" />
       <ellipse cx="0" cy="18" rx="6" ry="4.5" fill="var(--art-metal-shade)" />
       <ellipse cx="0" cy="18" rx="3.5" ry="2.5" fill="var(--art-grille)" />
+    </g>
+  );
+}
+
+/** A pair of Galaxy Buds2: two oval, stemless buds, facing each other. */
+function Buds2() {
+  return (
+    <>
+      <g transform="translate(62 75) scale(1.4) rotate(-12)">
+        <StemlessBud />
+      </g>
+      <g transform="translate(138 75) scale(-1.4 1.4) rotate(-12)">
+        <StemlessBud />
+      </g>
+    </>
+  );
+}
+
+/** One stemless bud, ear tip pointing left, centred on the origin. */
+function StemlessBud() {
+  return (
+    <g>
+      <ellipse cx="-19" cy="2" rx="8" ry="11" fill="var(--art-tip)" transform="rotate(-15 -19 2)" />
+      <ellipse cx="0" cy="0" rx="22" ry="17" fill="var(--art-body)" />
+      <path d="M4 -16.5 A22 17 0 0 1 4 16.5 A16 17 0 0 0 4 -16.5 Z" fill="var(--art-body-shade)" />
+      <ellipse cx="6" cy="0" rx="9" ry="7" fill="var(--art-metal)" />
+      <ellipse cx="6" cy="0" rx="4" ry="3" fill="var(--art-grille)" />
     </g>
   );
 }

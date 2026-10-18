@@ -1,17 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="HbModeButton">
+    <!-- A Noise Control Mode on the widget: a circle on the track, its label
+         below. The plain styles are the one-row layout's; .Large the taller
+         layout's. -->
+    <style name="HbModeSlot">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="HbModeCircleBox">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">32dp</item>
+    </style>
+
+    <style name="HbModeCircleBox.Large">
+        <item name="android:layout_height">52dp</item>
+    </style>
+
+    <!-- Half the track: the slot's own share of the line between circles' centres. -->
+    <style name="HbModeTrackRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">4dp</item>
+        <item name="android:layout_gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="HbModeTrackRow.Large">
+        <item name="android:layout_height">5dp</item>
+    </style>
+
+    <style name="HbModeTrack">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:layout_margin">3dp</item>
-        <item name="android:minHeight">44dp</item>
-        <item name="android:gravity">center</item>
-        <item name="android:maxLines">2</item>
-        <item name="android:paddingStart">4dp</item>
-        <item name="android:paddingEnd">4dp</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textColor">@color/hb_text</item>
+        <item name="android:background">@color/hb_surface_variant</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="HbModeCircle">
+        <item name="android:layout_width">32dp</item>
+        <item name="android:layout_height">32dp</item>
+        <item name="android:layout_gravity">center</item>
+        <item name="android:padding">7dp</item>
         <item name="android:background">@drawable/mode_unselected</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:tint">@color/hb_text</item>
+    </style>
+
+    <style name="HbModeCircle.Large">
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
+    <style name="HbModeLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:paddingStart">2dp</item>
+        <item name="android:paddingEnd">2dp</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:lineSpacingMultiplier">0.9</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/hb_text</item>
+    </style>
+
+    <style name="HbModeLabel.Large">
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:textSize">13sp</item>
     </style>
 </resources>

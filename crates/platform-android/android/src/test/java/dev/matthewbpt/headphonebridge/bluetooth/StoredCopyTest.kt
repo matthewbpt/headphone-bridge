@@ -98,6 +98,35 @@ class StoredCopyTest {
   }
 
   @Test
+  fun theModeAnActionIsSettingIsShownAsPendingUntilTheActionIsOver() {
+    copy.onDeviceList(deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "off")))
+    assertEquals(false, copy.shown(hasPermission = true).pending)
+
+    copy.actionStarted("ambient")
+    val setting = copy.shown(hasPermission = true)
+    assertEquals("ambient", setting.mode)
+    assertEquals(true, setting.pending)
+
+    copy.actionFinished(null)
+    val finished = copy.shown(hasPermission = true)
+    assertEquals("off", finished.mode)
+    assertEquals(false, finished.pending)
+  }
+
+  @Test
+  fun aFailedActionOrARefreshLeavesNothingPending() {
+    copy.onDeviceList(deviceList(device("AA", "Galaxy Buds4 Pro", state("attached"), buds, "off")))
+    copy.actionStarted("ambient")
+    copy.actionFinished(LINK_DROPPED)
+    assertEquals(false, copy.shown(hasPermission = true).pending)
+
+    copy.actionStarted(null)
+    val refreshing = copy.shown(hasPermission = true)
+    assertEquals("off", refreshing.mode)
+    assertEquals(false, refreshing.pending)
+  }
+
+  @Test
   fun whyAnActionFailedIsShownUntilTheDeviceIsAttachedAgain() {
     copy.onDeviceList(deviceList(device("AA", "Galaxy Buds4 Pro", state("detached"), buds, "off")))
     copy.actionStarted("ambient")

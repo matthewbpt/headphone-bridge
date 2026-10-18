@@ -25,6 +25,14 @@ const buds4ProCapabilities: Capabilities = {
   },
 };
 
+const buds2Capabilities: Capabilities = {
+  noiseControlModes: ["off", "noiseCancelling", "ambient"],
+  ambientLevel: { min: 0, max: 2 },
+  noiseCancellingLevel: null,
+  powerOff: false,
+  equalizer: null,
+};
+
 const xm5Capabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient"],
   ambientLevel: { min: 1, max: 20 },
@@ -67,6 +75,28 @@ export function buds4Pro(overrides: Partial<Device> = {}): Device {
     ambientLevel: 1,
     noiseCancellingLevel: 4,
     equalizer: { preset: 0, bands: null, clearBass: null },
+    equalizerUnavailable: false,
+    battery: { kind: "buds", left: 100, right: 100, case: null },
+    powerOffFailed: false,
+    reportedAt: null,
+    ...overrides,
+  };
+}
+
+/** An Attached Galaxy Buds2 in Ambient. */
+export function buds2(overrides: Partial<Device> = {}): Device {
+  return {
+    address: BUDS_ADDRESS,
+    name: "Matthew's Buds2",
+    model: "galaxyBuds2",
+    state: { kind: "attached" },
+    capabilities: buds2Capabilities,
+    chosenMode: "ambient",
+    effectiveMode: "ambient",
+    effectiveModeReason: null,
+    ambientLevel: 1,
+    noiseCancellingLevel: null,
+    equalizer: null,
     equalizerUnavailable: false,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,
