@@ -142,7 +142,8 @@ use std::time::Duration;
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::DeviceIdentity;
-use headphone_bridge_core::{Core, DeviceList};
+use headphone_bridge_core::wire::samsung::id;
+use headphone_bridge_core::{Command, Core, DeviceList, Equalizer, PresetId};
 use uuid::uuid;
 
 pub const SAMSUNG_SERVICE: Uuid = uuid!("2e73a4ad-332d-41fc-90e2-16bef06523f2");
@@ -216,6 +217,66 @@ pub async fn replay(link: &mut DeviceLink, records: &[FrameRecord]) {
                 assert_eq!(written.as_ref(), Some(&record.bytes), "expected {record}");
             }
         }
+    }
+}
+
+/// Starts a core, reports `device` Connected, and takes the control link the
+/// core opens to it.
+pub async fn linked_core(device: DeviceIdentity) -> (Core, FakeOs, DeviceLink) {
+    let (platform, mut os) = fake_platform();
+    let core = Core::start(platform);
+    os.observe(Observation::DeviceConnected(device));
+    let link = os.next_link().await;
+    (core, os, link)
+}
+
+/// Plays a recorded Galaxy Buds session of `device` from its Attach up to the
+/// first `EQUALIZER` the app sent, checking it reports Preset `attached_on`,
+/// then picks `picks` in turn, replaying each set and the Device's answer, and
+/// checks each Preset waits for its ACK.
+pub async fn real_preset_picks_are_confirmed_by_their_acks(
+    device: DeviceIdentity,
+    name: &str,
+    attached_on: u8,
+    picks: &[u8],
+) {
+    let preset = |preset| Equalizer {
+        preset: PresetId(preset),
+        bands: None,
+        clear_bass: None,
+    };
+    let (core, _os, mut link) = linked_core(device.clone()).await;
+    let records = fixture(name);
+    let set_at: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(3) == Some(&id::EQUALIZER))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(set_at.len(), picks.len());
+
+    replay(&mut link, &records[..set_at[0]]).await;
+    wait_for(&core, |list| {
+        list.devices[0].equalizer == Some(preset(attached_on))
+    })
+    .await;
+    let mut confirmed = attached_on;
+    for (i, &pick) in picks.iter().enumerate() {
+        core.command(Command::SetEqualizer(device.address.clone(), preset(pick)))
+            .await
+            .unwrap();
+        assert_eq!(
+            core.device_list().devices[0].equalizer,
+            Some(preset(confirmed)),
+            "Preset {pick} before its ACK"
+        );
+        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
+        replay(&mut link, &records[set_at[i]..end]).await;
+        wait_for(&core, |list| {
+            list.devices[0].equalizer == Some(preset(pick))
+        })
+        .await;
+        confirmed = pick;
     }
 }
 

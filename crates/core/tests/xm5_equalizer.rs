@@ -10,7 +10,7 @@ use headphone_bridge_core::{
     Preset, PresetId, StepRange,
 };
 use support::{
-    fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for,
+    fake_platform, fixture, linked_core, replay, sony_ack, sony_decode, sony_frame, wait_for,
     without_capability_probe, xm5, DeviceLink, FakeOs, EQEBB_RET_CAPABILITY,
 };
 
@@ -630,10 +630,7 @@ async fn replay_preset_picks(
     records: Vec<FrameRecord>,
     picks: &[(u8, i8, [i8; 5])],
 ) -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(xm5()));
-    let mut link = os.next_link().await;
+    let (core, os, mut link) = linked_core(xm5()).await;
     // The capture split before each EQEBB_SET_PARAM the app sent.
     let set_at: Vec<usize> = records
         .iter()
@@ -817,10 +814,7 @@ async fn a_change_made_in_sonys_app_between_two_attaches_is_read_on_the_second()
     // Sony's app can't Attach while this app is, so the listener changed
     // the Equalizer between two Attaches: Custom 2 and flat before, then
     // Custom 1 with Clear Bass +5.
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(xm5()));
-    let mut link = os.next_link().await;
+    let (core, _os, mut link) = linked_core(xm5()).await;
 
     let records = fixture("wh-1000xm5/real-equalizer-from-sonys-app");
     replay(&mut link, &without_capability_probe(&records)).await;

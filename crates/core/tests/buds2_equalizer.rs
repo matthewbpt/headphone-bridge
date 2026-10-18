@@ -10,7 +10,8 @@ use headphone_bridge_core::{
     PresetId,
 };
 use support::{
-    buds2, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds2, fake_platform, fixture, linked_core, real_preset_picks_are_confirmed_by_their_acks,
+    received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds2 Attached through `galaxy-buds2/attach`, the
@@ -72,10 +73,7 @@ async fn the_snapshot_carries_the_buds2s_six_presets_and_the_reported_one() {
 
 #[tokio::test]
 async fn a_real_buds2_attach_reports_normal() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(buds2()));
-    let mut link = os.next_link().await;
+    let (core, _os, mut link) = linked_core(buds2()).await;
 
     replay(&mut link, &fixture("galaxy-buds2/real-attach")).await;
 
@@ -201,61 +199,24 @@ async fn clear_bass_is_rejected_as_the_buds2_has_none() {
     rejected(equalizer, CommandError::MissingCapability).await;
 }
 
-/// Plays a recorded Buds2 session's frames from its Attach up to the first
-/// `EQUALIZER` the app sent, then picks `picks` in turn, replaying each set
-/// and the Device's answer, and checks each Preset waits for its ACK.
-async fn real_picks_are_confirmed_by_their_acks(name: &str, attached_on: u8, picks: &[u8]) {
-    use headphone_bridge_core::frame_log::Direction;
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(buds2()));
-    let mut link = os.next_link().await;
-    let records = fixture(name);
-    let set_at: Vec<usize> = records
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(3) == Some(&0x86))
-        .map(|(i, _)| i)
-        .collect();
-    assert_eq!(set_at.len(), picks.len());
-
-    replay(&mut link, &records[..set_at[0]]).await;
-    wait_for(&core, |list| {
-        list.devices[0].equalizer == Some(preset(attached_on))
-    })
-    .await;
-    let mut confirmed = attached_on;
-    for (i, &pick) in picks.iter().enumerate() {
-        core.command(Command::SetEqualizer(buds2().address, preset(pick)))
-            .await
-            .unwrap();
-        assert_eq!(
-            core.device_list().devices[0].equalizer,
-            Some(preset(confirmed)),
-            "Preset {pick} before its ACK"
-        );
-        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
-        replay(&mut link, &records[set_at[i]..end]).await;
-        wait_for(&core, |list| {
-            list.devices[0].equalizer == Some(preset(pick))
-        })
-        .await;
-        confirmed = pick;
-    }
-}
-
 #[tokio::test]
 async fn real_buds2_preset_picks_are_confirmed_by_their_acks() {
     // Bass boost, Soft, Dynamic, Clear, Treble boost, then Normal.
-    real_picks_are_confirmed_by_their_acks("galaxy-buds2/real-equalizer", 0, &[1, 2, 3, 4, 5, 0])
-        .await;
+    real_preset_picks_are_confirmed_by_their_acks(
+        buds2(),
+        "galaxy-buds2/real-equalizer",
+        0,
+        &[1, 2, 3, 4, 5, 0],
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn a_real_attach_after_samsungs_app_changed_the_preset_reports_it() {
     // Samsung's app moved the Device to Treble boost while it was away;
     // the app then picks Clear, Normal and Soft.
-    real_picks_are_confirmed_by_their_acks(
+    real_preset_picks_are_confirmed_by_their_acks(
+        buds2(),
         "galaxy-buds2/real-equalizer-from-samsungs-app",
         5,
         &[4, 0, 2],

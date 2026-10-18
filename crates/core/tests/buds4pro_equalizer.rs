@@ -6,7 +6,8 @@ use headphone_bridge_core::{
     PresetId,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds4pro, fake_platform, fixture, linked_core, real_preset_picks_are_confirmed_by_their_acks,
+    received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds4 Pro Attached through capture-3's first extended
@@ -222,10 +223,7 @@ async fn a_preset_is_not_sent_before_the_device_is_attached() {
 /// Starts a core and plays a recorded Buds4 Pro session's Attach and
 /// everything after it, keeping the link open.
 async fn replayed(name: &str) -> (Core, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(buds4pro()));
-    let mut link = os.next_link().await;
+    let (core, _os, mut link) = linked_core(buds4pro()).await;
     replay(&mut link, &fixture(name)).await;
     (core, link)
 }
@@ -257,42 +255,14 @@ async fn a_real_attach_after_samsungs_app_picked_custom_reports_it() {
 
 #[tokio::test]
 async fn real_buds4pro_preset_picks_are_confirmed_by_their_acks() {
-    use headphone_bridge_core::frame_log::Direction;
-    let (platform, mut os) = fake_platform();
-    let core = Core::start(platform);
-    os.observe(Observation::DeviceConnected(buds4pro()));
-    let mut link = os.next_link().await;
-    let records = fixture("galaxy-buds4-pro/real-equalizer");
-    let set_at: Vec<usize> = records
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.direction == Direction::Sent && r.bytes.get(3) == Some(&0x86))
-        .map(|(i, _)| i)
-        .collect();
     // Bass boost, Soft, Dynamic, Clear, Treble boost, then Normal.
-    let picks = [1, 2, 3, 4, 5, 0];
-    assert_eq!(set_at.len(), picks.len());
-
-    replay(&mut link, &records[..set_at[0]]).await;
-    wait_for(&core, |list| list.devices[0].equalizer == Some(preset(0))).await;
-    let mut confirmed = 0;
-    for (i, pick) in picks.into_iter().enumerate() {
-        core.command(Command::SetEqualizer(buds4pro().address, preset(pick)))
-            .await
-            .unwrap();
-        assert_eq!(
-            core.device_list().devices[0].equalizer,
-            Some(preset(confirmed)),
-            "Preset {pick} before its ACK"
-        );
-        let end = set_at.get(i + 1).copied().unwrap_or(records.len());
-        replay(&mut link, &records[set_at[i]..end]).await;
-        wait_for(&core, |list| {
-            list.devices[0].equalizer == Some(preset(pick))
-        })
-        .await;
-        confirmed = pick;
-    }
+    real_preset_picks_are_confirmed_by_their_acks(
+        buds4pro(),
+        "galaxy-buds4-pro/real-equalizer",
+        0,
+        &[1, 2, 3, 4, 5, 0],
+    )
+    .await;
 }
 
 #[tokio::test]
