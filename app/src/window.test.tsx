@@ -868,7 +868,7 @@ describe("Equalizer", () => {
     expect(await preset()).toHaveDisplayValue("Dynamic");
   });
 
-  it("follows a Preset changed from Samsung's app", async () => {
+  it("follows a Preset the Device reports later", async () => {
     const core = new FakeCore(
       only(buds4Pro({ equalizer: { preset: 3, bands: null, clearBass: null } })),
     );
@@ -1323,7 +1323,7 @@ describe("Equalizer", () => {
     expect(await clearBass()).toHaveValue("8");
   });
 
-  it("shows a Clear Bass change from Sony's app", async () => {
+  it("shows a Clear Bass change the Device reports", async () => {
     const core = new FakeCore(
       only(xm5({ equalizer: { preset: 0xa0, bands: [0, 0, 0, 0, 0], clearBass: 2 } })),
     );

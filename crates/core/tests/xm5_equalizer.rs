@@ -187,7 +187,7 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
 #[tokio::test]
 async fn editing_a_band_on_custom_1_stays_on_custom_1() {
     let (core, _os, mut link) = attached_xm5().await;
-    // Sony's app switches to Custom 1, with its curve.
+    // The Device notifies a switch to Custom 1, with its curve.
     link.send
         .send(sony_frame(
             0,
@@ -241,10 +241,10 @@ async fn a_preset_set_waits_for_the_last_request_to_be_acked() {
 }
 
 #[tokio::test]
-async fn changes_from_sonys_app_appear_live() {
+async fn changes_the_device_notifies_appear_live() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    // Sony's app switches to Custom 1, with its curve.
+    // The Device notifies a switch to Custom 1, with its curve.
     link.send
         .send(sony_frame(
             0,
@@ -323,7 +323,7 @@ async fn a_curve_without_one_value_per_band_is_rejected_before_anything_is_sent(
     .await;
 }
 
-/// Starts a core with an Attached WH-1000XM5 that Sony's app has moved
+/// Starts a core with an Attached WH-1000XM5 that has notified a move
 /// onto Manual, with Clear Bass +1 and Bands −10, +10, 0, −2 and +2.
 async fn xm5_on_manual() -> (Core, FakeOs, DeviceLink) {
     let (core, os, mut link) = attached_xm5().await;
@@ -376,10 +376,10 @@ async fn changing_clear_bass_sends_it_first_in_the_curve_and_waits_for_the_devic
 }
 
 #[tokio::test]
-async fn a_clear_bass_change_from_sonys_app_appears_live() {
+async fn a_clear_bass_change_the_device_notifies_appears_live() {
     let (core, _os, mut link) = xm5_on_manual().await;
 
-    // Sony's app raises Clear Bass to +10, leaving the Bands.
+    // The Device notifies Clear Bass raised to +10, leaving the Bands.
     link.send
         .send(sony_frame(
             1,

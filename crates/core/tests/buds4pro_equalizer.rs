@@ -95,7 +95,7 @@ fn extended_status_with_preset(preset: u8) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn a_preset_changed_from_samsungs_app_appears_live() {
+async fn a_preset_the_device_reports_later_appears_live() {
     let (core, _os, link) = attached_buds4pro().await;
     wait_for(&core, |list| list.devices[0].equalizer == Some(preset(3))).await;
 
