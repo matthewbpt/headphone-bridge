@@ -344,6 +344,12 @@ pub fn with_equalizer_read(records: &[FrameRecord], equalizer_reply: &[u8]) -> V
     rebased
 }
 
+/// Sony's request for what an Equalizer offers. The app as it ships never
+/// sends it; only a development build's probe did.
+pub const EQEBB_GET_CAPABILITY: u8 = 0x50;
+/// The WH-1000XM5's reply to [`EQEBB_GET_CAPABILITY`].
+pub const EQEBB_RET_CAPABILITY: u8 = 0x51;
+
 /// A real WH-1000XM5 capture with the temporary `EQEBB_GET_CAPABILITY`
 /// probe its development build sent after Attach, re-based onto the app as
 /// it ships. It drops the probe, the Device's ACK and `EQEBB_RET_CAPABILITY`
@@ -355,7 +361,9 @@ pub fn without_capability_probe(records: &[FrameRecord]) -> Vec<FrameRecord> {
     let decoded = |r: &FrameRecord| sony_decode(&r.bytes);
     let probe = records
         .iter()
-        .position(|r| r.direction == Direction::Sent && decoded(r).2.first() == Some(&0x50))
+        .position(|r| {
+            r.direction == Direction::Sent && decoded(r).2.first() == Some(&EQEBB_GET_CAPABILITY)
+        })
         .expect("the EQEBB_GET_CAPABILITY probe");
     let probe_ack = probe
         + records[probe..]
@@ -365,7 +373,10 @@ pub fn without_capability_probe(records: &[FrameRecord]) -> Vec<FrameRecord> {
     let reply = probe
         + records[probe..]
             .iter()
-            .position(|r| r.direction == Direction::Received && decoded(r).2.first() == Some(&0x51))
+            .position(|r| {
+                r.direction == Direction::Received
+                    && decoded(r).2.first() == Some(&EQEBB_RET_CAPABILITY)
+            })
             .expect("the EQEBB_RET_CAPABILITY reply");
     let reply_ack = reply + 1;
     assert_eq!(records[reply_ack].direction, Direction::Sent);

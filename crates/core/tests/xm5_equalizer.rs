@@ -4,13 +4,14 @@ use std::time::Duration;
 
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::Observation;
+use headphone_bridge_core::wire::sony::PRESET_EQ;
 use headphone_bridge_core::{
     Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, NoiseControlMode,
     Preset, PresetId, StepRange,
 };
 use support::{
     fake_platform, fixture, replay, sony_ack, sony_decode, sony_frame, wait_for,
-    without_capability_probe, xm5, DeviceLink, FakeOs,
+    without_capability_probe, xm5, DeviceLink, FakeOs, EQEBB_RET_CAPABILITY,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -689,31 +690,38 @@ async fn real_xm5_picks_of_mellow_vocal_and_the_customs_replay_from_their_frame_
 #[tokio::test]
 async fn the_capabilities_list_the_presets_and_steps_a_real_xm5_advertises() {
     let (core, _os, _link) = attached_xm5().await;
-    // The EQEBB_RET_CAPABILITY the probe drew: its type, the band count
-    // (Clear Bass and the Bands), the step count, then each Preset's id and
-    // name, length first.
+    // The EQEBB_RET_CAPABILITY the probe drew: its type, how many settings
+    // it steps (Clear Bass and each Band), the step count, then each Preset's
+    // id and name, length first.
     let advertised = fixture("wh-1000xm5/real-equalizer-more-presets")
         .iter()
         .map(|r| sony_decode(&r.bytes).2)
-        .find(|data| data.first() == Some(&0x51))
+        .find(|data| data.first() == Some(&EQEBB_RET_CAPABILITY))
         .unwrap();
-    let [0x51, 0x00, bands, steps, count, ref presets @ ..] = advertised[..] else {
+    let [EQEBB_RET_CAPABILITY, PRESET_EQ, stepped_settings, steps, count, ref presets @ ..] =
+        advertised[..]
+    else {
         panic!("not a PRESET_EQ capability: {advertised:02x?}");
     };
     let mut ids = Vec::new();
+    let mut names = Vec::new();
     let mut rest = presets;
     while let [id, len, ref tail @ ..] = *rest {
         ids.push(PresetId(id));
+        names.push(&tail[..len as usize]);
         rest = &tail[len as usize..];
     }
     assert_eq!(ids.len(), count as usize);
+    // The XM5 advertises no names, so the Model's own can't be checked
+    // against them. A capture that carries some should check them.
+    assert!(names.iter().all(|name| name.is_empty()), "{names:02x?}");
 
     let list = core.device_list();
     let equalizer = list.devices[0].capabilities.equalizer.as_ref().unwrap();
     let listed: Vec<PresetId> = equalizer.presets.iter().map(|p| p.id).collect();
     assert_eq!(listed, ids);
     let model_bands = equalizer.bands.as_ref().unwrap();
-    assert_eq!(1 + model_bands.frequencies.len(), bands as usize);
+    assert_eq!(1 + model_bands.frequencies.len(), stepped_settings as usize);
     for range in [model_bands.range, equalizer.clear_bass.unwrap()] {
         assert_eq!((range.max - range.min + 1) as u8, steps);
     }
@@ -805,7 +813,7 @@ async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
 }
 
 #[tokio::test]
-async fn a_change_made_in_sonys_app_while_detached_appears_on_the_next_attach() {
+async fn a_change_made_in_sonys_app_between_two_attaches_is_read_on_the_second() {
     // Sony's app can't Attach while this app is, so the listener changed
     // the Equalizer between two Attaches: Custom 2 and flat before, then
     // Custom 1 with Clear Bass +5.
