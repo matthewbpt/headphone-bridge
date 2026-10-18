@@ -75,7 +75,21 @@ impl Model {
                 ambient_level: Some(LevelRange { min: 0, max: 2 }),
                 noise_cancelling_level: None,
                 power_off: false,
-                equalizer: None,
+                // From GalaxyBudsClient, Gadgetbridge and Samsung's support
+                // pages, until a real capture shows a Buds2 off Normal. It
+                // has no custom EQ, so no Custom Preset.
+                equalizer: Some(EqualizerCapability {
+                    presets: vec![
+                        Preset::fixed(0, "Normal"),
+                        Preset::fixed(1, "Bass boost"),
+                        Preset::fixed(2, "Soft"),
+                        Preset::fixed(3, "Dynamic"),
+                        Preset::fixed(4, "Clear"),
+                        Preset::fixed(5, "Treble boost"),
+                    ],
+                    bands: None,
+                    clear_bass: None,
+                }),
             },
             Model::Wh1000Xm5 => Capabilities {
                 noise_control_modes: vec![
