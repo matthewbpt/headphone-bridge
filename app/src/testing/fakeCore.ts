@@ -236,6 +236,7 @@ export const LABELS: Labels = {
     { reason: { kind: "deviceNotConnected" }, text: "Not Connected" },
     { reason: { kind: "linkDropped" }, text: "Another app or device may be using it" },
     { reason: { kind: "noResponse" }, text: "The Device didn't respond" },
+    { reason: { kind: "other", detail: "" }, text: "Couldn't open the control link" },
   ],
 };
 
