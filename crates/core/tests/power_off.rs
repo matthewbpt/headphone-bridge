@@ -6,11 +6,11 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    Command, CommandError, Core, DeviceState, Model, NoiseControlMode, NotAttachedReason,
+    CommandError, CommandKind, Core, DeviceState, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, with_equalizer_read,
-    xm5, DeviceLink, FakeOs, SAMSUNG_SERVICE,
+    buds4pro, device_command, fake_platform, fixture, received, replay, sony_frame, wait_for,
+    with_equalizer_read, xm5, DeviceLink, FakeOs, SAMSUNG_SERVICE,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
@@ -28,7 +28,7 @@ async fn attached_xm5() -> (Core, FakeOs, DeviceLink) {
 async fn power_off_sends_power_set_status_and_the_device_is_powering_off() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
 
@@ -43,18 +43,23 @@ async fn power_off_sends_power_set_status_and_the_device_is_powering_off() {
 #[tokio::test]
 async fn a_device_that_is_powering_off_refuses_every_command() {
     let (core, _os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
 
     let address = xm5().address;
     for command in [
-        Command::PowerOff(address.clone()),
-        Command::SetNoiseControlMode(address.clone(), NoiseControlMode::NoiseCancelling),
-        Command::SetAmbientLevel(address.clone(), 15),
-        Command::SetNoiseCancellingLevel(address.clone(), 2),
-        Command::RetryAttach(address.clone()),
+        device_command(address, CommandKind::PowerOff),
+        device_command(
+            address,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::NoiseCancelling,
+            },
+        ),
+        device_command(address, CommandKind::SetAmbientLevel { level: 15 }),
+        device_command(address, CommandKind::SetNoiseCancellingLevel { level: 2 }),
+        device_command(address, CommandKind::RetryAttach),
     ] {
         assert_eq!(
             core.command(command.clone()).await,
@@ -68,7 +73,7 @@ async fn a_device_that_is_powering_off_refuses_every_command() {
 #[tokio::test(start_paused = true)]
 async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() {
     let (core, mut os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -90,7 +95,7 @@ async fn a_link_that_closes_while_powering_off_leaves_the_device_powering_off() 
 #[tokio::test(start_paused = true)]
 async fn a_device_whose_link_closed_before_the_ack_and_stays_connected_didnt_power_off() {
     let (core, mut os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -114,7 +119,7 @@ async fn a_device_whose_link_closed_before_the_ack_and_stays_connected_didnt_pow
 #[tokio::test]
 async fn a_device_that_is_powering_off_leaves_the_list_once_disconnected() {
     let (core, os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -129,7 +134,7 @@ async fn a_device_that_is_powering_off_leaves_the_list_once_disconnected() {
 #[tokio::test(start_paused = true)]
 async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() {
     let (core, _os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -149,9 +154,12 @@ async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() 
         "its link is still open"
     );
     // Its controls work again.
-    core.command(Command::SetAmbientLevel(xm5().address, 3))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 3 },
+    ))
+    .await
+    .unwrap();
     assert_eq!(
         written(&mut link).await,
         sony_frame(0, &[0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x03])
@@ -161,7 +169,7 @@ async fn a_device_still_connected_10_s_after_acking_power_off_didnt_power_off() 
 #[tokio::test(start_paused = true)]
 async fn a_device_that_didnt_power_off_and_closed_its_link_is_attached_again() {
     let (core, mut os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -192,7 +200,7 @@ async fn a_device_that_didnt_power_off_and_closed_its_link_is_attached_again() {
 #[tokio::test(start_paused = true)]
 async fn a_device_that_disconnects_before_the_timeout_reports_no_failure() {
     let (core, os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     written(&mut link).await;
@@ -214,7 +222,7 @@ async fn a_device_that_disconnects_before_the_timeout_reports_no_failure() {
 #[tokio::test(start_paused = true)]
 async fn a_power_off_that_is_never_acknowledged_follows_the_no_ack_path() {
     let (core, mut os, mut link) = attached_xm5().await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     let power_off = sony_frame(1, &[0x24, 0x03, 0x01]);
@@ -250,7 +258,8 @@ async fn an_xm5_keeps_its_power_off_capability_while_reattaching_but_refuses_it(
     assert_eq!(list.devices[0].model, Some(Model::Wh1000Xm5));
     assert!(list.devices[0].capabilities.power_off);
     assert_eq!(
-        core.command(Command::PowerOff(xm5().address)).await,
+        core.command(device_command(xm5().address, CommandKind::PowerOff))
+            .await,
         Err(CommandError::NotAttached)
     );
 
@@ -261,9 +270,14 @@ async fn an_xm5_keeps_its_power_off_capability_while_reattaching_but_refuses_it(
     .await;
     assert!(list.devices[0].capabilities.power_off);
     for command in [
-        Command::PowerOff(xm5().address),
-        Command::SetNoiseControlMode(xm5().address, NoiseControlMode::Ambient),
-        Command::SetAmbientLevel(xm5().address, 3),
+        device_command(xm5().address, CommandKind::PowerOff),
+        device_command(
+            xm5().address,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Ambient,
+            },
+        ),
+        device_command(xm5().address, CommandKind::SetAmbientLevel { level: 3 }),
     ] {
         assert_eq!(
             core.command(command.clone()).await,
@@ -292,7 +306,8 @@ async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothin
     wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
 
     assert_eq!(
-        core.command(Command::PowerOff(buds4pro().address)).await,
+        core.command(device_command(buds4pro().address, CommandKind::PowerOff))
+            .await,
         Err(CommandError::MissingCapability)
     );
     assert_eq!(core.device_list().devices[0].state, DeviceState::Attached);
@@ -312,7 +327,8 @@ async fn an_xm5_that_is_not_attached_refuses_power_off() {
     .await;
 
     assert_eq!(
-        core.command(Command::PowerOff(xm5().address)).await,
+        core.command(device_command(xm5().address, CommandKind::PowerOff))
+            .await,
         Err(CommandError::NotAttached)
     );
 }
@@ -322,7 +338,7 @@ async fn an_unsupported_model_refuses_power_off() {
     let (platform, os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("A1:B2:C3:00:00:02".into()),
+        address: DeviceAddress::parse("A1:B2:C3:00:00:02").unwrap(),
         name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
@@ -336,7 +352,8 @@ async fn an_unsupported_model_refuses_power_off() {
     .await;
 
     assert_eq!(
-        core.command(Command::PowerOff(buds2pro.address)).await,
+        core.command(device_command(buds2pro.address, CommandKind::PowerOff))
+            .await,
         Err(CommandError::UnsupportedModel)
     );
 }
@@ -382,7 +399,7 @@ async fn real_xm5_power_offs_replay_from_their_frame_log() {
         let mut link = os.next_link().await;
         replay(&mut link, &session[..power_off_at]).await;
         wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
-        core.command(Command::PowerOff(xm5().address))
+        core.command(device_command(xm5().address, CommandKind::PowerOff))
             .await
             .unwrap();
         replay(&mut link, &session[power_off_at..]).await;

@@ -6,10 +6,11 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
 use headphone_bridge_core::{
-    Command, CommandError, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
+    CommandError, CommandKind, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5, SAMSUNG_SERVICE,
+    buds4pro, device_command, fake_platform, fixture, received, replay, sony_frame, wait_for, xm5,
+    SAMSUNG_SERVICE,
 };
 
 /// Plays the Buds4 Pro's extended status on `link`, which Attaches it.
@@ -33,7 +34,7 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let address = buds4pro().address;
-    os.fail_links(&address, LinkFailure::InUseByAnotherProcess);
+    os.fail_links(address, LinkFailure::InUseByAnotherProcess);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
     wait_for(&core, |list| {
@@ -46,8 +47,8 @@ async fn a_device_in_use_by_another_app_is_attached_on_retry_once_that_app_lets_
     })
     .await;
 
-    os.allow_links(&address);
-    core.command(Command::RetryAttach(address.clone()))
+    os.allow_links(address);
+    core.command(device_command(address, CommandKind::RetryAttach))
         .await
         .unwrap();
 
@@ -61,7 +62,7 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("A1:B2:C3:00:00:02".into()),
+        address: DeviceAddress::parse("A1:B2:C3:00:00:02").unwrap(),
         name: "Galaxy Buds2 Pro (0002)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
@@ -72,14 +73,16 @@ async fn an_unsupported_model_is_never_retried_or_sent_a_command() {
     .await;
 
     assert_eq!(
-        core.command(Command::RetryAttach(buds2pro.address.clone()))
+        core.command(device_command(buds2pro.address, CommandKind::RetryAttach))
             .await,
         Err(CommandError::UnsupportedModel)
     );
     assert_eq!(
-        core.command(Command::SetNoiseControlMode(
-            buds2pro.address.clone(),
-            NoiseControlMode::Off
+        core.command(device_command(
+            buds2pro.address,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Off
+            }
         ))
         .await,
         Err(CommandError::UnsupportedModel)
@@ -120,7 +123,7 @@ async fn an_xm5_that_drops_its_link_when_idle_is_re_attached_after_a_pause() {
 async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
-    os.fail_links(&buds4pro().address, LinkFailure::ServiceNotFound);
+    os.fail_links(buds4pro().address, LinkFailure::ServiceNotFound);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
     let start = tokio::time::Instant::now();
@@ -135,8 +138,8 @@ async fn attaching_is_retried_with_growing_pauses_then_left_to_the_retry_button(
         &core.device_list(),
         not_attached(NotAttachedReason::LinkFailed(LinkFailure::ServiceNotFound))
     ));
-    os.allow_links(&buds4pro().address);
-    core.command(Command::RetryAttach(buds4pro().address))
+    os.allow_links(buds4pro().address);
+    core.command(device_command(buds4pro().address, CommandKind::RetryAttach))
         .await
         .unwrap();
     let link = os.next_link().await;
@@ -175,10 +178,10 @@ async fn each_link_failure_is_retried_unless_only_the_listener_or_a_restart_can_
     ] {
         let (platform, mut os) = fake_platform();
         let _core = Core::builder().start(platform);
-        os.fail_links(&buds4pro().address, failure.clone());
+        os.fail_links(buds4pro().address, failure.clone());
         os.observe(Observation::DeviceConnected(buds4pro()));
         os.next_attempt().await;
-        os.allow_links(&buds4pro().address);
+        os.allow_links(buds4pro().address);
 
         assert_eq!(
             os.attempts_within(Duration::from_secs(600)).await,
@@ -193,15 +196,15 @@ async fn a_disconnect_cancels_the_pending_retry_and_a_reconnect_attaches_straigh
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let address = buds4pro().address;
-    os.fail_links(&address, LinkFailure::DeviceNotConnected);
+    os.fail_links(address, LinkFailure::DeviceNotConnected);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.next_attempt().await;
 
-    os.observe(Observation::DeviceDisconnected(address.clone()));
+    os.observe(Observation::DeviceDisconnected(address));
     wait_for(&core, |list| list.devices.is_empty()).await;
     assert!(!os.attempts_within(Duration::from_secs(600)).await);
 
-    os.allow_links(&address);
+    os.allow_links(address);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     identify_buds4pro(&link);
@@ -214,7 +217,7 @@ async fn another_sony_model_is_not_retried() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let wh1000xm6 = DeviceIdentity {
-        address: DeviceAddress("AC:80:0A:44:55:66".into()),
+        address: DeviceAddress::parse("AC:80:0A:44:55:66").unwrap(),
         name: "WH-1000XM6".into(),
         service_uuids: vec![support::SONY_SERVICE],
     };
@@ -232,7 +235,8 @@ async fn another_sony_model_is_not_retried() {
 
     assert!(!os.attempts_within(Duration::from_secs(600)).await);
     assert_eq!(
-        core.command(Command::RetryAttach(wh1000xm6.address)).await,
+        core.command(device_command(wh1000xm6.address, CommandKind::RetryAttach))
+            .await,
         Err(CommandError::UnsupportedModel)
     );
 }
@@ -285,15 +289,20 @@ async fn an_xm5_request_whose_ack_is_lost_is_resent_after_a_second() {
     let (core, _os, mut link) = attached_xm5().await;
     let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         xm5().address,
-        NoiseControlMode::Off,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Off,
+        },
     ))
     .await
     .unwrap();
-    core.command(Command::SetAmbientLevel(xm5().address, 3))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 3 },
+    ))
+    .await
+    .unwrap();
     assert_eq!(written(&mut link).await.unwrap(), off);
     let sent_at = tokio::time::Instant::now();
 
@@ -316,9 +325,11 @@ async fn an_xm5_that_stops_acking_is_detached_after_10_tries_and_re_attached() {
     let (core, mut os, mut link) = attached_xm5().await;
     let off = sony_frame(1, &[0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0a]);
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         xm5().address,
-        NoiseControlMode::Off,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Off,
+        },
     ))
     .await
     .unwrap();

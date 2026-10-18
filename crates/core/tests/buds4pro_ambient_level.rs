@@ -3,9 +3,10 @@
 mod support;
 
 use headphone_bridge_core::platform::Observation;
-use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState, LevelRange};
+use headphone_bridge_core::{Battery, CommandError, CommandKind, Core, DeviceState, LevelRange};
 use support::{
-    buds4pro, fake_platform, fixture, received, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds4pro, device_command, fake_platform, fixture, received, samsung_frame, wait_for,
+    DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds4 Pro Attached through capture-3's first extended
@@ -50,9 +51,12 @@ async fn setting_a_level_sends_ambient_volume_and_changes_nothing_until_the_devi
     let (core, _os, mut link) = attached_buds4pro().await;
     wait_for(&core, |list| list.devices[0].ambient_level == Some(2)).await;
 
-    core.command(Command::SetAmbientLevel(buds4pro().address, 4))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetAmbientLevel { level: 4 },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(link.written.recv().await.unwrap(), SET_AMBIENT_LEVEL_4);
     // Like a mode set, polled with MANAGER_INFO for a fresh extended status.
@@ -84,7 +88,10 @@ async fn a_level_outside_the_models_range_is_rejected_before_anything_is_sent() 
     let (core, _os, mut link) = attached_buds4pro().await;
 
     let result = core
-        .command(Command::SetAmbientLevel(buds4pro().address, 5))
+        .command(device_command(
+            buds4pro().address,
+            CommandKind::SetAmbientLevel { level: 5 },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::OutOfRange));
@@ -101,7 +108,10 @@ async fn a_level_is_not_sent_before_the_model_and_its_capabilities_are_known() {
     link.written.recv().await.expect("MANAGER_INFO");
 
     let result = core
-        .command(Command::SetAmbientLevel(buds4pro().address, 1))
+        .command(device_command(
+            buds4pro().address,
+            CommandKind::SetAmbientLevel { level: 1 },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::NotAttached));
@@ -114,9 +124,12 @@ async fn an_ack_confirms_the_level_only_when_it_carries_the_one_asked_for() {
     let (core, _os, mut link) = attached_buds4pro().await;
     wait_for(&core, |list| list.devices[0].ambient_level == Some(2)).await;
 
-    core.command(Command::SetAmbientLevel(buds4pro().address, 0))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetAmbientLevel { level: 0 },
+    ))
+    .await
+    .unwrap();
     assert_eq!(
         link.written.recv().await.unwrap(),
         [0xfd, 0x04, 0x00, 0x84, 0x00, 0x5c, 0xd7, 0xdd]

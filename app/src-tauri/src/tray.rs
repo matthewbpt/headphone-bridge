@@ -10,7 +10,8 @@ use std::sync::{Mutex, PoisonError};
 
 use headphone_bridge_core::platform::DeviceAddress;
 use headphone_bridge_core::{
-    Battery, Command, Core, DeviceList, DeviceState, NoiseControlMode, NotAttachedReason,
+    Battery, Command, CommandKind, Core, DeviceCommand, DeviceList, DeviceState, NoiseControlMode,
+    NotAttachedReason,
 };
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -123,7 +124,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         Some(Click::Open) => crate::show_window(app),
         Some(Click::Quit) => app.exit(0),
         Some(Click::Send(command)) => {
-            if let Command::SetNoiseControlMode(..) = command {
+            if let CommandKind::SetNoiseControlMode { .. } = command.kind {
                 // A check item toggles itself when clicked. Put the check
                 // marks back as the Device last confirmed them: the radio
                 // selection moves only once the Device confirms the new mode.
@@ -132,7 +133,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let core = app.state::<&'static Core>();
-                if let Err(error) = core.command(command.clone()).await {
+                if let Err(error) = core.command(Command::Device(command.clone())).await {
                     eprintln!("couldn't send {command:?} from the tray: {error:?}");
                 }
             });
@@ -210,7 +211,7 @@ pub enum Click {
     Open,
     Quit,
     /// Sends a command for the Primary Device to the core.
-    Send(Command),
+    Send(DeviceCommand),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,7 +274,7 @@ impl TrayMenu {
                 .effective_mode_reason
                 .map(|reason| labels::hint(reason).into()),
             status: None,
-            device: Some(device.address.clone()),
+            device: Some(device.address),
             modes: device
                 .capabilities
                 .noise_control_modes
@@ -360,15 +361,21 @@ impl TrayMenu {
             QUIT => return Some(Click::Quit),
             _ => {}
         }
-        let address = self.device.clone()?;
+        let address = self.device?;
         if id == POWER_OFF {
             return self
                 .power_off
                 .is_some()
-                .then_some(Click::Send(Command::PowerOff(address)));
+                .then_some(Click::Send(DeviceCommand {
+                    address,
+                    kind: CommandKind::PowerOff,
+                }));
         }
         let mode = id.strip_prefix(MODE).and_then(mode_from_id)?;
-        Some(Click::Send(Command::SetNoiseControlMode(address, mode)))
+        Some(Click::Send(DeviceCommand {
+            address,
+            kind: CommandKind::SetNoiseControlMode { mode },
+        }))
     }
 }
 
@@ -410,7 +417,7 @@ mod tests {
 
     fn buds(state: DeviceState) -> Device {
         Device {
-            address: DeviceAddress("AA:BB:CC:DD:EE:FF".into()),
+            address: DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap(),
             name: "Matt's Buds4 Pro".into(),
             model: Some(Model::GalaxyBuds4Pro),
             state,
@@ -445,7 +452,7 @@ mod tests {
     fn shows_the_attached_device_with_its_chosen_mode_checked() {
         let list = DeviceList {
             devices: vec![buds(DeviceState::Attached)],
-            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+            primary: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -454,7 +461,7 @@ mod tests {
                 battery: Some("Battery: L 80% · R 75% · Case –".into()),
                 hint: None,
                 status: None,
-                device: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+                device: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
                     mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", false),
@@ -527,7 +534,7 @@ mod tests {
     fn offers_only_the_modes_in_the_headphones_capabilities() {
         let list = DeviceList {
             devices: vec![Device {
-                address: DeviceAddress("11:22:33:44:55:66".into()),
+                address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
                 name: "WH-1000XM5".into(),
                 model: Some(Model::Wh1000Xm5),
                 state: DeviceState::Attached,
@@ -543,7 +550,7 @@ mod tests {
                 power_off_failed: false,
                 reported_at: None,
             }],
-            primary: Some(DeviceAddress("11:22:33:44:55:66".into())),
+            primary: Some(DeviceAddress::parse("11:22:33:44:55:66").unwrap()),
         };
         assert_eq!(
             TrayMenu::new(&list),
@@ -552,7 +559,7 @@ mod tests {
                 battery: Some("Battery: 70%".into()),
                 hint: None,
                 status: None,
-                device: Some(DeviceAddress("11:22:33:44:55:66".into())),
+                device: Some(DeviceAddress::parse("11:22:33:44:55:66").unwrap()),
                 modes: vec![
                     mode(NoiseControlMode::Off, "Off", false),
                     mode(NoiseControlMode::NoiseCancelling, "Noise Cancelling", true),
@@ -574,7 +581,7 @@ mod tests {
                 effective_mode_reason: Some(EffectiveModeReason::BudOutOfEar),
                 ..buds(DeviceState::Attached)
             }],
-            primary: Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into())),
+            primary: Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap()),
         };
         let menu = TrayMenu::new(&list);
         assert_eq!(
@@ -589,7 +596,7 @@ mod tests {
 
     fn xm5() -> Device {
         Device {
-            address: DeviceAddress("11:22:33:44:55:66".into()),
+            address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
             name: "WH-1000XM5".into(),
             model: Some(Model::Wh1000Xm5),
             state: DeviceState::Attached,
@@ -616,7 +623,7 @@ mod tests {
         assert_eq!(TrayMenu::new(&list).title, "WH-1000XM5");
         assert_eq!(TrayMenu::new(&list).device, Some(xm5().address));
 
-        list.primary = Some(DeviceAddress("AA:BB:CC:DD:EE:FF".into()));
+        list.primary = Some(DeviceAddress::parse("AA:BB:CC:DD:EE:FF").unwrap());
         assert_eq!(TrayMenu::new(&list).title, "Matt's Buds4 Pro");
     }
 
@@ -761,7 +768,10 @@ mod tests {
         };
         assert_eq!(
             TrayMenu::new(&list).click("power-off"),
-            Some(Click::Send(Command::PowerOff(xm5().address)))
+            Some(Click::Send(DeviceCommand {
+                address: xm5().address,
+                kind: CommandKind::PowerOff,
+            }))
         );
     }
 
@@ -773,10 +783,12 @@ mod tests {
         };
         assert_eq!(
             TrayMenu::new(&list).click("mode:ambient"),
-            Some(Click::Send(Command::SetNoiseControlMode(
-                xm5().address,
-                NoiseControlMode::Ambient
-            )))
+            Some(Click::Send(DeviceCommand {
+                address: xm5().address,
+                kind: CommandKind::SetNoiseControlMode {
+                    mode: NoiseControlMode::Ambient
+                },
+            }))
         );
     }
 

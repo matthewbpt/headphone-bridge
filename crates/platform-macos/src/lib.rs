@@ -74,7 +74,7 @@ impl Platform for MacBluetooth {
 
     async fn open_control_link(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
         let stopped = || {
@@ -83,7 +83,7 @@ impl Platform for MacBluetooth {
         };
         let (reply, opened) = oneshot::channel();
         if !self.send(Command::Open {
-            address: address.clone(),
+            address,
             service,
             reply,
         }) {
@@ -108,10 +108,4 @@ impl Platform for MacBluetooth {
         });
         Ok(ControlLink { incoming, outgoing })
     }
-}
-
-/// Converts an IOBluetooth address (`ac-80-0a-11-22-33`) to the port's form
-/// (`AC:80:0A:11:22:33`).
-fn port_address(iobluetooth: &str) -> DeviceAddress {
-    DeviceAddress(iobluetooth.replace('-', ":").to_ascii_uppercase())
 }

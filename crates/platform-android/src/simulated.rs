@@ -13,16 +13,17 @@ use tokio::sync::mpsc;
 
 /// Where each Model is simulated: locally administered addresses, so never a
 /// real Device's.
-fn address(model: Model) -> DeviceAddress {
-    DeviceAddress(
-        match model {
-            Model::GalaxyBuds4Pro => "02:00:5E:00:00:01",
-            Model::Wh1000Xm5 => "02:00:5E:00:00:02",
-            Model::GalaxyBuds2 => "02:00:5E:00:00:03",
-        }
-        .into(),
-    )
+const fn address(model: Model) -> DeviceAddress {
+    match model {
+        Model::GalaxyBuds4Pro => BUDS4PRO,
+        Model::Wh1000Xm5 => XM5,
+        Model::GalaxyBuds2 => BUDS2,
+    }
 }
+
+const BUDS4PRO: DeviceAddress = DeviceAddress::from_octets([0x02, 0x00, 0x5E, 0x00, 0x00, 0x01]);
+const XM5: DeviceAddress = DeviceAddress::from_octets([0x02, 0x00, 0x5E, 0x00, 0x00, 0x02]);
+const BUDS2: DeviceAddress = DeviceAddress::from_octets([0x02, 0x00, 0x5E, 0x00, 0x00, 0x03]);
 
 /// A Simulated Device, switched on: its settings last for as long as it's
 /// Connected, across control links, as a real Device's do.
@@ -63,8 +64,8 @@ impl SimulatedDevice {
     }
 
     /// Whether it's at `asked`.
-    pub(crate) fn is_at(&self, asked: &DeviceAddress) -> bool {
-        address(self.model) == *asked
+    pub(crate) fn is_at(&self, asked: DeviceAddress) -> bool {
+        address(self.model) == asked
     }
 
     /// Opens a control link to it, which it answers until the core drops the

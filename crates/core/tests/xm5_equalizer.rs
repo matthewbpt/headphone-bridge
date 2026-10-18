@@ -8,12 +8,12 @@ use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::wire::sony::PRESET_EQ;
 use headphone_bridge_core::{
-    Bands, Battery, Command, CommandError, Core, Equalizer, EqualizerCapability, NoiseControlMode,
-    Preset, PresetId, StepRange,
+    Bands, Battery, CommandError, CommandKind, Core, Equalizer, EqualizerCapability,
+    NoiseControlMode, Preset, PresetId, StepRange,
 };
 use support::{
-    fake_platform, fixture, linked_core, replay, sony_ack, sony_decode, sony_frame, wait_for,
-    without_capability_probe, xm5, DeviceLink, FakeOs, EQEBB_RET_CAPABILITY,
+    device_command, fake_platform, fixture, linked_core, replay, sony_ack, sony_decode, sony_frame,
+    wait_for, without_capability_probe, xm5, DeviceLink, FakeOs, EQEBB_RET_CAPABILITY,
 };
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
@@ -105,9 +105,14 @@ async fn written(link: &mut DeviceLink) -> Vec<u8> {
 async fn setting_a_preset_sends_it_alone_and_waits_for_the_device() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::SetEqualizer(xm5().address, preset(0x16)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(0x16),
+        },
+    ))
+    .await
+    .unwrap();
 
     // EQEBB_SET_PARAM: Bass Boost, no steps.
     assert_eq!(
@@ -154,9 +159,12 @@ async fn moving_from_a_fixed_preset_to_manual_sends_the_whole_curve_and_waits_fo
         clear_bass: Some(2),
     };
 
-    core.command(Command::SetEqualizer(xm5().address, manual))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer { equalizer: manual },
+    ))
+    .await
+    .unwrap();
 
     // EQEBB_SET_PARAM: Manual, six steps each + 10: Bright's Clear Bass
     // (+2), then the Bands.
@@ -207,9 +215,14 @@ async fn editing_a_band_on_custom_1_stays_on_custom_1() {
         bands: Some(vec![-10, 10, 0, -2, -10]),
         clear_bass: Some(1),
     };
-    core.command(Command::SetEqualizer(xm5().address, custom_1))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: custom_1,
+        },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(
         written(&mut link).await,
@@ -224,12 +237,20 @@ async fn editing_a_band_on_custom_1_stays_on_custom_1() {
 async fn a_preset_set_waits_for_the_last_request_to_be_acked() {
     let (core, _os, mut link) = attached_xm5().await;
 
-    core.command(Command::SetAmbientLevel(xm5().address, 3))
-        .await
-        .unwrap();
-    core.command(Command::SetEqualizer(xm5().address, preset(0xa0)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetAmbientLevel { level: 3 },
+    ))
+    .await
+    .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(0xa0),
+        },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(
         written(&mut link).await,
@@ -282,7 +303,10 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
     let (core, _os, mut link) = attached_xm5().await;
 
     let result = core
-        .command(Command::SetEqualizer(xm5().address, equalizer))
+        .command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer { equalizer },
+        ))
         .await;
 
     assert_eq!(result, Err(error));
@@ -352,9 +376,14 @@ async fn changing_clear_bass_sends_it_first_in_the_curve_and_waits_for_the_devic
         clear_bass: Some(7),
     };
 
-    core.command(Command::SetEqualizer(xm5().address, louder.clone()))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: louder.clone(),
+        },
+    ))
+    .await
+    .unwrap();
 
     // EQEBB_SET_PARAM: Manual, six steps each + 10, Clear Bass first.
     assert_eq!(
@@ -439,8 +468,13 @@ async fn a_preset_set_before_the_device_reports_its_equalizer_is_rejected() {
     wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
 
     assert_eq!(
-        core.command(Command::SetEqualizer(xm5().address, preset(0x16)))
-            .await,
+        core.command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(0x16)
+            }
+        ))
+        .await,
         Err(CommandError::SettingsNotReported)
     );
 
@@ -448,9 +482,14 @@ async fn a_preset_set_before_the_device_reports_its_equalizer_is_rejected() {
     // the first set after it is the next thing written.
     replay(&mut link, &records[20..]).await;
     wait_for(&core, |list| list.devices[0].equalizer.is_some()).await;
-    core.command(Command::SetEqualizer(xm5().address, preset(0x16)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(0x16),
+        },
+    ))
+    .await
+    .unwrap();
     assert_eq!(
         written(&mut link).await,
         sony_frame(1, &[0x58, 0x00, 0x16, 0x00])
@@ -510,11 +549,21 @@ async fn a_set_while_the_equalizer_is_unavailable_is_rejected_and_nothing_is_sen
     assert_eq!(written(&mut link).await[1], 0x01, "an ACK");
 
     let result = core
-        .command(Command::SetEqualizer(xm5().address, preset(0x16)))
+        .command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(0x16),
+            },
+        ))
         .await;
     // Before anything else is checked: even a Preset the Model lacks.
     let unlisted = core
-        .command(Command::SetEqualizer(xm5().address, preset(0x18)))
+        .command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(0x18),
+            },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::EqualizerUnavailable));
@@ -540,7 +589,12 @@ async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equ
     wait_for(&core, |list| list.devices[0].equalizer_unavailable).await;
 
     let result = core
-        .command(Command::SetEqualizer(xm5().address, preset(0x16)))
+        .command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(0x16),
+            },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::EqualizerUnavailable));
@@ -559,9 +613,14 @@ async fn a_curve_edit_the_device_only_acks_is_read_back() {
         clear_bass: Some(7),
     };
 
-    core.command(Command::SetEqualizer(xm5().address, louder.clone()))
-        .await
-        .unwrap();
+    core.command(device_command(
+        xm5().address,
+        CommandKind::SetEqualizer {
+            equalizer: louder.clone(),
+        },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(
         written(&mut link).await,
@@ -651,9 +710,14 @@ async fn replay_preset_picks(
         Some(carried(&[0x57, 0x00, 0x00, 6, 10, 10, 10, 10, 10, 10]))
     );
     for (i, &(preset, clear_bass, bands)) in picks.iter().enumerate() {
-        core.command(Command::SetEqualizer(xm5().address, self::preset(preset)))
-            .await
-            .unwrap();
+        core.command(device_command(
+            xm5().address,
+            CommandKind::SetEqualizer {
+                equalizer: self::preset(preset),
+            },
+        ))
+        .await
+        .unwrap();
         let end = set_at.get(i + 1).copied().unwrap_or(records.len());
         replay(&mut link, &records[set_at[i]..end]).await;
         let reported = Equalizer {
@@ -756,13 +820,19 @@ async fn real_xm5_curve_edits_are_read_back_after_their_ack() {
         // A set the app sent: sent again, with the same data. Besides the
         // Equalizer, the listener moved to Ambient and back mid-capture.
         let asked = carried(&data);
-        let command = match data[..] {
-            [0x68, _, _, _, 0x01, ..] => Command::SetNoiseControlMode(xm5().address, Ambient),
-            [0x68, ..] => Command::SetNoiseControlMode(xm5().address, NoiseCancelling),
-            _ => Command::SetEqualizer(xm5().address, asked.clone()),
+        let kind = match data[..] {
+            [0x68, _, _, _, 0x01, ..] => CommandKind::SetNoiseControlMode { mode: Ambient },
+            [0x68, ..] => CommandKind::SetNoiseControlMode {
+                mode: NoiseCancelling,
+            },
+            _ => CommandKind::SetEqualizer {
+                equalizer: asked.clone(),
+            },
         };
-        let curve = matches!(command, Command::SetEqualizer(..)) && asked.bands.is_some();
-        core.command(command).await.unwrap();
+        let curve = matches!(kind, CommandKind::SetEqualizer { .. }) && asked.bands.is_some();
+        core.command(device_command(xm5().address, kind))
+            .await
+            .unwrap();
         let (seq, sent) = written_data(&mut link).await;
         assert_eq!(sent, data, "expected {record}");
         link.send.send(sony_ack(1 - seq)).unwrap();

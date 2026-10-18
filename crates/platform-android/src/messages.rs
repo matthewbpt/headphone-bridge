@@ -2,7 +2,7 @@
 //! core's types.
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
-use headphone_bridge_core::{Command, CommandError, DeviceList, NoiseControlMode};
+use headphone_bridge_core::{Command, CommandError, DeviceCommand, DeviceList};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
 use uuid::Uuid;
@@ -47,15 +47,15 @@ pub struct BadMessage(#[source] pub serde_json::Error);
 #[serde(tag = "type", rename_all = "camelCase")]
 enum WireEvent {
     Connected {
-        address: String,
+        address: DeviceAddress,
         name: String,
         uuids: Vec<String>,
     },
     Disconnected {
-        address: String,
+        address: DeviceAddress,
     },
     AudioOutput {
-        address: Option<String>,
+        address: Option<DeviceAddress>,
     },
     Opened {
         request: u64,
@@ -90,16 +90,16 @@ pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
             name,
             uuids,
         } => Event::Observed(Observation::DeviceConnected(DeviceIdentity {
-            address: DeviceAddress(address),
+            address,
             name,
             // A service the core can't parse is one it doesn't know.
             service_uuids: uuids.iter().filter_map(|uuid| uuid.parse().ok()).collect(),
         })),
         WireEvent::Disconnected { address } => {
-            Event::Observed(Observation::DeviceDisconnected(DeviceAddress(address)))
+            Event::Observed(Observation::DeviceDisconnected(address))
         }
         WireEvent::AudioOutput { address } => {
-            Event::Observed(Observation::AudioOutputChanged(address.map(DeviceAddress)))
+            Event::Observed(Observation::AudioOutputChanged(address))
         }
         WireEvent::Opened { request, link } => Event::Opened { request, link },
         WireEvent::OpenFailed { request, failure } => Event::OpenFailed { request, failure },
@@ -112,47 +112,12 @@ pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
     })
 }
 
-/// [`Command`] as Kotlin writes it, sent to `NativeCore.command`. The frame
-/// log is the App Screen's, so it isn't here.
-#[derive(Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-enum WireCommand {
-    SetNoiseControlMode {
-        address: String,
-        mode: NoiseControlMode,
-    },
-    SetAmbientLevel {
-        address: String,
-        level: u8,
-    },
-    SetNoiseCancellingLevel {
-        address: String,
-        level: u8,
-    },
-    PowerOff {
-        address: String,
-    },
-    RetryAttach {
-        address: String,
-    },
-}
-
-/// Reads a command from Kotlin.
+/// Reads a command from Kotlin, sent to `NativeCore.command`: a
+/// [`DeviceCommand`], so it can't switch the frame log, the App Screen's
+/// host setting.
 pub fn parse_command(json: &str) -> Result<Command, BadMessage> {
-    let command = serde_json::from_str(json).map_err(BadMessage)?;
-    Ok(match command {
-        WireCommand::SetNoiseControlMode { address, mode } => {
-            Command::SetNoiseControlMode(DeviceAddress(address), mode)
-        }
-        WireCommand::SetAmbientLevel { address, level } => {
-            Command::SetAmbientLevel(DeviceAddress(address), level)
-        }
-        WireCommand::SetNoiseCancellingLevel { address, level } => {
-            Command::SetNoiseCancellingLevel(DeviceAddress(address), level)
-        }
-        WireCommand::PowerOff { address } => Command::PowerOff(DeviceAddress(address)),
-        WireCommand::RetryAttach { address } => Command::RetryAttach(DeviceAddress(address)),
-    })
+    let command: DeviceCommand = serde_json::from_str(json).map_err(BadMessage)?;
+    Ok(Command::Device(command))
 }
 
 /// A message from the core to Kotlin, for `NativeCore.fromCore`.

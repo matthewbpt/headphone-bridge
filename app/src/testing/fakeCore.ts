@@ -1,5 +1,5 @@
 import { act } from "react";
-import type { Commands, Events, Permission, Platform } from "../core";
+import type { Commands, DeviceCommand, Events, Permission, Platform } from "../core";
 import type { DeviceList, Labels, Model } from "../deviceList";
 
 /**
@@ -78,10 +78,11 @@ export class FakeCore {
   }
 
   /**
-   * How the core answers every later call of `command`: accept it at once
-   * (the default), reject it with an error, or hold it until `release`.
-   * Turning the frame log on or off, and opening the app's settings, are
-   * answered at once: accepted or rejected.
+   * How the core answers every later call of `command`, or of a device
+   * `command` of that `kind`: accept it at once (the default), reject it with
+   * an error, or hold it until `release`. Turning the frame log on or off,
+   * and opening the app's settings, are answered at once: accepted or
+   * rejected.
    */
   answer<C extends AnsweredCommand>(
     command: C,
@@ -90,9 +91,9 @@ export class FakeCore {
     this.answers.set(command, answer);
   }
 
-  /** Answers the oldest held call of `command`. */
+  /** Answers the oldest held call of `command`, or of a device `command` of that `kind`. */
   async release(command: RecordedCommand, answer: Exclude<Answer, "hold"> = "accept") {
-    const call = this.calls.find((call) => call.command === command && call.held);
+    const call = this.calls.find((call) => call.answeredAs === command && call.held);
     if (!call) throw new Error(`no held ${command} call to release`);
     call.held = false;
     await act(async () => {
@@ -103,7 +104,7 @@ export class FakeCore {
 
   /** Every command the window sent, oldest first. */
   sent(): SentCommand[] {
-    return this.calls.map(({ command, args }) => ({ command, args }));
+    return this.calls.map(({ sent }) => sent);
   }
 
   /** The window's `invoke`, for `@tauri-apps/api/core`. */
@@ -122,12 +123,7 @@ export class FakeCore {
     labels: () => Promise.resolve(structuredClone(LABELS)),
     platform: () => Promise.resolve(this.platform),
     device_list: () => Promise.resolve(structuredClone(this.deviceList)),
-    set_noise_control_mode: (args) => this.record("set_noise_control_mode", args),
-    set_ambient_level: (args) => this.record("set_ambient_level", args),
-    set_noise_cancelling_level: (args) => this.record("set_noise_cancelling_level", args),
-    set_equalizer: (args) => this.record("set_equalizer", args),
-    retry_attach: (args) => this.record("retry_attach", args),
-    power_off: (args) => this.record("power_off", args),
+    command: (args) => this.record(args.command.kind, { command: "command", args }),
     frame_log: () => Promise.resolve(this.frameLog),
     set_frame_log: ({ enabled }) => {
       const refusal = this.refusal("set_frame_log");
@@ -135,7 +131,7 @@ export class FakeCore {
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
-    share_frame_log: (args) => this.record("share_frame_log", args),
+    share_frame_log: (args) => this.record("share_frame_log", { command: "share_frame_log", args }),
     nearby_devices_permission: () => Promise.resolve(this.nearbyDevices),
     open_app_settings: () => {
       const refusal = this.refusal("open_app_settings");
@@ -182,26 +178,23 @@ export class FakeCore {
     return typeof answer === "object" ? Promise.reject(answer.reject) : null;
   }
 
-  private record<C extends RecordedCommand>(command: C, args: Commands[C]["args"]): Promise<void> {
-    const answer = this.answers.get(command) ?? "accept";
+  /** Records `sent`, answered as a test told the core to answer `answeredAs`. */
+  private record(answeredAs: RecordedCommand, sent: SentCommand): Promise<void> {
+    const answer = this.answers.get(answeredAs) ?? "accept";
     let settle!: Call["settle"];
     const promise = new Promise<void>((resolve, reject) => (settle = { resolve, reject }));
-    this.calls.push({ command, args, settle, held: answer === "hold" });
+    this.calls.push({ answeredAs, sent, settle, held: answer === "hold" });
     if (answer === "accept") settle.resolve();
     else if (answer !== "hold") settle.reject(answer.reject);
     return promise;
   }
 }
 
-/** The commands the fake core records. */
-export type RecordedCommand =
-  | "set_noise_control_mode"
-  | "set_ambient_level"
-  | "set_noise_cancelling_level"
-  | "set_equalizer"
-  | "retry_attach"
-  | "power_off"
-  | "share_frame_log";
+/**
+ * The commands the fake core records: a device `command`, told apart by its
+ * `kind`, or sharing the frame log.
+ */
+export type RecordedCommand = DeviceCommand["kind"] | "share_frame_log";
 
 /** The commands a test can tell the fake core how to answer. */
 type AnsweredCommand = RecordedCommand | "set_frame_log" | "open_app_settings";
@@ -209,12 +202,14 @@ type AnsweredCommand = RecordedCommand | "set_frame_log" | "open_app_settings";
 /** Accept at once, reject with the core's error, or hold until released. */
 export type Answer = "accept" | "hold" | { reject: unknown };
 
-export interface SentCommand {
-  command: RecordedCommand;
-  args: Record<string, unknown>;
-}
+/** A command the window sent, with its arguments. */
+export type SentCommand = {
+  [C in "command" | "share_frame_log"]: { command: C; args: Commands[C]["args"] };
+}["command" | "share_frame_log"];
 
-interface Call extends SentCommand {
+interface Call {
+  answeredAs: RecordedCommand;
+  sent: SentCommand;
   settle: { resolve: () => void; reject: (error: unknown) => void };
   held: boolean;
 }

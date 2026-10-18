@@ -10,20 +10,48 @@ use crate::platform::DeviceAddress;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    SetNoiseControlMode(DeviceAddress, NoiseControlMode),
+    /// Something to do to a Device, as the UI and Kotlin send it.
+    Device(DeviceCommand),
+    /// Switches the frame log on, appending to the given file, or off (`None`).
+    /// A host setting, so no [`DeviceCommand`] can do it.
+    SetFrameLog(Option<PathBuf>),
+}
+
+/// A command for one Device: its address and what to do to it. On the wire
+/// it's one flat object tagged by `kind`, with the address beside the tag,
+/// e.g. `{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE:FF","mode":"ambient"}`,
+/// the same from the UI and from Kotlin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceCommand {
+    pub address: DeviceAddress,
+    #[serde(flatten)]
+    pub kind: CommandKind,
+}
+
+/// What a [`DeviceCommand`] does, named for its `kind` tag on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CommandKind {
+    SetNoiseControlMode {
+        mode: NoiseControlMode,
+    },
     /// Sets the Ambient Level, in the Model's own steps.
-    SetAmbientLevel(DeviceAddress, u8),
+    SetAmbientLevel {
+        level: u8,
+    },
     /// Sets the Noise Cancelling Level, in the Model's own steps.
-    SetNoiseCancellingLevel(DeviceAddress, u8),
+    SetNoiseCancellingLevel {
+        level: u8,
+    },
     /// Sets the whole Equalizer: a Preset, and its Bands and Clear Bass where
     /// the Model has them.
-    SetEqualizer(DeviceAddress, Equalizer),
+    SetEqualizer {
+        equalizer: Equalizer,
+    },
     /// Powers Off the Device: it switches off and stops being Connected.
-    PowerOff(DeviceAddress),
+    PowerOff,
     /// Tries again to Attach a Connected Device that isn't Attached.
-    RetryAttach(DeviceAddress),
-    /// Switches the frame log on, appending to the given file, or off (`None`).
-    SetFrameLog(Option<PathBuf>),
+    RetryAttach,
 }
 
 /// Why a command was rejected before anything was sent to a Device. Its

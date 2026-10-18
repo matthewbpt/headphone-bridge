@@ -279,7 +279,7 @@ impl Platform for KotlinBluetooth {
 
     async fn open_control_link(
         &self,
-        address: &DeviceAddress,
+        address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
         let shared = &self.shared;
@@ -306,7 +306,7 @@ impl Platform for KotlinBluetooth {
             .insert(request, opened_tx);
         let asked = shared.send(Message::Open {
             request,
-            address: address.clone(),
+            address,
             service,
         });
         if !asked {

@@ -36,7 +36,7 @@ impl Platform for NoBluetooth {
 
     async fn open_control_link(
         &self,
-        _address: &DeviceAddress,
+        _address: DeviceAddress,
         _service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
         Err(LinkFailure::DeviceNotConnected)

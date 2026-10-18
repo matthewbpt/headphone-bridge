@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::command::{Command, CommandError};
+use crate::command::{Command, CommandError, CommandKind, DeviceCommand};
 use crate::device_list::{Device, DeviceList, DeviceState, NotAttachedReason};
 use crate::frame_log::FrameLog;
 use crate::platform::{DeviceAddress, DeviceIdentity, Observation, Platform};
@@ -114,6 +114,25 @@ impl Tracked {
     fn end_session(&mut self) {
         self.session = None;
         self.power_off_deadline = None;
+    }
+
+    /// Fails for an unsupported Model, or a Device that is Powering Off.
+    fn supported(&self) -> Result<(), CommandError> {
+        match self.device.state {
+            DeviceState::NotAttached {
+                reason: NotAttachedReason::UnsupportedModel,
+            } => Err(CommandError::UnsupportedModel),
+            DeviceState::PoweringOff => Err(CommandError::PoweringOff),
+            _ => Ok(()),
+        }
+    }
+
+    /// The Device and its Control Link session, if it's Attached.
+    fn attached(&self) -> Result<(&Device, &LinkSession), CommandError> {
+        match (&self.device.state, &self.session) {
+            (DeviceState::Attached, Some(session)) => Ok((&self.device, session)),
+            _ => Err(CommandError::NotAttached),
+        }
     }
 }
 
@@ -256,13 +275,13 @@ impl<P: Platform> State<P> {
             DeviceState::NotAttached {
                 reason: NotAttachedReason::UnsupportedModel,
             }
-        } else if self.wants_attached(&identity.address) {
+        } else if self.wants_attached(identity.address) {
             DeviceState::Attaching
         } else {
             DeviceState::Detached
         };
         let state_is_attaching = state == DeviceState::Attaching;
-        let address = identity.address.clone();
+        let address = identity.address;
         self.next_recency += 1;
         let tracked = Tracked {
             device: Device::unidentified(identity.address, identity.name, state),
@@ -273,37 +292,40 @@ impl<P: Platform> State<P> {
             last_report: None,
             power_off_deadline: None,
         };
-        self.devices.insert(address.clone(), tracked);
+        self.devices.insert(address, tracked);
         if state_is_attaching {
-            self.reattach(&address, Duration::ZERO);
+            self.reattach(address, Duration::ZERO);
         }
     }
 
     /// Starts a new session for the tracked Device at `address` that opens
     /// the Control Link after `delay`, in place of any session it had.
-    fn reattach(&mut self, address: &DeviceAddress, delay: Duration) {
-        let Some(vendor) = self.devices.get(address).and_then(|tracked| tracked.vendor) else {
+    fn reattach(&mut self, address: DeviceAddress, delay: Duration) {
+        let Some(vendor) = self
+            .devices
+            .get(&address)
+            .and_then(|tracked| tracked.vendor)
+        else {
             return;
         };
         let session = self.attach(address, vendor, delay);
-        if let Some(tracked) = self.devices.get_mut(address) {
+        if let Some(tracked) = self.devices.get_mut(&address) {
             tracked.session = Some(session);
         }
     }
 
     /// Starts a session that opens the Control Link after `delay`.
-    fn attach(&mut self, address: &DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
+    fn attach(&mut self, address: DeviceAddress, vendor: Vendor, delay: Duration) -> LinkSession {
         let attempt = self.next_attempt;
         self.next_attempt += 1;
         let (commands, commands_rx) = mpsc::unbounded_channel();
         let platform = self.platform.clone();
         let events = self.link_events.clone();
         let frame_log = self.frame_log.clone();
-        let address = address.clone();
         let task = tokio::spawn(async move {
             let send = |kind| {
                 let _ = events.send(LinkEvent {
-                    address: address.clone(),
+                    address,
                     attempt,
                     kind,
                 });
@@ -317,7 +339,7 @@ impl<P: Platform> State<P> {
                 Vendor::Sony => sony::SERVICE,
             };
             let on_update = |update| send(LinkEventKind::Update(update));
-            let reason = match platform.open_control_link(&address, service).await {
+            let reason = match platform.open_control_link(address, service).await {
                 Ok(link) => match vendor {
                     Vendor::Samsung(candidate) => {
                         let session = samsung::Session::new(candidate);
@@ -410,7 +432,7 @@ impl<P: Platform> State<P> {
                 if retry {
                     let delay = backoff(tracked.retries);
                     tracked.retries += 1;
-                    self.reattach(&event.address, delay);
+                    self.reattach(event.address, delay);
                 }
             }
         }
@@ -418,67 +440,7 @@ impl<P: Platform> State<P> {
 
     fn command(&mut self, command: Command) -> Result<(), CommandError> {
         match command {
-            Command::SetNoiseControlMode(address, mode) => {
-                let (device, session) = self.attached(&address)?;
-                if !device.capabilities.noise_control_modes.contains(&mode) {
-                    return Err(CommandError::MissingCapability);
-                }
-                device.settings_reported()?;
-                session.send(SessionCommand::SetNoiseControlMode(mode))
-            }
-            Command::SetAmbientLevel(address, level) => {
-                let (device, session) = self.attached(&address)?;
-                device.capabilities.check_ambient_level(level)?;
-                device.settings_reported()?;
-                session.send(SessionCommand::SetAmbientLevel(level))
-            }
-            Command::SetNoiseCancellingLevel(address, level) => {
-                let (device, session) = self.attached(&address)?;
-                device.capabilities.check_noise_cancelling_level(level)?;
-                device.settings_reported()?;
-                session.send(SessionCommand::SetNoiseCancellingLevel(level))
-            }
-            Command::SetEqualizer(address, equalizer) => {
-                let (device, session) = self.attached(&address)?;
-                // Before anything else: the Device takes no Equalizer change.
-                if device.equalizer_unavailable {
-                    return Err(CommandError::EqualizerUnavailable);
-                }
-                device.capabilities.check_equalizer(&equalizer)?;
-                if device.equalizer.is_none() {
-                    return Err(CommandError::SettingsNotReported);
-                }
-                session.send(SessionCommand::SetEqualizer(equalizer))
-            }
-            Command::PowerOff(address) => {
-                let (device, session) = self.attached(&address)?;
-                if !device.capabilities.power_off {
-                    return Err(CommandError::MissingCapability);
-                }
-                session.send(SessionCommand::PowerOff)?;
-                let tracked = self
-                    .devices
-                    .get_mut(&address)
-                    .ok_or(CommandError::UnknownDevice)?;
-                tracked.device.state = DeviceState::PoweringOff;
-                tracked.device.power_off_failed = false;
-                Ok(())
-            }
-            Command::RetryAttach(address) => {
-                let tracked = self.supported(&address)?;
-                if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
-                    return Ok(());
-                }
-                // Retrying by hand starts over, straight away.
-                let tracked = self
-                    .devices
-                    .get_mut(&address)
-                    .ok_or(CommandError::UnknownDevice)?;
-                tracked.device.state = DeviceState::Attaching;
-                tracked.retries = 0;
-                self.reattach(&address, Duration::ZERO);
-                Ok(())
-            }
+            Command::Device(command) => self.device_command(command),
             Command::SetFrameLog(Some(path)) => self
                 .frame_log
                 .start(&path)
@@ -490,14 +452,77 @@ impl<P: Platform> State<P> {
         }
     }
 
+    fn device_command(&mut self, command: DeviceCommand) -> Result<(), CommandError> {
+        let DeviceCommand { address, kind } = command;
+        let tracked = self
+            .devices
+            .get_mut(&address)
+            .ok_or(CommandError::UnknownDevice)?;
+        tracked.supported()?;
+        match kind {
+            CommandKind::SetNoiseControlMode { mode } => {
+                let (device, session) = tracked.attached()?;
+                if !device.capabilities.noise_control_modes.contains(&mode) {
+                    return Err(CommandError::MissingCapability);
+                }
+                device.settings_reported()?;
+                session.send(SessionCommand::SetNoiseControlMode(mode))
+            }
+            CommandKind::SetAmbientLevel { level } => {
+                let (device, session) = tracked.attached()?;
+                device.capabilities.check_ambient_level(level)?;
+                device.settings_reported()?;
+                session.send(SessionCommand::SetAmbientLevel(level))
+            }
+            CommandKind::SetNoiseCancellingLevel { level } => {
+                let (device, session) = tracked.attached()?;
+                device.capabilities.check_noise_cancelling_level(level)?;
+                device.settings_reported()?;
+                session.send(SessionCommand::SetNoiseCancellingLevel(level))
+            }
+            CommandKind::SetEqualizer { equalizer } => {
+                let (device, session) = tracked.attached()?;
+                // Before anything else: the Device takes no Equalizer change.
+                if device.equalizer_unavailable {
+                    return Err(CommandError::EqualizerUnavailable);
+                }
+                device.capabilities.check_equalizer(&equalizer)?;
+                if device.equalizer.is_none() {
+                    return Err(CommandError::SettingsNotReported);
+                }
+                session.send(SessionCommand::SetEqualizer(equalizer))
+            }
+            CommandKind::PowerOff => {
+                let (device, session) = tracked.attached()?;
+                if !device.capabilities.power_off {
+                    return Err(CommandError::MissingCapability);
+                }
+                session.send(SessionCommand::PowerOff)?;
+                tracked.device.state = DeviceState::PoweringOff;
+                tracked.device.power_off_failed = false;
+                Ok(())
+            }
+            CommandKind::RetryAttach => {
+                if !matches!(tracked.device.state, DeviceState::NotAttached { .. }) {
+                    return Ok(());
+                }
+                // Retrying by hand starts over, straight away.
+                tracked.device.state = DeviceState::Attaching;
+                tracked.retries = 0;
+                self.reattach(address, Duration::ZERO);
+                Ok(())
+            }
+        }
+    }
+
     /// Whether the policy, or a hold, asks for the Device at `address` to be
     /// Attached.
-    fn wants_attached(&self, address: &DeviceAddress) -> bool {
+    fn wants_attached(&self, address: DeviceAddress) -> bool {
         self.policy == AttachPolicy::Always
             || self
                 .holds
                 .values()
-                .any(|held| held.as_ref().is_none_or(|held| held == address))
+                .any(|held| held.is_none_or(|held| held == address))
     }
 
     /// Attaches every Detached Device the policy or a hold now asks for, and
@@ -506,8 +531,8 @@ impl<P: Platform> State<P> {
         let wanted: BTreeSet<DeviceAddress> = self
             .devices
             .keys()
-            .filter(|address| self.wants_attached(address))
-            .cloned()
+            .copied()
+            .filter(|&address| self.wants_attached(address))
             .collect();
         let mut to_attach = Vec::new();
         for (address, tracked) in &mut self.devices {
@@ -516,7 +541,7 @@ impl<P: Platform> State<P> {
                 DeviceState::Detached if wanted => {
                     tracked.device.state = DeviceState::Attaching;
                     tracked.retries = 0;
-                    to_attach.push(address.clone());
+                    to_attach.push(*address);
                 }
                 // A Device Powering Off is left to finish, or to fail and
                 // be Detached then.
@@ -527,7 +552,7 @@ impl<P: Platform> State<P> {
             }
         }
         for address in to_attach {
-            self.reattach(&address, Duration::ZERO);
+            self.reattach(address, Duration::ZERO);
         }
     }
 
@@ -550,10 +575,10 @@ impl<P: Platform> State<P> {
             .devices
             .iter()
             .filter(|(_, tracked)| tracked.power_off_deadline.is_some_and(|d| d <= now))
-            .map(|(address, _)| address.clone())
+            .map(|(address, _)| *address)
             .collect();
         for address in timed_out {
-            let wanted = self.wants_attached(&address);
+            let wanted = self.wants_attached(address);
             let Some(tracked) = self.devices.get_mut(&address) else {
                 continue;
             };
@@ -570,33 +595,8 @@ impl<P: Platform> State<P> {
             }
             tracked.device.power_off_failed = true;
             if reattach {
-                self.reattach(&address, Duration::ZERO);
+                self.reattach(address, Duration::ZERO);
             }
-        }
-    }
-
-    /// The Device at `address`, unless it's unknown, an unsupported Model, or
-    /// Powering Off.
-    fn supported(&self, address: &DeviceAddress) -> Result<&Tracked, CommandError> {
-        let tracked = self
-            .devices
-            .get(address)
-            .ok_or(CommandError::UnknownDevice)?;
-        match tracked.device.state {
-            DeviceState::NotAttached {
-                reason: NotAttachedReason::UnsupportedModel,
-            } => Err(CommandError::UnsupportedModel),
-            DeviceState::PoweringOff => Err(CommandError::PoweringOff),
-            _ => Ok(tracked),
-        }
-    }
-
-    /// The Attached Device at `address` and its Control Link session.
-    fn attached(&self, address: &DeviceAddress) -> Result<(&Device, &LinkSession), CommandError> {
-        let tracked = self.supported(address)?;
-        match (&tracked.device.state, &tracked.session) {
-            (DeviceState::Attached, Some(session)) => Ok((&tracked.device, session)),
-            _ => Err(CommandError::NotAttached),
         }
     }
 
@@ -613,7 +613,7 @@ impl<P: Platform> State<P> {
             .find(|tracked| Some(&tracked.device.address) == self.audio_output.as_ref());
         playing
             .or_else(|| candidates().max_by_key(|tracked| tracked.recency))
-            .map(|tracked| tracked.device.address.clone())
+            .map(|tracked| tracked.device.address)
     }
 
     fn publish(&self) {

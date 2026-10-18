@@ -4,12 +4,13 @@ mod support;
 
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
-    Battery, Command, CommandError, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
+    Battery, CommandError, CommandKind, Core, DeviceState, Equalizer, EqualizerCapability, Preset,
     PresetId,
 };
 use support::{
-    buds4pro, fake_platform, fixture, linked_core, real_preset_picks_are_confirmed_by_their_acks,
-    received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
+    buds4pro, device_command, fake_platform, fixture, linked_core,
+    real_preset_picks_are_confirmed_by_their_acks, received, replay, samsung_frame, wait_for,
+    DeviceLink, FakeOs,
 };
 
 /// Starts a core with a Buds4 Pro Attached through capture-3's first extended
@@ -156,9 +157,14 @@ async fn setting_a_preset_sends_equalizer_and_an_ack_carrying_it_confirms_it() {
     let (core, _os, mut link) = attached_buds4pro().await;
     wait_for(&core, |list| list.devices[0].equalizer == Some(preset(3))).await;
 
-    core.command(Command::SetEqualizer(buds4pro().address, preset(1)))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds4pro().address,
+        CommandKind::SetEqualizer {
+            equalizer: preset(1),
+        },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(link.written.recv().await.unwrap(), SET_PRESET_1);
     // Like the other sets, polled with MANAGER_INFO for a fresh extended
@@ -181,7 +187,10 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
     wait_for(&core, |list| list.devices[0].equalizer.is_some()).await;
 
     let result = core
-        .command(Command::SetEqualizer(buds4pro().address, equalizer))
+        .command(device_command(
+            buds4pro().address,
+            CommandKind::SetEqualizer { equalizer },
+        ))
         .await;
 
     assert_eq!(result, Err(error));
@@ -226,7 +235,12 @@ async fn a_preset_is_not_sent_before_the_device_is_attached() {
     link.written.recv().await.expect("MANAGER_INFO");
 
     let result = core
-        .command(Command::SetEqualizer(buds4pro().address, preset(1)))
+        .command(device_command(
+            buds4pro().address,
+            CommandKind::SetEqualizer {
+                equalizer: preset(1),
+            },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::NotAttached));

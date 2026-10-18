@@ -6,10 +6,12 @@ use std::time::Duration;
 
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{
-    AttachPolicy, Command, CommandError, Core, DeviceList, DeviceState, NoiseControlMode,
+    AttachPolicy, CommandError, CommandKind, Core, DeviceList, DeviceState, NoiseControlMode,
     NotAttachedReason,
 };
-use support::{buds4pro, fake_platform, fixture, received, replay, wait_for, xm5, DeviceLink};
+use support::{
+    buds4pro, device_command, fake_platform, fixture, received, replay, wait_for, xm5, DeviceLink,
+};
 
 /// Whether the only Device in `list` is in `state`.
 fn is(list: &DeviceList, state: DeviceState) -> bool {
@@ -164,16 +166,21 @@ async fn commands_to_a_detached_device_are_refused() {
 
     let address = buds4pro().address;
     assert_eq!(
-        core.command(Command::SetNoiseControlMode(
-            address.clone(),
-            NoiseControlMode::Ambient
+        core.command(device_command(
+            address,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Ambient
+            }
         ))
         .await,
         Err(CommandError::NotAttached)
     );
     assert_eq!(
-        core.command(Command::SetAmbientLevel(address.clone(), 1))
-            .await,
+        core.command(device_command(
+            address,
+            CommandKind::SetAmbientLevel { level: 1 }
+        ))
+        .await,
         Err(CommandError::NotAttached)
     );
 }
@@ -190,7 +197,7 @@ async fn ending_the_hold_leaves_a_power_off_to_finish_then_detaches_a_device_tha
     let mut link = os.next_link().await;
     identify(&mut link).await;
     wait_for(&core, |list| list.devices[0].ambient_level.is_some()).await;
-    core.command(Command::PowerOff(xm5().address))
+    core.command(device_command(xm5().address, CommandKind::PowerOff))
         .await
         .unwrap();
     link.written.recv().await;

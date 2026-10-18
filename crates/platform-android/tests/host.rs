@@ -71,7 +71,7 @@ impl Kotlin {
 fn state_of(list: &DeviceList, address: &str) -> Option<DeviceState> {
     list.devices
         .iter()
-        .find(|device| device.address.0 == address)
+        .find(|device| device.address.to_string() == address)
         .map(|device| device.state.clone())
 }
 
@@ -101,7 +101,7 @@ impl Kotlin {
                 request,
                 address: asked,
                 ..
-            } if asked.0 == address => Some(request),
+            } if asked.to_string() == address => Some(request),
             _ => None,
         })
         .await
@@ -237,7 +237,7 @@ async fn a_hold_on_the_primary_device_attaches_only_the_one_playing_audio() {
         .device_list(|list| {
             list.primary
                 .as_ref()
-                .is_some_and(|primary| primary.0 == XM5)
+                .is_some_and(|primary| primary.to_string() == XM5)
         })
         .await;
     host.event(r#"{"type":"holdPrimary"}"#).unwrap();

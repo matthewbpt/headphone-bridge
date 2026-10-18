@@ -10,12 +10,12 @@ use std::time::Duration;
 use headphone_bridge_core::frame_log::{Direction, FrameRecord};
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
 use headphone_bridge_core::{
-    Battery, Capabilities, Command, CommandError, Core, DeviceState, EffectiveModeReason,
-    LevelRange, Model, NoiseControlMode, NotAttachedReason,
+    Battery, Capabilities, Command, CommandError, CommandKind, Core, DeviceState,
+    EffectiveModeReason, LevelRange, Model, NoiseControlMode, NotAttachedReason,
 };
 use support::{
-    buds2, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink, FakeOs,
-    SAMSUNG_SERVICE,
+    buds2, device_command, fake_platform, fixture, received, replay, samsung_frame, wait_for,
+    DeviceLink, FakeOs, SAMSUNG_SERVICE,
 };
 
 const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 0x58, 0xdd];
@@ -110,7 +110,7 @@ async fn a_galaxy_buds2_pro_is_listed_as_unsupported_and_sent_nothing() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds2pro = DeviceIdentity {
-        address: DeviceAddress("10:20:30:40:50:60".into()),
+        address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds2 Pro (9F3C)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
@@ -193,9 +193,11 @@ const SET_AMBIENT_LEVEL_2: [u8; 8] = [0xfd, 0x04, 0x00, 0x84, 0x02, 0x1e, 0xf7, 
 async fn a_mode_set_sends_noise_controls_then_manager_info_and_an_ack_confirms_it() {
     let (core, _os, mut link) = attached_buds2().await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds2().address,
-        NoiseControlMode::Ambient,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Ambient,
+        },
     ))
     .await
     .unwrap();
@@ -215,9 +217,11 @@ async fn a_mode_set_sends_noise_controls_then_manager_info_and_an_ack_confirms_i
 async fn a_mode_set_is_confirmed_by_the_next_extended_status_without_an_ack() {
     let (core, _os, mut link) = attached_buds2().await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds2().address,
-        NoiseControlMode::Off,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Off,
+        },
     ))
     .await
     .unwrap();
@@ -238,9 +242,12 @@ async fn a_mode_set_is_confirmed_by_the_next_extended_status_without_an_ack() {
 async fn an_ambient_level_set_sends_ambient_volume_then_manager_info_and_an_ack_confirms_it() {
     let (core, _os, mut link) = attached_buds2().await;
 
-    core.command(Command::SetAmbientLevel(buds2().address, 2))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds2().address,
+        CommandKind::SetAmbientLevel { level: 2 },
+    ))
+    .await
+    .unwrap();
 
     assert_eq!(link.written.recv().await.unwrap(), SET_AMBIENT_LEVEL_2);
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
@@ -252,9 +259,12 @@ async fn an_ambient_level_set_sends_ambient_volume_then_manager_info_and_an_ack_
 async fn an_ambient_level_set_is_confirmed_by_the_next_extended_status_without_an_ack() {
     let (core, _os, mut link) = attached_buds2().await;
 
-    core.command(Command::SetAmbientLevel(buds2().address, 0))
-        .await
-        .unwrap();
+    core.command(device_command(
+        buds2().address,
+        CommandKind::SetAmbientLevel { level: 0 },
+    ))
+    .await
+    .unwrap();
     link.written.recv().await.expect("AMBIENT_VOLUME");
     assert_eq!(link.written.recv().await.unwrap(), MANAGER_INFO);
     link.send
@@ -269,7 +279,10 @@ async fn an_ambient_level_beyond_the_buds2s_three_steps_is_rejected_before_anyth
     let (core, _os, mut link) = attached_buds2().await;
 
     let result = core
-        .command(Command::SetAmbientLevel(buds2().address, 3))
+        .command(device_command(
+            buds2().address,
+            CommandKind::SetAmbientLevel { level: 3 },
+        ))
         .await;
 
     assert_eq!(result, Err(CommandError::OutOfRange));
@@ -282,9 +295,11 @@ async fn adaptive_is_never_sent_to_a_buds2() {
     let (core, _os, mut link) = attached_buds2().await;
 
     let result = core
-        .command(Command::SetNoiseControlMode(
+        .command(device_command(
             buds2().address,
-            NoiseControlMode::Adaptive,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Adaptive,
+            },
         ))
         .await;
 
@@ -499,9 +514,12 @@ async fn real_buds2_mode_sets_are_confirmed_by_their_acks_and_a_bud_out_only_pau
     replay(&mut link, &records[..set_at[0]]).await;
     wait_for(&core, |list| list.devices[0].chosen_mode == Some(Ambient)).await;
     for (i, mode) in modes.into_iter().enumerate() {
-        core.command(Command::SetNoiseControlMode(buds2().address, mode))
-            .await
-            .unwrap();
+        core.command(device_command(
+            buds2().address,
+            CommandKind::SetNoiseControlMode { mode },
+        ))
+        .await
+        .unwrap();
         let end = set_at.get(i + 1).copied().unwrap_or(bud_out_at);
         replay(&mut link, &records[set_at[i]..end]).await;
         wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;
@@ -545,9 +563,12 @@ async fn real_buds2_ambient_level_sets_down_to_0_are_confirmed_by_their_acks() {
     replay(&mut link, &records[..set_at[0]]).await;
     wait_for(&core, |list| list.devices[0].ambient_level == Some(1)).await;
     for (i, level) in levels.into_iter().enumerate() {
-        core.command(Command::SetAmbientLevel(buds2().address, level))
-            .await
-            .unwrap();
+        core.command(device_command(
+            buds2().address,
+            CommandKind::SetAmbientLevel { level },
+        ))
+        .await
+        .unwrap();
         let end = set_at.get(i + 1).copied().unwrap_or(records.len());
         replay(&mut link, &records[set_at[i]..end]).await;
         wait_for(&core, |list| list.devices[0].ambient_level == Some(level)).await;

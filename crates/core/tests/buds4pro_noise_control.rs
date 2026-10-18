@@ -3,10 +3,12 @@
 mod support;
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, Observation};
-use headphone_bridge_core::{Battery, Command, CommandError, Core, DeviceState, NoiseControlMode};
+use headphone_bridge_core::{
+    Battery, CommandError, CommandKind, Core, DeviceState, NoiseControlMode,
+};
 use support::{
-    buds4pro, fake_platform, fixture, received, replay, samsung_frame, wait_for, DeviceLink,
-    FakeOs, SAMSUNG_SERVICE,
+    buds4pro, device_command, fake_platform, fixture, received, replay, samsung_frame, wait_for,
+    DeviceLink, FakeOs, SAMSUNG_SERVICE,
 };
 
 /// `NOISE_CONTROLS` (0x78) with Noise Cancelling (1).
@@ -43,9 +45,11 @@ async fn setting_a_mode_sends_noise_controls_then_polls_and_an_ack_of_another_mo
 {
     let (core, _os, mut link) = attached_buds4pro().await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds4pro().address,
-        NoiseControlMode::NoiseCancelling,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::NoiseCancelling,
+        },
     ))
     .await
     .unwrap();
@@ -91,9 +95,11 @@ async fn a_mode_set_from_the_app_appears_once_the_noise_controls_update_confirms
     })
     .await;
 
-    core.command(Command::SetNoiseControlMode(
+    core.command(device_command(
         buds4pro().address,
-        NoiseControlMode::Ambient,
+        CommandKind::SetNoiseControlMode {
+            mode: NoiseControlMode::Ambient,
+        },
     ))
     .await
     .unwrap();
@@ -189,9 +195,11 @@ async fn a_mode_is_not_sent_before_the_model_and_its_capabilities_are_known() {
     link.written.recv().await.expect("MANAGER_INFO");
 
     let result = core
-        .command(Command::SetNoiseControlMode(
+        .command(device_command(
             buds4pro().address,
-            NoiseControlMode::NoiseCancelling,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::NoiseCancelling,
+            },
         ))
         .await;
 
@@ -205,7 +213,7 @@ async fn a_mode_is_never_sent_to_an_unsupported_model() {
     let (platform, os) = fake_platform();
     let core = Core::builder().start(platform);
     let buds3pro = DeviceIdentity {
-        address: DeviceAddress("10:20:30:40:50:60".into()),
+        address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds3 Pro (9F3C)".into(),
         service_uuids: vec![SAMSUNG_SERVICE],
     };
@@ -213,9 +221,11 @@ async fn a_mode_is_never_sent_to_an_unsupported_model() {
     wait_for(&core, |list| list.devices.len() == 1).await;
 
     let result = core
-        .command(Command::SetNoiseControlMode(
+        .command(device_command(
             buds3pro.address,
-            NoiseControlMode::Off,
+            CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Off,
+            },
         ))
         .await;
 
@@ -244,9 +254,12 @@ async fn real_buds4pro_sets_are_confirmed_by_their_acks() {
     replay(&mut link, &records[..set_at[0]]).await;
     wait_for(&core, |list| list.devices[0].chosen_mode == Some(Off)).await;
     for (i, mode) in [Ambient, NoiseCancelling].into_iter().enumerate() {
-        core.command(Command::SetNoiseControlMode(buds4pro().address, mode))
-            .await
-            .unwrap();
+        core.command(device_command(
+            buds4pro().address,
+            CommandKind::SetNoiseControlMode { mode },
+        ))
+        .await
+        .unwrap();
         let end = set_at.get(i + 1).copied().unwrap_or(records.len());
         replay(&mut link, &records[set_at[i]..end]).await;
         wait_for(&core, |list| list.devices[0].chosen_mode == Some(mode)).await;

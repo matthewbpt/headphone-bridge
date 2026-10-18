@@ -63,7 +63,7 @@ mod linux {
 
         async fn open_control_link(
             &self,
-            address: &DeviceAddress,
+            address: DeviceAddress,
             service: Uuid,
         ) -> Result<ControlLink, LinkFailure> {
             let bluez = self.bluez.get().await.map_err(|error| {

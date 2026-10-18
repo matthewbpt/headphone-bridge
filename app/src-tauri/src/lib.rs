@@ -17,10 +17,9 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::{Mutex, PoisonError};
 
-use headphone_bridge_core::platform::DeviceAddress;
 #[cfg(not(target_os = "android"))]
 use headphone_bridge_core::CoreBuilder;
-use headphone_bridge_core::{Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode};
+use headphone_bridge_core::{Command, CommandError, Core, DeviceCommand, DeviceList};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// The process's one core. On Android it's the platform adapter's instead,
@@ -182,59 +181,14 @@ fn device_list(core: State<&'static Core>) -> DeviceList {
     core.device_list()
 }
 
+/// Runs a command for a Device: every device command the window sends comes
+/// through here, as the one flat object Kotlin sends too.
 #[tauri::command]
-async fn set_noise_control_mode(
+async fn command(
     core: State<'_, &'static Core>,
-    address: String,
-    mode: NoiseControlMode,
+    command: DeviceCommand,
 ) -> Result<(), CommandError> {
-    core.command(Command::SetNoiseControlMode(DeviceAddress(address), mode))
-        .await
-}
-
-#[tauri::command]
-async fn set_ambient_level(
-    core: State<'_, &'static Core>,
-    address: String,
-    level: u8,
-) -> Result<(), CommandError> {
-    core.command(Command::SetAmbientLevel(DeviceAddress(address), level))
-        .await
-}
-
-#[tauri::command]
-async fn set_noise_cancelling_level(
-    core: State<'_, &'static Core>,
-    address: String,
-    level: u8,
-) -> Result<(), CommandError> {
-    core.command(Command::SetNoiseCancellingLevel(
-        DeviceAddress(address),
-        level,
-    ))
-    .await
-}
-
-#[tauri::command]
-async fn set_equalizer(
-    core: State<'_, &'static Core>,
-    address: String,
-    equalizer: Equalizer,
-) -> Result<(), CommandError> {
-    core.command(Command::SetEqualizer(DeviceAddress(address), equalizer))
-        .await
-}
-
-#[tauri::command]
-async fn retry_attach(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
-    core.command(Command::RetryAttach(DeviceAddress(address)))
-        .await
-}
-
-#[tauri::command]
-async fn power_off(core: State<'_, &'static Core>, address: String) -> Result<(), CommandError> {
-    core.command(Command::PowerOff(DeviceAddress(address)))
-        .await
+    core.command(Command::Device(command)).await
 }
 
 /// The frame log file, or `None` while the frame log is off.
@@ -488,12 +442,7 @@ pub fn run() {
             platform,
             labels,
             device_list,
-            set_noise_control_mode,
-            set_ambient_level,
-            set_noise_cancelling_level,
-            set_equalizer,
-            retry_attach,
-            power_off,
+            command,
             frame_log,
             set_frame_log,
             nearby_devices_permission,

@@ -1,14 +1,17 @@
 #![cfg(test)]
 
 use headphone_bridge_core::platform::{DeviceAddress, DeviceIdentity, LinkFailure, Observation};
-use headphone_bridge_core::{Command, CommandError, DeviceList, NoiseControlMode};
+use headphone_bridge_core::{
+    Command, CommandError, CommandKind, DeviceCommand, DeviceList, Equalizer, NoiseControlMode,
+    PresetId,
+};
 use headphone_bridge_platform_android::messages::{
     parse_command, parse_event, BadMessage, CommandFailure, Event, HoldKind, Message,
 };
 use serde_json::{json, Value};
 
 fn address(text: &str) -> DeviceAddress {
-    DeviceAddress(text.into())
+    DeviceAddress::parse(text).unwrap()
 }
 
 #[test]
@@ -168,6 +171,17 @@ fn an_event_the_core_does_not_know_is_refused() {
 }
 
 #[test]
+fn an_event_with_a_malformed_address_is_a_bad_message() {
+    for json in [
+        r#"{"type":"connected","address":"AA:BB:CC:DD:EE","name":"Galaxy Buds4 Pro","uuids":[]}"#,
+        r#"{"type":"disconnected","address":"not an address"}"#,
+        r#"{"type":"audioOutput","address":"AA_BB_CC_DD_EE_FF"}"#,
+    ] {
+        assert!(matches!(parse_event(json), Err(BadMessage(_))), "{json}");
+    }
+}
+
+#[test]
 fn a_bad_message_keeps_the_json_error_as_its_source() {
     for bad in [
         parse_event("not json").unwrap_err(),
@@ -182,27 +196,45 @@ fn a_bad_message_keeps_the_json_error_as_its_source() {
 
 #[test]
 fn every_device_command_can_be_sent() {
-    let device = || address("AA:BB:CC:DD:EE:FF");
+    let device = |kind| {
+        Command::Device(DeviceCommand {
+            address: address("AA:BB:CC:DD:EE:FF"),
+            kind,
+        })
+    };
     let cases = [
         (
             r#"{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE:FF","mode":"ambient"}"#,
-            Command::SetNoiseControlMode(device(), NoiseControlMode::Ambient),
+            device(CommandKind::SetNoiseControlMode {
+                mode: NoiseControlMode::Ambient,
+            }),
         ),
         (
             r#"{"kind":"setAmbientLevel","address":"AA:BB:CC:DD:EE:FF","level":3}"#,
-            Command::SetAmbientLevel(device(), 3),
+            device(CommandKind::SetAmbientLevel { level: 3 }),
         ),
         (
             r#"{"kind":"setNoiseCancellingLevel","address":"AA:BB:CC:DD:EE:FF","level":2}"#,
-            Command::SetNoiseCancellingLevel(device(), 2),
+            device(CommandKind::SetNoiseCancellingLevel { level: 2 }),
+        ),
+        (
+            r#"{"kind":"setEqualizer","address":"AA:BB:CC:DD:EE:FF",
+                "equalizer":{"preset":10,"bands":[-2,0,3,1,-1],"clearBass":4}}"#,
+            device(CommandKind::SetEqualizer {
+                equalizer: Equalizer {
+                    preset: PresetId(10),
+                    bands: Some(vec![-2, 0, 3, 1, -1]),
+                    clear_bass: Some(4),
+                },
+            }),
         ),
         (
             r#"{"kind":"powerOff","address":"AA:BB:CC:DD:EE:FF"}"#,
-            Command::PowerOff(device()),
+            device(CommandKind::PowerOff),
         ),
         (
             r#"{"kind":"retryAttach","address":"AA:BB:CC:DD:EE:FF"}"#,
-            Command::RetryAttach(device()),
+            device(CommandKind::RetryAttach),
         ),
     ];
     for (json, command) in cases {
@@ -217,6 +249,16 @@ fn a_command_the_core_does_not_know_is_refused() {
         r#"{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE:FF","mode":"loud"}"#
     )
     .is_err());
+}
+
+#[test]
+fn a_command_with_a_malformed_address_is_refused() {
+    for json in [
+        r#"{"kind":"setNoiseControlMode","address":"AA:BB:CC:DD:EE","mode":"ambient"}"#,
+        r#"{"kind":"powerOff","address":"AA:BB:CC:DD:EE:GG"}"#,
+    ] {
+        assert!(matches!(parse_command(json), Err(BadMessage(_))), "{json}");
+    }
 }
 
 fn sent(message: Message) -> Value {
@@ -282,6 +324,17 @@ fn a_command_result_is_null_or_why_it_failed() {
         }),
         json!({"type": "commandResult", "request": 7,
                "error": {"kind": "badRequest",
-                         "message": "missing field `address`"}})
+                         "message": "missing field `address` at line 1 column 19"}})
+    );
+    assert_eq!(
+        sent(Message::CommandResult {
+            request: 8,
+            result: Err(CommandFailure::BadRequest(
+                parse_command(r#"{"kind":"powerOff","address":"AA:BB:CC:DD:EE"}"#).unwrap_err()
+            ))
+        }),
+        json!({"type": "commandResult", "request": 8,
+               "error": {"kind": "badRequest",
+                         "message": "not a Bluetooth address: \"AA:BB:CC:DD:EE\" at line 1 column 46"}})
     );
 }

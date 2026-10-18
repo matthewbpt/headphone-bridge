@@ -107,7 +107,7 @@ async fn another_sony_model_is_detached_having_been_sent_only_reads() {
     let (platform, mut os) = fake_platform();
     let core = Core::builder().start(platform);
     let wh1000xm6 = DeviceIdentity {
-        address: DeviceAddress("AC:80:0A:44:55:66".into()),
+        address: DeviceAddress::parse("AC:80:0A:44:55:66").unwrap(),
         name: "WH-1000XM6".into(),
         service_uuids: vec![SONY_SERVICE],
     };

@@ -129,7 +129,7 @@ fn run(
         }
         if let Some(device) = output.borrow_mut().take() {
             if last.as_ref() != Some(&device) {
-                *last = Some(device.clone());
+                *last = Some(device);
                 observations
                     .send(Observation::AudioOutputChanged(device))
                     .map_err(|_| SoundServerError::CoreStopped)?;
