@@ -353,6 +353,27 @@ async fn the_simulated_buds4_pro_confirms_an_equalizer_preset_like_a_real_one() 
 }
 
 #[tokio::test]
+async fn the_simulated_buds2_confirms_an_equalizer_preset_like_the_buds4_pro() {
+    let (host, mut kotlin) = start();
+    let address = attached(&host, &mut kotlin, Model::GalaxyBuds2).await;
+
+    // GalaxyBudsClient's Buds2 extended status: Dynamic.
+    assert_eq!(
+        host.core().device_list().devices[0].equalizer,
+        Some(preset(3))
+    );
+
+    // Treble boost, set from the App Screen.
+    host.core()
+        .command(Command::SetEqualizer(DeviceAddress(address), preset(5)))
+        .await
+        .unwrap();
+    kotlin
+        .simulated(|device| device.equalizer == Some(preset(5)))
+        .await;
+}
+
+#[tokio::test]
 async fn the_simulated_xm5_reports_its_equalizer_and_confirms_presets_and_curves_like_a_real_one() {
     let (host, mut kotlin) = start();
     let address = DeviceAddress(attached(&host, &mut kotlin, Model::Wh1000Xm5).await);
