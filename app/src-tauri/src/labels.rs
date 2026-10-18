@@ -112,7 +112,6 @@ pub fn all() -> Labels {
 
 #[cfg(test)]
 mod tests {
-    use headphone_bridge_core::platform::LinkFailure;
     use serde_json::to_value;
 
     use super::*;

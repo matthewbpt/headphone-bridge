@@ -72,10 +72,13 @@ pub enum LinkFailure {
     /// Another process, such as the vendor's desktop app, holds the link.
     #[error("another process holds the control link")]
     InUseByAnotherProcess,
+    /// The OS hasn't let the app use Bluetooth.
     #[error("Bluetooth permission denied")]
     BluetoothPermissionDenied,
+    /// The Device doesn't offer the vendor service asked for.
     #[error("the Device has no such vendor service")]
     ServiceNotFound,
+    /// The Device stopped being Connected, or the OS doesn't know it.
     #[error("the Device isn't Connected")]
     DeviceNotConnected,
     /// A failure the adapter has no cause for, with its own detail.
@@ -86,7 +89,7 @@ pub enum LinkFailure {
 impl LinkFailure {
     /// Whether trying again by itself might open the link. Not when only the
     /// listener can fix the cause, e.g. by quitting the app holding the link.
-    pub fn is_transient(&self) -> bool {
+    pub(crate) fn is_transient(&self) -> bool {
         match self {
             LinkFailure::InUseByAnotherProcess | LinkFailure::BluetoothPermissionDenied => false,
             LinkFailure::ServiceNotFound
