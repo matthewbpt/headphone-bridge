@@ -1,6 +1,6 @@
 # Headphone Bridge
 
-An app for desktop and Android that reads and changes the sound settings of Bluetooth headphones and earbuds from different vendors, replacing each vendor's mobile app for everyday adjustments.
+An app for desktop and Android that reads and changes the sound settings of Bluetooth headphones and earbuds from different Vendors, replacing each Vendor's mobile app for everyday adjustments.
 
 ## Devices and connections
 
@@ -12,6 +12,10 @@ _Avoid_: Headset, buds, cans, peripheral
 The product a Device is an instance of, e.g. Galaxy Buds4 Pro or WH-1000XM5. A Model determines which Capabilities a Device has.
 _Avoid_: Device type, product, SKU
 
+**Vendor**:
+The company whose Models share one protocol for reading and changing settings, e.g. Samsung or Sony. The app speaks each Vendor's protocol in place of the Vendor's own app.
+_Avoid_: Brand, manufacturer, maker
+
 **Capability**:
 A Noise Control Mode, adjustable setting, or action such as Power Off that a Model supports. The app only offers what a Device's Capabilities include.
 _Avoid_: Feature, feature flag, support
@@ -20,12 +24,16 @@ _Avoid_: Feature, feature flag, support
 The state of a Device that the operating system has paired and connected for audio. The app observes this state; it never changes it.
 _Avoid_: Paired, online
 
+**Control Link**:
+The connection to a Connected Device over which the app speaks its Vendor's protocol, separate from the audio. Only one app or device can hold a Device's Control Link at a time.
+_Avoid_: Connection, socket, RFCOMM channel
+
 **Attached**:
-The state of a Connected Device for which the app has an open control link and can read and change settings. A Device can be Connected without being Attached, e.g. when another app holds the control link.
-_Avoid_: Connected (when the control link is meant), linked, bound
+The state of a Connected Device for which the app has an open Control Link and can read and change settings. A Device can be Connected without being Attached, e.g. when another app holds the Control Link.
+_Avoid_: Connected (when the Control Link is meant), linked, bound
 
 **Detach**:
-To close a Device's control link on purpose so another app or device can use it. The Device stays Connected.
+To close a Device's Control Link on purpose so another app or device can use it. The Device stays Connected.
 _Avoid_: Release, yield, disconnect, let go
 
 **Detached**:
@@ -37,7 +45,7 @@ A request that keeps a Device Attached while it lasts, whatever the Attach Polic
 _Avoid_: Lock, lease, claim, keep-alive
 
 **Attach Policy**:
-When the app Attaches a Connected Device that no Hold is on: **Always**, for as long as it's Connected, as on desktop; or **On request**, never, so it stays Detached and another app or device can have its control link, as on Android.
+When the app Attaches a Connected Device that no Hold is on: **Always**, for as long as it's Connected, as on desktop; or **On request**, never, so it stays Detached and another app or device can have its Control Link, as on Android.
 _Avoid_: Attach mode, auto-attach
 
 **Power Off**:
@@ -71,7 +79,7 @@ The Noise Control Mode in which the Device itself blends Noise Cancelling and Am
 _Avoid_: Auto, Adaptive Sound Control (a different Sony feature)
 
 **Chosen Mode**:
-The Noise Control Mode the listener last selected, by any means: this app, the vendor app, or a gesture on the Device.
+The Noise Control Mode the listener last selected, by any means: this app, the Vendor's app, or a gesture on the Device.
 _Avoid_: Selected mode, user mode, setting
 
 **Effective Mode**:

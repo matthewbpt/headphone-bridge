@@ -16,7 +16,8 @@ use uuid::{uuid, Uuid};
 use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
 use crate::model::{Model, PresetId, WH_1000XM5_BANDS};
-pub use crate::update::Update;
+use crate::session::{SessionCommand, VendorSession};
+use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, DataType, Deframer};
 
@@ -160,33 +161,6 @@ impl Session {
         session
     }
 
-    /// Takes the frames to write to the Device, in order.
-    pub fn outgoing(&mut self) -> Vec<Vec<u8>> {
-        std::mem::take(&mut self.outgoing)
-    }
-
-    /// While a request is waiting for its ACK, a number that changes each
-    /// time it is sent again or another request goes out. `None` while
-    /// nothing is waiting.
-    pub fn awaiting_ack(&self) -> Option<u64> {
-        self.in_flight.as_ref().map(|_| self.sends)
-    }
-
-    /// Sends the request that is waiting for its ACK again. Returns `false`,
-    /// sending nothing, once it has been sent [`MAX_SENDS`] times.
-    pub fn resend(&mut self) -> bool {
-        let Some(in_flight) = &mut self.in_flight else {
-            return true;
-        };
-        if in_flight.sends >= MAX_SENDS {
-            return false;
-        }
-        in_flight.sends += 1;
-        self.sends += 1;
-        self.outgoing.push(in_flight.frame.clone());
-        true
-    }
-
     /// Asks the Device to switch to `mode`. The Device confirms with a
     /// notification of the new params. Does nothing until the Device has
     /// reported its params, as there is nothing to keep unchanged yet.
@@ -215,7 +189,8 @@ impl Session {
 
     /// Asks the Device to set its Equalizer: a Preset alone, which leaves
     /// its curve to the Device, or with the whole curve, Bands and Clear Bass
-    /// together, as the core checks they come. A Preset change is confirmed
+    /// together. Bands or Clear Bass alone set the Preset alone, though the
+    /// Capabilities checks already reject them. A Preset change is confirmed
     /// by the notification that follows it. A curve that stays on its Preset
     /// brings none, so it is read back once acknowledged.
     pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
@@ -230,11 +205,7 @@ impl Session {
                 );
                 self.request_as(payload, RequestKind::EqualizerCurve);
             }
-            (bands, clear_bass) => {
-                debug_assert!(
-                    bands.is_none() && clear_bass.is_none(),
-                    "the core sends Bands and Clear Bass together"
-                );
+            _ => {
                 payload.push(0);
                 self.request(payload);
             }
@@ -262,29 +233,6 @@ impl Session {
             params.focus_on_voice,
             params.level,
         ]);
-    }
-
-    /// Feeds bytes received from the Device, in chunks of any size, and
-    /// returns the whole frames they complete.
-    pub fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
-        self.deframer.push(bytes)
-    }
-
-    /// Handles a frame received from the Device. Any frames to send in
-    /// response, such as its ACK, are then in [`Session::outgoing`].
-    pub fn receive(&mut self, frame: &Frame) -> Vec<Update> {
-        match frame.data_type {
-            DataType::Ack => return self.acknowledged(frame),
-            DataType::Mdr | DataType::MdrNo2 => {
-                self.outgoing
-                    .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
-                if frame.data_type == DataType::Mdr {
-                    return self.message(&frame.data);
-                }
-            }
-            DataType::Other(_) => {}
-        }
-        Vec::new()
     }
 
     fn acknowledged(&mut self, ack: &Frame) -> Vec<Update> {
@@ -417,6 +365,68 @@ impl Session {
                 kind,
             });
         }
+    }
+}
+
+/// A request is resent until it has been sent [`MAX_SENDS`] times.
+impl VendorSession for Session {
+    type Frame = Frame;
+
+    const VENDOR: &'static str = "sony";
+
+    fn raw(frame: &Frame) -> &[u8] {
+        &frame.raw
+    }
+
+    fn deframe(&mut self, bytes: &[u8]) -> Vec<Frame> {
+        self.deframer.push(bytes)
+    }
+
+    fn receive(&mut self, frame: &Frame) -> Vec<Update> {
+        match frame.data_type {
+            DataType::Ack => return self.acknowledged(frame),
+            DataType::Mdr | DataType::MdrNo2 => {
+                self.outgoing
+                    .push(encode(DataType::Ack, 1 - (frame.seq & 1), &[]));
+                if frame.data_type == DataType::Mdr {
+                    return self.message(&frame.data);
+                }
+            }
+            DataType::Other(_) => {}
+        }
+        Vec::new()
+    }
+
+    fn apply(&mut self, command: SessionCommand) {
+        match command {
+            SessionCommand::SetNoiseControlMode(mode) => self.set_noise_control_mode(mode),
+            SessionCommand::SetAmbientLevel(level) => self.set_ambient_level(level),
+            // No Sony Model has a Noise Cancelling Level.
+            SessionCommand::SetNoiseCancellingLevel(_) => {}
+            SessionCommand::SetEqualizer(equalizer) => self.set_equalizer(&equalizer),
+            SessionCommand::PowerOff => self.power_off(),
+        }
+    }
+
+    fn outgoing(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.outgoing)
+    }
+
+    fn awaiting_ack(&self) -> Option<u64> {
+        self.in_flight.as_ref().map(|_| self.sends)
+    }
+
+    fn resend(&mut self) -> bool {
+        let Some(in_flight) = &mut self.in_flight else {
+            return true;
+        };
+        if in_flight.sends >= MAX_SENDS {
+            return false;
+        }
+        in_flight.sends += 1;
+        self.sends += 1;
+        self.outgoing.push(in_flight.frame.clone());
+        true
     }
 }
 
