@@ -81,7 +81,9 @@ impl CoreBuilder {
 
     /// Switches the frame log on now, appending to `path`, so Devices Attached
     /// at startup are logged too. If the file can't be opened, the frame log
-    /// stays off and the core still starts.
+    /// stays off and the core still starts. It's the one option that doesn't
+    /// chain, so the error comes back beside the path that caused it while
+    /// [`CoreBuilder::start`] stays infallible.
     pub fn frame_log(&mut self, path: &Path) -> Result<(), FrameLogError> {
         self.frame_log.start(path)
     }

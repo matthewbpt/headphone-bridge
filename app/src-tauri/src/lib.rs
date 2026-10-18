@@ -116,13 +116,9 @@ fn start_frame_log(app: &AppHandle, core: &mut CoreBuilder) -> Option<PathBuf> {
     if !frame_log_wanted(app) {
         return None;
     }
-    let path = match frame_log_path(app) {
-        Ok(path) => path,
-        Err(error) => {
-            eprintln!("couldn't open the frame log: {error:?}");
-            return None;
-        }
-    };
+    let path = frame_log_path(app)
+        .inspect_err(|error| eprintln!("couldn't make the log directory: {error:?}"))
+        .ok()?;
     if let Err(error) = core.frame_log(&path) {
         eprintln!("couldn't open the frame log: {error:?}");
         return None;

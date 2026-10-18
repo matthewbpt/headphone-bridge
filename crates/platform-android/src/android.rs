@@ -93,8 +93,10 @@ fn host_with(frame_log: Option<&Path>) -> Result<&'static Host, StartError> {
         log_panics();
         let _entered = runtime.enter();
         let mut core = Core::builder();
-        if let Some(Err(error)) = frame_log.map(|path| core.frame_log(path)) {
-            log(&format!("couldn't open the frame log: {error:?}"));
+        if let Some(path) = frame_log {
+            if let Err(error) = core.frame_log(path) {
+                log(&format!("couldn't open the frame log: {error:?}"));
+            }
         }
         let host = Host::start(to_kotlin, core);
         log("core started");
