@@ -5,21 +5,23 @@ import type { Capabilities, Device, DeviceList } from "../deviceList";
 export const BUDS_ADDRESS = "AA:BB:CC:00:00:01";
 export const XM5_ADDRESS = "AA:BB:CC:00:00:02";
 
+// The fixed Presets the Buds4 Pro and the Buds2 share.
+const samsungPresets = [
+  { id: 0, name: "Normal", editable: false, selectable: true },
+  { id: 1, name: "Bass boost", editable: false, selectable: true },
+  { id: 2, name: "Soft", editable: false, selectable: true },
+  { id: 3, name: "Dynamic", editable: false, selectable: true },
+  { id: 4, name: "Clear", editable: false, selectable: true },
+  { id: 5, name: "Treble boost", editable: false, selectable: true },
+];
+
 const buds4ProCapabilities: Capabilities = {
   noiseControlModes: ["off", "noiseCancelling", "ambient", "adaptive"],
   ambientLevel: { min: 0, max: 4 },
   noiseCancellingLevel: { min: 0, max: 4 },
   powerOff: false,
   equalizer: {
-    presets: [
-      { id: 0, name: "Normal", editable: false, selectable: true },
-      { id: 1, name: "Bass boost", editable: false, selectable: true },
-      { id: 2, name: "Soft", editable: false, selectable: true },
-      { id: 3, name: "Dynamic", editable: false, selectable: true },
-      { id: 4, name: "Clear", editable: false, selectable: true },
-      { id: 5, name: "Treble boost", editable: false, selectable: true },
-      { id: 7, name: "Custom", editable: false, selectable: false },
-    ],
+    presets: [...samsungPresets, { id: 7, name: "Custom", editable: false, selectable: false }],
     bands: null,
     clearBass: null,
   },
@@ -30,7 +32,7 @@ const buds2Capabilities: Capabilities = {
   ambientLevel: { min: 0, max: 2 },
   noiseCancellingLevel: null,
   powerOff: false,
-  equalizer: null,
+  equalizer: { presets: samsungPresets, bands: null, clearBass: null },
 };
 
 const xm5Capabilities: Capabilities = {
@@ -96,7 +98,7 @@ export function buds2(overrides: Partial<Device> = {}): Device {
     effectiveModeReason: null,
     ambientLevel: 1,
     noiseCancellingLevel: null,
-    equalizer: null,
+    equalizer: { preset: 0, bands: null, clearBass: null },
     equalizerUnavailable: false,
     battery: { kind: "buds", left: 100, right: 100, case: null },
     powerOffFailed: false,

@@ -872,6 +872,49 @@ describe("Equalizer", () => {
     expect(await preset()).toHaveDisplayValue("Treble boost");
   });
 
+  it("lists the Buds2's six Presets under Samsung's names, with the current one selected and no curve", async () => {
+    renderWindow(
+      new FakeCore(only(buds2({ equalizer: { preset: 3, bands: null, clearBass: null } }))),
+    );
+
+    expect(await optionNames()).toEqual([
+      "Normal",
+      "Bass boost",
+      "Soft",
+      "Dynamic",
+      "Clear",
+      "Treble boost",
+    ]);
+    expect(await preset()).toHaveDisplayValue("Dynamic");
+    const card = screen.getByRole("group", { name: "Equalizer" });
+    expect(within(card).queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  it("sends a Preset picked for the Buds2", async () => {
+    const core = new FakeCore(
+      only(buds2({ equalizer: { preset: 0, bands: null, clearBass: null } })),
+    );
+    renderWindow(core);
+
+    await userEvent.selectOptions(await preset(), "Treble boost");
+
+    expect(core.sent()).toEqual([
+      {
+        command: "set_equalizer",
+        args: { address: BUDS_ADDRESS, equalizer: { preset: 5, bands: null, clearBass: null } },
+      },
+    ]);
+  });
+
+  it("shows a Buds2 reporting 7 as Unrecognised, with no Custom to pick", async () => {
+    renderWindow(
+      new FakeCore(only(buds2({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
+    );
+
+    expect(await preset()).toHaveDisplayValue("Unrecognised Preset");
+    expect(screen.queryByRole("option", { name: "Custom" })).not.toBeInTheDocument();
+  });
+
   it("is shown whatever Noise Control Mode is chosen, with no curve", async () => {
     const core = new FakeCore(only(buds4Pro({ chosenMode: "off" })));
     renderWindow(core);
