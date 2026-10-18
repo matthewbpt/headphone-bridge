@@ -107,22 +107,25 @@ fn start_core(app: &AppHandle) -> (Core, Option<PathBuf>) {
 /// wanted. Devices stay Detached until the App Screen holds them, so no
 /// Attach goes unlogged. Returns the log file while it's on.
 #[cfg(target_os = "android")]
-fn android_core(app: &AppHandle) -> (&'static Core, Option<PathBuf>) {
-    let core = headphone_bridge_platform_android::android::core();
+fn android_core(
+    app: &AppHandle,
+) -> Result<(&'static Core, Option<PathBuf>), headphone_bridge_platform_android::android::StartError>
+{
+    let core = headphone_bridge_platform_android::android::core()?;
     if !frame_log_wanted(app) {
-        return (core, None);
+        return Ok((core, None));
     }
     let started = frame_log_path(app).and_then(|path| {
         tauri::async_runtime::block_on(core.command(Command::SetFrameLog(Some(path.clone()))))?;
         Ok(path)
     });
     match started {
-        Ok(path) => (core, Some(path)),
+        Ok(path) => Ok((core, Some(path))),
         Err(error) => {
             headphone_bridge_platform_android::android::log(&format!(
                 "couldn't open the frame log: {error:?}"
             ));
-            (core, None)
+            Ok((core, None))
         }
     }
 }
@@ -246,14 +249,18 @@ async fn set_frame_log(
 #[cfg(all(target_os = "android", debug_assertions))]
 #[tauri::command]
 fn simulated_device() -> Option<headphone_bridge_core::Model> {
+    // The setup started the core, so it's there to ask.
     headphone_bridge_platform_android::android::simulated()
+        .ok()
+        .flatten()
 }
 
 /// Switches the Simulated Device on as `model`, or off with `None`.
 #[cfg(all(target_os = "android", debug_assertions))]
 #[tauri::command]
 fn set_simulated_device(model: Option<headphone_bridge_core::Model>) {
-    headphone_bridge_platform_android::android::simulate(model);
+    // The setup started the core, so it's there to switch.
+    let _ = headphone_bridge_platform_android::android::simulate(model);
 }
 
 /// Whether Android lets the app use Bluetooth: the Nearby devices permission,
@@ -382,7 +389,7 @@ pub fn run() {
                 (core, frame_log)
             };
             #[cfg(target_os = "android")]
-            let (core, frame_log) = android_core(app.handle());
+            let (core, frame_log) = android_core(app.handle())?;
             let mut snapshots = core.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

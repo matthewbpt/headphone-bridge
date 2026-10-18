@@ -3,7 +3,7 @@
 //! Kotlin. The app crate exports the JNI symbols that call in here.
 
 use std::path::Path;
-use std::sync::{Once, OnceLock};
+use std::sync::{Mutex, Once, OnceLock, PoisonError};
 
 use headphone_bridge_core::Core;
 use jni::objects::{GlobalRef, JClass, JValue};
@@ -60,28 +60,33 @@ struct Bridge {
 static BRIDGE: OnceLock<Bridge> = OnceLock::new();
 static HOST: OnceLock<Host> = OnceLock::new();
 
-/// The process's one core, started on first use. Safe to call from any
-/// thread, inside an async runtime or not.
-pub fn core() -> &'static Core {
-    host().core()
+/// Why the process's one core couldn't start.
+#[derive(Debug, thiserror::Error)]
+pub enum StartError {
+    /// Tokio's runtime couldn't be built, e.g. the OS refused it a thread.
+    #[error("couldn't start Tokio")]
+    Runtime(#[source] std::io::Error),
 }
 
-fn host() -> &'static Host {
+/// The process's one core, started on first use. Safe to call from any
+/// thread, inside an async runtime or not.
+pub fn core() -> Result<&'static Core, StartError> {
+    Ok(host()?.core())
+}
+
+fn host() -> Result<&'static Host, StartError> {
     host_with(None)
 }
 
 /// The process's one host, started with the frame log on, appending to
 /// `frame_log`, if this call starts it.
-fn host_with(frame_log: Option<&Path>) -> &'static Host {
-    HOST.get_or_init(|| {
+fn host_with(frame_log: Option<&Path>) -> Result<&'static Host, StartError> {
+    if let Some(host) = HOST.get() {
+        return Ok(host);
+    }
+    let runtime = runtime()?;
+    Ok(HOST.get_or_init(|| {
         log_panics();
-        static RUNTIME: OnceLock<Tokio> = OnceLock::new();
-        let runtime = RUNTIME.get_or_init(|| {
-            Tokio::new().unwrap_or_else(|error| {
-                log(&format!("couldn't start Tokio: {error}"));
-                std::process::exit(1)
-            })
-        });
         let _entered = runtime.enter();
         let host = match frame_log {
             None => Host::start(to_kotlin),
@@ -95,26 +100,41 @@ fn host_with(frame_log: Option<&Path>) -> &'static Host {
         };
         log("core started");
         host
-    })
+    }))
+}
+
+/// The Tokio runtime the core runs on, built on first use. A failed build is
+/// tried again on the next call.
+fn runtime() -> Result<&'static Tokio, StartError> {
+    static RUNTIME: OnceLock<Tokio> = OnceLock::new();
+    // Held while building, so no thread builds a runtime only to drop it.
+    static BUILDING: Mutex<()> = Mutex::new(());
+    let _building = BUILDING.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(runtime) = RUNTIME.get() {
+        return Ok(runtime);
+    }
+    let runtime = Tokio::new().map_err(StartError::Runtime)?;
+    Ok(RUNTIME.get_or_init(|| runtime))
 }
 
 /// Switches the Simulated Device on as `model`, or off with `None`. Debug
 /// builds alone have it.
 #[cfg(debug_assertions)]
-pub fn simulate(model: Option<headphone_bridge_core::Model>) {
-    host().simulate(model);
+pub fn simulate(model: Option<headphone_bridge_core::Model>) -> Result<(), StartError> {
+    host()?.simulate(model);
+    Ok(())
 }
 
 /// The Simulated Device's Model while it's switched on.
 #[cfg(debug_assertions)]
-pub fn simulated() -> Option<headphone_bridge_core::Model> {
-    host().simulated()
+pub fn simulated() -> Result<Option<headphone_bridge_core::Model>, StartError> {
+    Ok(host()?.simulated())
 }
 
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
 /// hasn't, with the frame log on at `frame_log` if the setting is on, so a
 /// widget or tile tap's Attach is logged too. From `NativeCore.start`.
-pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) {
+pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) -> Result<(), StartError> {
     log_panics();
     if BRIDGE.get().is_none() {
         match (env.get_java_vm(), env.new_global_ref(class)) {
@@ -123,24 +143,29 @@ pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) {
                 log("Kotlin connected");
             }
             (Err(error), _) | (_, Err(error)) => {
-                return log(&format!("can't reach Kotlin: {error}"))
+                log(&format!("can't reach Kotlin: {error}"));
+                return Ok(());
             }
         }
     }
-    host_with(frame_log).resend_device_list();
+    host_with(frame_log)?.resend_device_list();
+    Ok(())
 }
 
-/// An event from Kotlin. From `NativeCore.event`.
-pub fn event(json: &str) {
-    if let Err(BadMessage(error)) = host().event(json) {
+/// An event from Kotlin. From `NativeCore.event`. A bad event is logged
+/// here: only Kotlin could fix it.
+pub fn event(json: &str) -> Result<(), StartError> {
+    if let Err(BadMessage(error)) = host()?.event(json) {
         log(&format!("bad event {json}: {error}"));
     }
+    Ok(())
 }
 
 /// A command from Kotlin, answered with a `commandResult`. From
 /// `NativeCore.command`.
-pub fn command(request: i64, json: &str) {
-    host().command(request, json);
+pub fn command(request: i64, json: &str) -> Result<(), StartError> {
+    host()?.command(request, json);
+    Ok(())
 }
 
 /// Sends a message to `NativeCore.fromCore`, from any thread. False if Kotlin

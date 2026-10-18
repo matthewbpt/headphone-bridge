@@ -21,7 +21,7 @@ pub extern "system" fn Java_dev_matthewbpt_headphonebridge_bluetooth_NativeCore_
         .then(|| env.get_string(&frame_log).ok().map(String::from))
         .flatten()
         .map(PathBuf::from);
-    android::start(&mut env, &class, frame_log.as_deref());
+    log_failure(android::start(&mut env, &class, frame_log.as_deref()));
 }
 
 #[no_mangle]
@@ -31,7 +31,7 @@ pub extern "system" fn Java_dev_matthewbpt_headphonebridge_bluetooth_NativeCore_
     json: JString,
 ) {
     if let Ok(json) = env.get_string(&json) {
-        android::event(&String::from(json));
+        log_failure(android::event(&String::from(json)));
     }
 }
 
@@ -43,7 +43,18 @@ pub extern "system" fn Java_dev_matthewbpt_headphonebridge_bluetooth_NativeCore_
     json: JString,
 ) {
     if let Ok(json) = env.get_string(&json) {
-        android::command(request, &String::from(json));
+        log_failure(android::command(request, &String::from(json)));
+    }
+}
+
+/// Logs why the core couldn't start, since a JNI call can't return it.
+/// Kotlin carries on without the core, and the next call tries again.
+fn log_failure(result: Result<(), android::StartError>) {
+    if let Err(error) = result {
+        let source = std::error::Error::source(&error)
+            .map(|source| format!(": {source}"))
+            .unwrap_or_default();
+        android::log(&format!("{error}{source}"));
     }
 }
 
