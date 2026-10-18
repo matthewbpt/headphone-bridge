@@ -39,7 +39,7 @@ pub enum HoldKind {
 /// A message Kotlin sent that isn't one the core knows, with why serde
 /// couldn't read it.
 #[derive(Debug, thiserror::Error)]
-#[error("bad message: {0}")]
+#[error("bad message")]
 pub struct BadMessage(#[source] pub serde_json::Error);
 
 /// [`Event`] as Kotlin writes it.

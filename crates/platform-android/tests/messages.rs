@@ -174,10 +174,9 @@ fn a_bad_message_keeps_the_json_error_as_its_source() {
         parse_command(r#"{"kind":"powerOff"}"#).unwrap_err(),
     ] {
         let source = std::error::Error::source(&bad).expect("a source");
-        let json = source
-            .downcast_ref::<serde_json::Error>()
-            .expect("the JSON error");
-        assert_eq!(bad.to_string(), format!("bad message: {json}"));
+        assert!(source.is::<serde_json::Error>(), "{source:?}");
+        // The source isn't repeated, so a log of the chain shows it once.
+        assert_eq!(bad.to_string(), "bad message");
     }
 }
 
