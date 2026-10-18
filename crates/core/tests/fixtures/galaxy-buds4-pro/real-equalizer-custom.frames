@@ -1,8 +1,8 @@
 # Galaxy Buds4 Pro on Linux, captured by the frame log on 2026-10-18,
 # firmware R640XXU0AZD2, the session after
 # real-equalizer-from-samsungs-app. Disconnected from the laptop again,
-# Samsung's app set a custom curve, then the Device was connected to the
-# laptop again. This Attach reports Preset 6 (extended status byte 9): the
+# Samsung's app picked its Custom Preset, then the Device was connected to
+# the laptop again. This Attach reports Preset 6 (extended status byte 9): the
 # Buds4 Pro's Custom Preset is 6 on the wire, not the 7 upstream gave.
 2026-10-18T12:38:40.238Z samsung >> fd 06 00 88 01 01 22 da 58 dd
 2026-10-18T12:38:40.303Z galaxy-buds4-pro << fd 41 00 61 04 0d 0c 11 01 00 11 00 00 06 ff 23 01 00 67 01 67 01 02 00 04 99 00 03 04 10 00 00 00 00 11 02 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 00 01 01 00 00 00 ff 01 01 00 00 00 01 00 01 45 e4 dd

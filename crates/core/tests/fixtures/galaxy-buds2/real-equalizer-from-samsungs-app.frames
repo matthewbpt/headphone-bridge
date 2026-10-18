@@ -1,8 +1,8 @@
 # Galaxy Buds2 on Linux, captured by the frame log on 2026-10-18, firmware
-# revision 11, device id 314: the session after real-equalizer. Galaxy
-# Wearable can't connect while this app is Attached, so the Device was
-# disconnected from the laptop, Galaxy Wearable moved it to Treble boost,
-# and it was connected again. Debug/log frames (242, 244, 245, 246) left
+# revision 11, device id 314: the session after real-equalizer. Samsung's
+# app can't Attach while this app is Attached, so the Device was
+# disconnected from the laptop, Samsung's app moved it to Treble boost, and
+# it was connected again. Debug/log frames (242, 244, 245, 246) left
 # out. The Attach's extended status reports Preset 5 at byte 9, and so does
 # one the Device sends unasked three seconds later. Then the app picks
 # Clear, Normal and Soft, each confirmed by an ACK carrying it.

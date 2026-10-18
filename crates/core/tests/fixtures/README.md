@@ -63,12 +63,13 @@ file.
     confirmed only by an ACK carrying the applied Preset: its `MANAGER_INFO`
     gets a bare `88 00`.
   - `real-equalizer-from-samsungs-app`: the next session, the same day.
-    Samsung's app can't connect while this app is Attached, so the Device was
+    Samsung's app can't Attach while this app is Attached, so the Device was
     disconnected from the laptop, Samsung's app moved it to Bass boost, and it
     was connected again. This Attach reports Preset 1.
-  - `real-equalizer-custom`: the session after, the same way, with a custom
-    curve set in Samsung's app. This Attach reports Preset 6: the Buds4 Pro's
-    Custom is 6 on the wire, not the 7 the upstream-derived protocol gave.
+  - `real-equalizer-custom`: the session after, the same way, with the
+    Custom Preset picked in Samsung's app. This Attach reports Preset 6: the
+    Buds4 Pro's Custom is 6 on the wire, not the 7 the upstream-derived
+    protocol gave.
 - `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314.
   The `real-*` files are from the frame log: two link sessions on macOS, on
   2026-10-17, and the `real-equalizer*` sessions on Linux, on 2026-10-18.
@@ -92,11 +93,11 @@ file.
     its `MANAGER_INFO` gets a bare `88 00`. A Noise Control Mode set between
     the last two picks is left out.
   - `real-equalizer-from-samsungs-app`: the next session, the same day.
-    Galaxy Wearable can't connect while this app is Attached, so the Device
-    was disconnected from the laptop, Galaxy Wearable moved it to Treble
-    boost, and it was connected again. This Attach reports Preset 5 at byte
-    9. Then Clear, Normal and Soft are picked from the app. Galaxy Wearable
-    offers the Buds2 no custom curve.
+    Samsung's app can't Attach while this app is Attached, so the Device was
+    disconnected from the laptop, Samsung's app moved it to Treble boost, and
+    it was connected again. This Attach reports Preset 5 at byte 9. Then
+    Clear, Normal and Soft are picked from the app. Samsung's app offers the
+    Buds2 no Custom Preset.
   - `attach`: synthesised. The app's `MANAGER_INFO`, answered by the real
     revision-10 extended status in GalaxyBudsClient's tests
     (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,

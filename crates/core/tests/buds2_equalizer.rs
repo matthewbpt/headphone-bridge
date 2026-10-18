@@ -1,6 +1,6 @@
 //! The Galaxy Buds2's Equalizer: its six Presets, from GalaxyBudsClient,
 //! Gadgetbridge and Samsung's support pages, confirmed by real captures of
-//! Preset picks and of an Attach after Galaxy Wearable changed the Preset.
+//! Preset picks and of an Attach after Samsung's app changed the Preset.
 
 mod support;
 
@@ -94,8 +94,10 @@ fn extended_status_with_preset(preset: u8) -> Vec<u8> {
 
 #[tokio::test]
 async fn a_preset_reported_in_a_later_extended_status_replaces_the_last() {
-    // Samsung's app can't connect while this app is Attached, so whether a
-    // Buds2 sends one when it changes the Preset is unproven.
+    // Samsung's app can't Attach while this app is Attached, so it can't
+    // change the Preset then. A Buds2 does send an extended status unasked,
+    // as it did three seconds after an Attach
+    // (real-equalizer-from-samsungs-app).
     let (core, _os, link) = attached_buds2().await;
 
     link.send.send(extended_status_with_preset(1)).unwrap();
@@ -251,7 +253,7 @@ async fn real_buds2_preset_picks_are_confirmed_by_their_acks() {
 
 #[tokio::test]
 async fn a_real_attach_after_samsungs_app_changed_the_preset_reports_it() {
-    // Galaxy Wearable moved the Device to Treble boost while it was away;
+    // Samsung's app moved the Device to Treble boost while it was away;
     // the app then picks Clear, Normal and Soft.
     real_picks_are_confirmed_by_their_acks(
         "galaxy-buds2/real-equalizer-from-samsungs-app",

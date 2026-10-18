@@ -231,8 +231,8 @@ async fn replayed(name: &str) -> (Core, DeviceLink) {
 }
 
 #[tokio::test]
-async fn a_real_attach_on_a_custom_curve_reports_custom() {
-    // Samsung's app set a custom curve before this Attach; the Device
+async fn a_real_attach_after_samsungs_app_picked_custom_reports_it() {
+    // Samsung's app picked its Custom Preset before this Attach; the Device
     // reports Preset 6.
     let (core, _link) = replayed("galaxy-buds4-pro/real-equalizer-custom").await;
 

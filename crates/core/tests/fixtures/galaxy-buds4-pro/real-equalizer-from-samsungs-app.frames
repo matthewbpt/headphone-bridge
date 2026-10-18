@@ -1,6 +1,6 @@
 # Galaxy Buds4 Pro on Linux, captured by the frame log on 2026-10-18,
 # firmware R640XXU0AZD2, the session after real-equalizer. Samsung's app
-# can't connect while this app is Attached, so the Device was disconnected
+# can't Attach while this app is Attached, so the Device was disconnected
 # from the laptop, Samsung's app on the phone switched Presets, ending on
 # Bass boost, and the Device was connected to the laptop again. This Attach
 # reports Preset 1 (extended status byte 9).
