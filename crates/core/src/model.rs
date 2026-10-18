@@ -75,8 +75,8 @@ impl Model {
                 power_off: false,
                 // From GalaxyBudsClient, Gadgetbridge and Samsung's support
                 // pages, and confirmed on a real Buds2
-                // (galaxy-buds2/real-equalizer*). Samsung's app can't set a
-                // custom curve on it, so it has no Custom Preset.
+                // (galaxy-buds2/real-equalizer*). Samsung's app offers it no
+                // Custom Preset, so neither does the Model.
                 equalizer: Some(EqualizerCapability {
                     presets: samsung_presets(),
                     bands: None,
