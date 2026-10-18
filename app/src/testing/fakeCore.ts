@@ -130,16 +130,16 @@ export class FakeCore {
     power_off: (args) => this.record("power_off", args),
     frame_log: () => Promise.resolve(this.frameLog),
     set_frame_log: ({ enabled }) => {
-      const answer = this.answers.get("set_frame_log") ?? "accept";
-      if (typeof answer === "object") return Promise.reject(answer.reject);
+      const refusal = this.refusal("set_frame_log");
+      if (refusal) return refusal;
       this.frameLog = enabled ? "/tmp/headphone-bridge-frames.log" : null;
       return Promise.resolve(this.frameLog);
     },
     share_frame_log: (args) => this.record("share_frame_log", args),
     nearby_devices_permission: () => Promise.resolve(this.nearbyDevices),
     open_app_settings: () => {
-      const answer = this.answers.get("open_app_settings") ?? "accept";
-      if (typeof answer === "object") return Promise.reject(answer.reject);
+      const refusal = this.refusal("open_app_settings");
+      if (refusal) return refusal;
       this.appSettingsOpens += 1;
       return Promise.resolve();
     },
@@ -175,6 +175,12 @@ export class FakeCore {
       return Promise.resolve();
     },
   };
+
+  /** The rejection for `command` when a test told the core to reject it, else null. */
+  private refusal(command: AnsweredCommand): Promise<never> | null {
+    const answer = this.answers.get(command) ?? "accept";
+    return typeof answer === "object" ? Promise.reject(answer.reject) : null;
+  }
 
   private record<C extends RecordedCommand>(command: C, args: Commands[C]["args"]): Promise<void> {
     const answer = this.answers.get(command) ?? "accept";
