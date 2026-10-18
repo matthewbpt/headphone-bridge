@@ -160,3 +160,14 @@ fun deviceList(vararg devices: JSONObject): JSONObject =
   JSONObject()
     .put("devices", JSONArray(devices.toList()))
     .put("primary", devices.firstOrNull()?.getString("address") ?: JSONObject.NULL)
+
+/** Labels as the shell's `labels::all` serialises them, with a reason table of [reasons]. */
+fun labels(vararg reasons: Pair<String, String>): JSONObject =
+  JSONObject().put(
+    "reasons",
+    JSONArray(
+      reasons.map { (kind, text) ->
+        JSONObject().put("reason", JSONObject().put("kind", kind)).put("text", text)
+      },
+    ),
+  )

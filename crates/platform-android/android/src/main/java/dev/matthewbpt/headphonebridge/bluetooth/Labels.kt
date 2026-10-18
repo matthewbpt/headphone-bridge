@@ -47,9 +47,18 @@ fun notAttachedText(
 ): String {
   val state = list?.let { primaryDevice(it) }?.getJSONObject("state")
   return when {
-    state == null -> NO_DEVICE_CONNECTED
-    state.getString("kind") != "notAttached" -> reasonText(JSONObject().put("kind", "linkDropped"), labels)
-    else -> reasonText(state.getJSONObject("reason"), labels)
+    state == null -> {
+      NO_DEVICE_CONNECTED
+    }
+
+    state.getString("kind") != "notAttached" -> {
+      reasonText("linkDropped", labels)
+    }
+
+    else -> {
+      val reason = state.getJSONObject("reason")
+      reasonText(reason.getString("kind"), labels, reason.optString("detail"))
+    }
   }
 }
 
@@ -59,17 +68,17 @@ fun notAttachedText(
  * no label for is shown by its name, as the window shows it.
  */
 private fun reasonText(
-  reason: JSONObject,
+  kind: String,
   labels: JSONObject,
+  detail: String = "",
 ): String {
-  val kind = reason.getString("kind")
   val table = labels.optJSONArray("reasons") ?: JSONArray()
   val label =
     (0 until table.length())
       .map { table.getJSONObject(it) }
       .firstOrNull { it.getJSONObject("reason").getString("kind") == kind }
       ?.getString("text") ?: kind
-  return listOf(label, reason.optString("detail")).filter { it.isNotEmpty() }.joinToString("\n")
+  return listOf(label, detail).filter { it.isNotEmpty() }.joinToString("\n")
 }
 
 const val NO_DEVICE_CONNECTED = "No Device Connected"

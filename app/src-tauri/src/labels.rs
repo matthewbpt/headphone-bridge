@@ -34,7 +34,8 @@ pub fn hint(reason: EffectiveModeReason) -> &'static str {
 }
 
 /// Where the listener grants the app Bluetooth: on Android the Nearby
-/// devices permission, worded for the App Screen and the widget alike.
+/// devices permission, worded to read right on the App Screen and in the
+/// widget and tile, which show this label too.
 fn permission_denied(android: bool) -> &'static str {
     if android {
         "Allow Nearby devices for Headphone Bridge in Android settings"
