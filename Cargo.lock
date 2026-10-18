@@ -1604,6 +1604,7 @@ version = "1.0.0"
 dependencies = [
  "headphone-bridge-core",
  "headphone-bridge-fixtures",
+ "headphone-bridge-simulated",
  "jni",
  "serde",
  "serde_json",

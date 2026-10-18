@@ -118,13 +118,22 @@ fn runtime() -> Result<&'static Tokio, StartError> {
     Ok(RUNTIME.get_or_init(|| runtime))
 }
 
+/// Switches the Simulated Device in front of the process's one core,
+/// started on first use. Debug builds alone have it.
+#[cfg(debug_assertions)]
+pub fn simulator() -> Result<&'static headphone_bridge_simulated::Simulator, StartError> {
+    Ok(host()?.simulator())
+}
+
 /// Switches the Simulated Device on as `model`, or off with `None`, once the
 /// core has started; before that there's nothing to switch. Debug builds
 /// alone have it.
 #[cfg(debug_assertions)]
 pub fn simulate(model: Option<headphone_bridge_core::Model>) {
     if let Some(host) = HOST.get() {
-        host.simulate(model);
+        if let Err(error) = host.simulator().simulate(model) {
+            log(&format!("couldn't switch the Simulated Device: {error}"));
+        }
     }
 }
 
@@ -132,7 +141,7 @@ pub fn simulate(model: Option<headphone_bridge_core::Model>) {
 /// core has started.
 #[cfg(debug_assertions)]
 pub fn simulated() -> Option<headphone_bridge_core::Model> {
-    HOST.get().and_then(Host::simulated)
+    HOST.get().and_then(|host| host.simulator().model())
 }
 
 /// Connects Kotlin, once per process, and starts the core if the Tauri setup
