@@ -148,8 +148,10 @@ async fn a_held_device_attaches_over_the_link_kotlin_opens() {
 
 impl Kotlin {
     async fn closed(&mut self, link: i32) {
-        self.next(|message| (message == Message::Close { link }).then_some(()))
-            .await
+        self.next(|message| {
+            matches!(message, Message::Close { link: closed } if closed == link).then_some(())
+        })
+        .await
     }
 }
 
@@ -274,17 +276,17 @@ async fn a_command_is_answered_with_its_result() {
         7,
         &format!(r#"{{"kind":"setNoiseControlMode","address":"{XM5}","mode":"noiseCancelling"}}"#),
     );
-    assert_eq!(kotlin.command_result(7).await, Ok(()));
+    assert!(matches!(kotlin.command_result(7).await, Ok(())));
 }
 
 #[tokio::test]
 async fn a_command_the_core_refuses_or_cannot_read_says_why() {
     let (host, mut kotlin) = start();
     host.command(8, r#"{"kind":"powerOff","address":"00:00:00:00:00:00"}"#);
-    assert_eq!(
+    assert!(matches!(
         kotlin.command_result(8).await,
         Err(CommandFailure::Rejected(CommandError::UnknownDevice))
-    );
+    ));
     host.command(9, r#"{"kind":"powerOff"}"#);
     assert!(matches!(
         kotlin.command_result(9).await,

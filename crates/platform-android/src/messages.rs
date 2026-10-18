@@ -36,9 +36,11 @@ pub enum HoldKind {
     Primary,
 }
 
-/// A message Kotlin sent that isn't one the core knows.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BadMessage(pub String);
+/// A message Kotlin sent that isn't one the core knows, with why serde
+/// couldn't read it.
+#[derive(Debug, thiserror::Error)]
+#[error("bad message: {0}")]
+pub struct BadMessage(#[source] pub serde_json::Error);
 
 /// [`Event`] as Kotlin writes it.
 #[derive(Deserialize)]
@@ -81,7 +83,7 @@ enum WireEvent {
 
 /// Reads an event from Kotlin.
 pub fn parse_event(json: &str) -> Result<Event, BadMessage> {
-    let event = serde_json::from_str(json).map_err(|error| BadMessage(error.to_string()))?;
+    let event = serde_json::from_str(json).map_err(BadMessage)?;
     Ok(match event {
         WireEvent::Connected {
             address,
@@ -137,7 +139,7 @@ enum WireCommand {
 
 /// Reads a command from Kotlin.
 pub fn parse_command(json: &str) -> Result<Command, BadMessage> {
-    let command = serde_json::from_str(json).map_err(|error| BadMessage(error.to_string()))?;
+    let command = serde_json::from_str(json).map_err(BadMessage)?;
     Ok(match command {
         WireCommand::SetNoiseControlMode { address, mode } => {
             Command::SetNoiseControlMode(DeviceAddress(address), mode)
@@ -154,7 +156,7 @@ pub fn parse_command(json: &str) -> Result<Command, BadMessage> {
 }
 
 /// A message from the core to Kotlin, for `NativeCore.fromCore`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Message {
     /// Open a control link to the vendor service `service` of the Device at
@@ -187,7 +189,7 @@ impl Message {
 }
 
 /// Why a command from Kotlin did nothing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum CommandFailure {
     /// The core rejected it.
     Rejected(CommandError),
@@ -204,8 +206,8 @@ fn command_error<S: Serializer>(
     match result {
         Ok(()) => serializer.serialize_none(),
         Err(CommandFailure::Rejected(error)) => error.serialize(serializer),
-        Err(CommandFailure::BadRequest(BadMessage(message))) => {
-            json!({ "kind": "badRequest", "message": message }).serialize(serializer)
+        Err(CommandFailure::BadRequest(BadMessage(error))) => {
+            json!({ "kind": "badRequest", "message": error.to_string() }).serialize(serializer)
         }
     }
 }
