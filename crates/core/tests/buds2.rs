@@ -54,6 +54,8 @@ async fn a_buds2_is_sent_the_handshake_and_attached_as_a_galaxy_buds2() {
             equalizer: None,
         }
     );
+    // Byte 9 reports Dynamic, but without the Capability it isn't shown.
+    assert_eq!(device.equalizer, None);
 }
 
 /// The Buds2 extended status in `galaxy-buds2/attach`, as a frame with

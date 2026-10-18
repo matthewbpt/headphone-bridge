@@ -171,6 +171,13 @@ impl Session {
         range.contains(level).then_some(Update::AmbientLevel(level))
     }
 
+    /// The Preset a Device reports as `preset`, if the identified Model has
+    /// an Equalizer. A Preset the Model doesn't list is still reported.
+    fn preset(&self, preset: u8) -> Option<Update> {
+        self.model?.capabilities().equalizer?;
+        Some(preset_update(preset))
+    }
+
     /// The Noise Cancelling Level a Device reports as `value`, if it is in
     /// the identified Model's range.
     fn noise_cancelling_level(&self, value: Option<&u8>) -> Option<Update> {
@@ -231,7 +238,7 @@ impl Session {
                     updates.push(self.mode_update(mode, p[6], chosen));
                 }
                 // Byte 9 is the Preset.
-                updates.push(preset_update(p[9]));
+                updates.extend(self.preset(p[9]));
                 updates.extend(self.ambient_level(p.get(23)));
                 // Byte 24, whatever the mode (real-nc-level-0 to 4).
                 updates.extend(self.noise_cancelling_level(p.get(24)));
