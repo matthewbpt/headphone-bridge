@@ -13,9 +13,9 @@ use std::collections::VecDeque;
 
 use uuid::{uuid, Uuid};
 
-use crate::command::NoiseControlMode;
+use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::Battery;
-use crate::model::Model;
+use crate::model::{Model, PresetId, WH_1000XM5_BANDS};
 pub use crate::update::Update;
 pub use frame::Frame;
 use frame::{encode, DataType, Deframer};
@@ -24,7 +24,7 @@ use frame::{encode, DataType, Deframer};
 pub const SERVICE: Uuid = uuid!("956c7b26-d49a-4ba8-b03f-b17d393cb6e2");
 
 /// Table 1 command ids: payload byte 0.
-mod command {
+pub mod command {
     pub const CONNECT_GET_PROTOCOL_INFO: u8 = 0x00;
     pub const CONNECT_RET_PROTOCOL_INFO: u8 = 0x01;
     pub const CONNECT_GET_DEVICE_INFO: u8 = 0x04;
@@ -39,6 +39,13 @@ mod command {
     pub const NCASM_RET_PARAM: u8 = 0x67;
     pub const NCASM_SET_PARAM: u8 = 0x68;
     pub const NCASM_NTFY_PARAM: u8 = 0x69;
+    pub const EQEBB_GET_STATUS: u8 = 0x52;
+    pub const EQEBB_RET_STATUS: u8 = 0x53;
+    pub const EQEBB_NTFY_STATUS: u8 = 0x55;
+    pub const EQEBB_GET_PARAM: u8 = 0x56;
+    pub const EQEBB_RET_PARAM: u8 = 0x57;
+    pub const EQEBB_SET_PARAM: u8 = 0x58;
+    pub const EQEBB_NTFY_PARAM: u8 = 0x59;
 }
 
 /// `ConnectInquiredType::FIXED_VALUE`.
@@ -68,6 +75,17 @@ const NCASM_TYPE: u8 = 0x17;
 /// `ValueChangeStatus::CHANGED`: a set that is final, not a slider mid-drag.
 const CHANGED: u8 = 0x01;
 
+/// `EqEbbInquiredType::PRESET_EQ`.
+pub const PRESET_EQ: u8 = 0x00;
+/// `EqEbbStatus::DISABLE`: the Device refuses Equalizer changes for now.
+const EQUALIZER_DISABLE: u8 = 0x01;
+/// How far an Equalizer step is offset on the wire: a step of −10 is sent
+/// as 0.
+const EQUALIZER_STEP_OFFSET: i8 = 10;
+/// How many steps an Equalizer curve has on the wire: Clear Bass, then each
+/// Band.
+const CURVE_STEPS: usize = 1 + WH_1000XM5_BANDS.len();
+
 /// NCASM params as the Device reports and takes them, bytes 3–6 of a 0x17
 /// RET, NTFY or SET.
 #[derive(Debug, Clone, Copy)]
@@ -88,6 +106,9 @@ enum RequestKind {
     Plain,
     /// That the Device has taken the Power Off.
     PowerOff,
+    /// That the Device has taken an Equalizer curve. It sends no notification
+    /// for a curve edit that stays on its Preset, so the curve is read back.
+    EqualizerCurve,
 }
 
 /// A request waiting for its ACK.
@@ -192,6 +213,34 @@ impl Session {
         self.set_noise_control(params);
     }
 
+    /// Asks the Device to set its Equalizer: a Preset alone, which leaves
+    /// its curve to the Device, or with the whole curve, Bands and Clear Bass
+    /// together, as the core checks they come. A Preset change is confirmed
+    /// by the notification that follows it. A curve that stays on its Preset
+    /// brings none, so it is read back once acknowledged.
+    pub fn set_equalizer(&mut self, equalizer: &Equalizer) {
+        let mut payload = vec![command::EQEBB_SET_PARAM, PRESET_EQ, equalizer.preset.0];
+        match (&equalizer.bands, equalizer.clear_bass) {
+            (Some(bands), Some(clear_bass)) => {
+                payload.push(CURVE_STEPS as u8);
+                payload.extend(
+                    std::iter::once(clear_bass)
+                        .chain(bands.iter().copied())
+                        .map(|step| (step + EQUALIZER_STEP_OFFSET) as u8),
+                );
+                self.request_as(payload, RequestKind::EqualizerCurve);
+            }
+            (bands, clear_bass) => {
+                debug_assert!(
+                    bands.is_none() && clear_bass.is_none(),
+                    "the core sends Bands and Clear Bass together"
+                );
+                payload.push(0);
+                self.request(payload);
+            }
+        }
+    }
+
     /// Asks the Device to Power Off, as libmdr and Gadgetbridge do.
     pub fn power_off(&mut self) {
         /// `PowerOffSettingValue::ON`.
@@ -247,6 +296,10 @@ impl Session {
         self.send_next();
         match in_flight.kind {
             RequestKind::PowerOff => vec![Update::PowerOffAcknowledged],
+            RequestKind::EqualizerCurve => {
+                self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                Vec::new()
+            }
             RequestKind::Plain => Vec::new(),
         }
     }
@@ -314,12 +367,28 @@ impl Session {
                     (_, 0x00) => NoiseControlMode::NoiseCancelling,
                     _ => NoiseControlMode::Ambient,
                 };
+                if data[0] == command::NCASM_RET_PARAM {
+                    self.request(vec![command::EQEBB_GET_STATUS, PRESET_EQ]);
+                }
                 let mut updates = vec![Update::ChosenMode(mode)];
                 let range = Model::Wh1000Xm5.capabilities().ambient_level;
                 if range.is_some_and(|range| range.contains(level)) {
                     updates.push(Update::AmbientLevel(level));
                 }
                 updates
+            }
+            [command::EQEBB_RET_STATUS | command::EQEBB_NTFY_STATUS, PRESET_EQ, status]
+                if self.identified =>
+            {
+                if data[0] == command::EQEBB_RET_STATUS {
+                    self.request(vec![command::EQEBB_GET_PARAM, PRESET_EQ]);
+                }
+                vec![Update::EqualizerUnavailable(status == EQUALIZER_DISABLE)]
+            }
+            [command::EQEBB_RET_PARAM | command::EQEBB_NTFY_PARAM, PRESET_EQ, preset, n, ref steps @ ..]
+                if self.identified && steps.len() == n as usize =>
+            {
+                vec![Update::Equalizer(equalizer(preset, steps))]
             }
             _ => Vec::new(),
         }
@@ -348,6 +417,35 @@ impl Session {
                 kind,
             });
         }
+    }
+}
+
+/// The Equalizer the Device reports as `preset` and the `steps` that follow
+/// it. A whole curve is Clear Bass then each Band. Any other count is kept
+/// as the Preset alone.
+fn equalizer(preset: u8, steps: &[u8]) -> Equalizer {
+    let steps: Option<Vec<i8>> = match steps.len() {
+        CURVE_STEPS => steps
+            .iter()
+            .map(|&step| {
+                i8::try_from(step)
+                    .ok()
+                    .map(|step| step - EQUALIZER_STEP_OFFSET)
+            })
+            .collect(),
+        _ => None,
+    };
+    match steps {
+        Some(steps) => Equalizer {
+            preset: PresetId(preset),
+            clear_bass: Some(steps[0]),
+            bands: Some(steps[1..].to_vec()),
+        },
+        None => Equalizer {
+            preset: PresetId(preset),
+            bands: None,
+            clear_bass: None,
+        },
     }
 }
 

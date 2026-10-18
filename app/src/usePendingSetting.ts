@@ -12,26 +12,32 @@ const PENDING_TIMEOUT_MS = 10_000;
  * clear a later one. A reported value that wasn't asked for means the Device
  * has moved somewhere else, so it drops every Pending value. Only a change of
  * the reported value settles them: a snapshot still reporting the old value
- * says nothing about those asked.
+ * says nothing about those asked. Values are compared by their contents, so
+ * a compound value such as an Equalizer settles on a reported copy, unless
+ * `settles` says when a reported value settles one asked.
  *
- * `reported` is the Device's latest value, null until it reports one.
+ * `reportedNow` is the Device's latest value, null until it reports one.
  * `command` asks the Device for a value and resolves once the core accepts
  * it. `name` names a value in the errors: "<name> wasn't confirmed by the
  * Device" after 10 s, "Couldn't set <name>: <why>" when the core rejects
- * it, with the rejection in words as the why. The latest `command` and
- * `name` are always used, so neither has to be a stable reference.
+ * it, with the rejection in words as the why. The latest `command`, `name`
+ * and `settles` are always used, so none has to be a stable reference.
  */
 export function usePendingSetting<T>(
-  reported: T | null,
+  reportedNow: T | null,
   command: (value: T) => Promise<void>,
   name: (value: T) => string,
+  settles: (asked: T, reported: T) => boolean = sameValue,
 ) {
+  const reported = useStable(reportedNow);
   const [asked, setAsked] = useState<T[]>([]);
   const [error, setError] = useState<string | null>(null);
   const commandRef = useRef(command);
   commandRef.current = command;
   const nameRef = useRef(name);
   nameRef.current = name;
+  const settlesRef = useRef(settles);
+  settlesRef.current = settles;
   const pending = asked.length > 0 ? asked[asked.length - 1] : null;
   const shown = pending ?? reported;
 
@@ -49,7 +55,7 @@ export function usePendingSetting<T>(
     if (Object.is(settledAgainst.current, reported)) return;
     settledAgainst.current = reported;
     setAsked((asked) => {
-      const i = asked.findIndex((v) => v === reported);
+      const i = reported === null ? -1 : asked.findIndex((v) => settlesRef.current(v, reported));
       return i < 0 ? [] : asked.slice(i + 1);
     });
   }, [reported]);
@@ -64,7 +70,7 @@ export function usePendingSetting<T>(
 
   /** Asks the Device for `value`, Pending until it reports it. */
   const request = (value: T) => {
-    if (value === shown) return;
+    if (sameValue(value, shown)) return;
     setError(null);
     setAsked((asked) => [...asked, value]);
     commandRef.current(value).catch((e) => {
@@ -73,4 +79,28 @@ export function usePendingSetting<T>(
   };
 
   return { shown, pending, error, request };
+}
+
+/**
+ * `value`, kept as the earlier reference while its contents stay the same, so
+ * a snapshot reporting an equal copy doesn't count as a change.
+ */
+function useStable<T>(value: T): T {
+  const ref = useRef(value);
+  if (!sameValue(ref.current, value)) ref.current = value;
+  return ref.current;
+}
+
+/** Whether two setting values have the same contents. */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(
+    (key) =>
+      key in b &&
+      sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
 }

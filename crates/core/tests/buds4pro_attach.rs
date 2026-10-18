@@ -55,6 +55,8 @@ async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
             ambient_level: Some(LevelRange { min: 0, max: 4 }),
             noise_cancelling_level: Some(LevelRange { min: 0, max: 4 }),
             power_off: false,
+            // Pinned in buds4pro_equalizer.
+            equalizer: Model::GalaxyBuds4Pro.capabilities().equalizer,
         }
     );
     assert_eq!(

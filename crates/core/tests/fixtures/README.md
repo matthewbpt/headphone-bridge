@@ -57,9 +57,22 @@ file.
   - `real-nc-level-set`: from the frame log, on 2026-10-12. Attach, then
     Noise Cancelling Level and mode sets from the app, each level set
     confirmed only by an ACK carrying the applied level.
-- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314,
-  from the frame log on macOS, on 2026-10-17. Two link sessions, cut into the
-  `real-*` files.
+  - `real-equalizer`: from the frame log on Linux, 2026-10-18, firmware
+    `R640XXU0AZD2`. Attach on Normal, then Bass boost, Soft, Dynamic, Clear,
+    Treble boost and Normal picked from the app. Each `EQUALIZER` set is
+    confirmed only by an ACK carrying the applied Preset: its `MANAGER_INFO`
+    gets a bare `88 00`.
+  - `real-equalizer-from-samsungs-app`: the next session, the same day.
+    Samsung's app can't Attach while this app is Attached, so the Device was
+    disconnected from the laptop, Samsung's app moved it to Bass boost, and it
+    was connected again. This Attach reports Preset 1.
+  - `real-equalizer-custom`: the session after, the same way, with the
+    Custom Preset picked in Samsung's app. This Attach reports Preset 6: the
+    Buds4 Pro's Custom is 6 on the wire, not the 7 the upstream-derived
+    protocol gave.
+- `galaxy-buds2/`: a Galaxy Buds2 on firmware revision 11, device id 314.
+  The `real-*` files are from the frame log: two link sessions on macOS, on
+  2026-10-17, and the `real-equalizer*` sessions on Linux, on 2026-10-18.
   - `real-attach`: the Attach, answered with an extended status, then the
     Device's own traffic.
   - `real-noise-control`: Attach, then four mode sets, each confirmed only
@@ -73,15 +86,58 @@ file.
     1 (gesture) at byte 4, and nothing sent to the Device.
   - `real-ambient-level`: Attach, then six Ambient Level sets down to 0,
     each confirmed only by an ACK carrying the applied level.
+  - `real-equalizer`: from the frame log on Linux, 2026-10-18, firmware
+    revision 11 (extended status byte 0). Attach on Normal, then Bass boost,
+    Soft, Dynamic, Clear, Treble boost and Normal picked from the app. Each
+    `EQUALIZER` set is confirmed only by an ACK carrying the applied Preset:
+    its `MANAGER_INFO` gets a bare `88 00`. A Noise Control Mode set between
+    the last two picks is left out.
+  - `real-equalizer-from-samsungs-app`: the next session, the same day.
+    Samsung's app can't Attach while this app is Attached, so the Device was
+    disconnected from the laptop, Samsung's app moved it to Treble boost, and
+    it was connected again. This Attach reports Preset 5 at byte 9. Then
+    Clear, Normal and Soft are picked from the app. Samsung's app offers the
+    Buds2 no Custom Preset.
   - `attach`: synthesised. The app's `MANAGER_INFO`, answered by the real
     revision-10 extended status in GalaxyBudsClient's tests
     (`TestData/ExtendedStatusUpdate/Buds2_rev10.bin`, GPL-3.0,
     timschneeb/GalaxyBudsClient at 754b6fd), wire bytes verbatim. Device id
     316 (Green), Noise Cancelling, Ambient Level 1.
-- `wh-1000xm5/`: synthesised from libmdr's protocol definitions (MIT,
-  mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`, until real captures
-  exist from the frame log. No WH-1000XM5 capture exists yet.
-  - `attach`: identification by model name, support functions and battery.
+- `wh-1000xm5/`: `attach` is synthesised from libmdr's protocol definitions
+  (MIT, mos9527/SonyHeadphonesClient) by `wh-1000xm5/gen.py`. The `real-`
+  fixtures are from the frame log.
+  - `attach`: identification by model name, support functions, battery,
+    noise control and the Equalizer.
   - `real-attach`: a real Attach from the frame log, WH-1000XM5 firmware 2.5.1.
   - `real-noise-control`: real mode and Ambient Level sets, each confirmed by
     a notification, firmware 2.5.1.
+  - `real-noise-control` and `real-power-off` were recorded before the app
+    read the Equalizer on Attach. Their replays re-base them with
+    `support::with_equalizer_read`, which inserts synthetic reads of the
+    Equalizer's Status and params. The two reads leave the sequence numbers
+    of every later frame as recorded.
+  - `real-equalizer-presets`: from the frame log on Linux, 2026-10-12, with
+    the same protocol info as `real-attach`. An Attach that reads the
+    Equalizer, then twelve Presets picked alone, each notified with its
+    curve. It replays exactly.
+  - `real-equalizer-curve`: the same link session continued: Band and Clear
+    Bass edits, and two Noise Control Mode sets. The Device notifies an edit
+    only when it moves onto Manual from another Preset. An edit already on
+    Manual is only ACKed. It was recorded before the app read a curve back
+    after its ACK, so its replay plays the Device's side from it rather than
+    matching every frame the app sends.
+  - `real-equalizer-kept`: the next Attach, two minutes later. The Device
+    reports the last curve sent, which it had only ACKed.
+  - `real-equalizer-more-presets`: from the frame log on Linux, 2026-10-18,
+    firmware 2.5.1. An Attach, then Mellow, Vocal, Custom 1 and Custom 2
+    picked alone, each notified with its curve. A development build sent
+    `EQEBB_GET_CAPABILITY` for `PRESET_EQ` once after Attach; its
+    `EQEBB_RET_CAPABILITY` advertises Clear Bass and five Bands of 21 steps
+    and the twelve Presets the Model lists, with empty names. The app as it
+    ships never sends it, so replays drop the probe with
+    `support::without_capability_probe`, which re-sequences the frames after
+    it.
+  - `real-equalizer-from-sonys-app`: the next session, the same day. Sony's
+    app can't Attach while this app is, so the app was closed, the phone
+    moved the Device to Custom 1 with Clear Bass +5, and the app was opened
+    again. This Attach reads that change. It carries the same probe.

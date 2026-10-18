@@ -30,6 +30,10 @@ export interface Device {
   ambientLevel: number | null;
   /** In the Model's own steps, within `capabilities.noiseCancellingLevel`. Null until reported. */
   noiseCancellingLevel: number | null;
+  /** The Equalizer the Device reports. Null until reported. */
+  equalizer: Equalizer | null;
+  /** The Device reports that it refuses Equalizer changes for now. */
+  equalizerUnavailable: boolean;
   /** Null until the Device first reports it. */
   battery: Battery | null;
   /**
@@ -77,13 +81,61 @@ export interface Capabilities {
   noiseCancellingLevel: LevelRange | null;
   /** Whether the app can Power Off the Device. */
   powerOff: boolean;
+  /** The Model's Equalizer, if the app can show and change it. */
+  equalizer: EqualizerCapability | null;
 }
 
-/** A level Capability's steps in the Model's own units, both ends included. */
-export interface LevelRange {
+/** What a Model's Equalizer offers. */
+export interface EqualizerCapability {
+  /** Every Preset the Device can report, in the order the Model lists them. */
+  presets: Preset[];
+  /** Null if the Model's Bands can't be shown. */
+  bands: Bands | null;
+  /** Clear Bass's range in the Model's own steps, if it has Clear Bass. */
+  clearBass: StepRange | null;
+}
+
+/** A Preset's id on the wire, as its Model's protocol numbers it. */
+export type PresetId = number;
+
+export interface Preset {
+  id: PresetId;
+  /** In the Model's own words. */
+  name: string;
+  /** Whether its Bands can be changed while on it. */
+  editable: boolean;
+  /** Whether the app can pick it. A Preset it can't is only reported. */
+  selectable: boolean;
+}
+
+export interface Bands {
+  /** Each Band's centre frequency, as the app labels it, lowest first. */
+  frequencies: string[];
+  /** The range every Band shares, in the Model's own steps. */
+  range: StepRange;
+}
+
+/** A setting's steps in the Model's own units, both ends included. */
+export interface Steps {
   min: number;
   max: number;
 }
+
+/** A signed setting's steps, such as a Band's or Clear Bass. */
+export type StepRange = Steps;
+
+/** An Equalizer's settings, as reported by a Device or asked of it. */
+export interface Equalizer {
+  /** Possibly a Preset the Model's Capability doesn't list. */
+  preset: PresetId;
+  /** Each Band's value, lowest first. Null when not reported, or for a set of the Preset alone. */
+  bands: number[] | null;
+  /** Null as for the Bands. A Model with both is set with both or neither. */
+  clearBass: number | null;
+}
+
+/** A level Capability's steps. */
+export type LevelRange = Steps;
 
 /** Percentages; for earbuds, null where the level is unknown. */
 export type Battery =

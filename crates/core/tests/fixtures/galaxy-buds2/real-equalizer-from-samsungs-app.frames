@@ -1,0 +1,45 @@
+# Galaxy Buds2 on Linux, captured by the frame log on 2026-10-18, firmware
+# revision 11, device id 314: the session after real-equalizer. Samsung's
+# app can't Attach while this app is Attached, so the Device was
+# disconnected from the laptop, Samsung's app moved it to Treble boost, and
+# it was connected again. Debug/log frames (242, 244, 245, 246) left
+# out. The Attach's extended status reports Preset 5 at byte 9, and so does
+# one the Device sends unasked three seconds later. Then the app picks
+# Clear, Normal and Soft, each confirmed by an ACK carrying it.
+2026-10-18T13:01:45.653Z samsung >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-18T13:01:45.686Z galaxy-buds2 << fd 2a 08 61 0b 03 63 63 01 01 11 00 00 05 bf 12 01 00 3a 01 3a 01 02 00 03 66 00 01 00 10 00 00 00 00 11 02 00 01 00 00 80 00 00 20 ec dd
+2026-10-18T13:01:45.711Z galaxy-buds2 << fd 06 54 c2 26 01 01 ba 49 dd
+2026-10-18T13:01:45.739Z galaxy-buds2 << fd 0d 88 63 00 00 01 a5 01 01 a5 01 00 00 dc e3 dd
+2026-10-18T13:01:45.766Z galaxy-buds2 << fd 29 d4 41 02 11 35 00 63 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 63 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 cb ff dd
+2026-10-18T13:01:45.766Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-18T13:01:45.772Z galaxy-buds2 << fd 06 54 c2 26 00 01 8b 7a dd
+2026-10-18T13:01:45.881Z galaxy-buds2 << fd 0d 80 27 01 de 05 06 42 10 12 44 08 bf ce c8 dd
+2026-10-18T13:01:45.912Z galaxy-buds2 << fd 18 c0 21 01 11 00 00 00 00 a0 00 a0 00 fa 00 fa 00 00 00 00 00 00 00 02 1b 36 dd
+2026-10-18T13:01:45.915Z galaxy-buds2 << fd 16 00 40 02 42 53 43 4c 00 27 4f 00 00 42 53 43 52 00 af 4d 00 00 a4 93 dd
+2026-10-18T13:01:46.033Z galaxy-buds2 << fd 04 54 88 00 31 92 dd
+2026-10-18T13:01:46.155Z galaxy-buds2 << fd 0d 80 27 01 1e 05 06 42 10 12 44 08 bf a5 28 dd
+2026-10-18T13:01:47.641Z galaxy-buds2 << fd 08 80 77 01 11 00 66 0a 59 4a dd
+2026-10-18T13:01:47.797Z galaxy-buds2 << fd 0b c8 60 01 63 63 01 00 11 26 00 d4 37 dd
+2026-10-18T13:01:47.800Z galaxy-buds2 << fd 05 14 c2 21 01 61 6d dd
+2026-10-18T13:01:47.911Z galaxy-buds2 << fd 18 44 21 01 00 00 00 00 00 a0 00 a0 00 fa 00 fa 00 00 00 00 00 00 00 02 fb 68 dd
+2026-10-18T13:01:48.254Z galaxy-buds2 << fd 29 d4 41 02 11 35 00 63 00 00 00 00 00 00 00 00 77 85 01 00 00 00 00 00 63 00 00 00 00 00 00 00 00 77 85 01 00 00 00 00 00 8e 38 dd
+2026-10-18T13:01:48.619Z galaxy-buds2 << fd 2a 08 61 0b 03 63 63 01 00 11 00 00 05 bf 12 01 00 3a 01 3a 01 02 00 03 66 00 01 00 10 00 00 00 00 11 02 00 01 00 00 00 00 00 5f 4b dd
+2026-10-18T13:01:48.619Z galaxy-buds2 << fd 29 54 41 02 11 35 00 63 00 00 00 00 00 00 00 00 e5 86 01 00 00 00 00 00 63 00 00 00 00 00 00 00 00 e5 86 01 00 00 00 00 00 16 b8 dd
+2026-10-18T13:01:56.137Z galaxy-buds2 >> fd 04 00 86 04 ba f1 dd
+2026-10-18T13:01:56.137Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-18T13:01:56.186Z galaxy-buds2 << fd 05 94 42 86 04 77 82 dd
+2026-10-18T13:01:56.216Z galaxy-buds2 << fd 04 d4 88 00 31 92 dd
+2026-10-18T13:01:56.262Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-18T13:02:04.063Z galaxy-buds2 >> fd 04 00 86 00 3e b1 dd
+2026-10-18T13:02:04.063Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-18T13:02:04.126Z galaxy-buds2 << fd 05 d4 42 86 00 f3 c2 dd
+2026-10-18T13:02:04.177Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-18T13:02:04.204Z galaxy-buds2 << fd 04 54 88 00 31 92 dd
+2026-10-18T13:02:11.816Z galaxy-buds2 >> fd 04 00 86 02 7c 91 dd
+2026-10-18T13:02:11.816Z galaxy-buds2 >> fd 06 00 88 01 01 22 da 58 dd
+2026-10-18T13:02:11.863Z galaxy-buds2 << fd 05 94 42 86 02 b1 e2 dd
+2026-10-18T13:02:11.909Z galaxy-buds2 << fd 04 d4 88 00 31 92 dd
+2026-10-18T13:02:11.934Z galaxy-buds2 << fd 04 14 88 00 31 92 dd
+2026-10-18T13:02:13.252Z galaxy-buds2 << fd 0b 88 60 01 63 63 01 00 11 26 00 d4 37 dd
+2026-10-18T13:02:13.354Z galaxy-buds2 << fd 05 d4 c2 21 01 61 6d dd
+2026-10-18T13:02:13.369Z galaxy-buds2 << fd 29 14 41 02 11 35 00 63 00 00 00 00 00 00 00 00 8e e7 01 00 00 00 00 00 63 00 00 00 00 00 00 00 00 8e e7 01 00 00 00 00 00 14 d5 dd

@@ -5,7 +5,10 @@ use std::time::Duration;
 use headphone_bridge_core::frame_log::Direction;
 use headphone_bridge_core::platform::Observation;
 use headphone_bridge_core::{Battery, Command, CommandError, Core, NoiseControlMode};
-use support::{fake_platform, fixture, replay, sony_frame, wait_for, xm5, DeviceLink, FakeOs};
+use support::{
+    fake_platform, fixture, replay, sony_frame, wait_for, with_equalizer_read, xm5, DeviceLink,
+    FakeOs,
+};
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach
 /// fixture, which reports Ambient, Focus on Voice on and Ambient Level 10.
@@ -209,7 +212,9 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     let core = Core::start(platform);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
-    let records = fixture("wh-1000xm5/real-noise-control");
+    // Recorded before the Equalizer was read on Attach, so re-based onto an
+    // Attach that reads it: available, Off, flat.
+    let records = with_equalizer_read(&fixture("wh-1000xm5/real-noise-control"), &FLAT_OFF);
     let address = xm5().address;
     // Each set as the capture made it, and what the Device then reported.
     let sets = [
@@ -262,6 +267,9 @@ async fn real_xm5_sets_replay_from_their_frame_log() {
     })
     .await;
 }
+
+/// `EQEBB_RET_PARAM`: Off, Clear Bass and every Band at 0.
+const FLAT_OFF: [u8; 10] = [0x57, 0x00, 0x00, 0x06, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a];
 
 /// The next frame the core writes.
 async fn written(link: &mut DeviceLink) -> Vec<u8> {

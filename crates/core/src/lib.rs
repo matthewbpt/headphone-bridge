@@ -24,12 +24,14 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-pub use command::{Command, CommandError, NoiseControlMode};
+pub use command::{Command, CommandError, Equalizer, NoiseControlMode};
 pub use device_list::{
     Battery, Device, DeviceList, DeviceState, EffectiveModeReason, NotAttachedReason,
 };
 use frame_log::{Direction, FrameLog};
-pub use model::{Capabilities, LevelRange, Model};
+pub use model::{
+    Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, PresetId, StepRange, Steps,
+};
 use platform::{ControlLink, DeviceAddress, DeviceIdentity, Observation, Platform};
 use update::Update;
 
@@ -42,7 +44,7 @@ pub struct Core {
 
 /// What the core is asked for, in the order it's asked.
 enum Request {
-    Command(Command, oneshot::Sender<Result<(), CommandError>>),
+    Command(Command, Reply),
     /// A hold on the Device at the address, or on every Connected Device.
     Hold(u64, Option<DeviceAddress>),
     EndHold(u64),
@@ -291,6 +293,57 @@ fn check_level(range: Option<LevelRange>, level: u8) -> Result<(), CommandError>
     Ok(())
 }
 
+/// Rejects `equalizer` unless a Device with the Equalizer Capability
+/// `capability` can be set to it.
+fn check_equalizer(
+    capability: Option<&EqualizerCapability>,
+    equalizer: &Equalizer,
+) -> Result<(), CommandError> {
+    let capability = capability.ok_or(CommandError::MissingCapability)?;
+    let preset = capability
+        .preset(equalizer.preset)
+        .filter(|preset| preset.selectable)
+        .ok_or(CommandError::UnavailablePreset)?;
+    if let Some(bands) = &equalizer.bands {
+        let shape = capability
+            .bands
+            .as_ref()
+            .ok_or(CommandError::MissingCapability)?;
+        if bands.len() != shape.frequencies.len() {
+            return Err(CommandError::OutOfRange);
+        }
+        check_steps(Some(shape.range), preset, bands)?;
+    }
+    if let Some(clear_bass) = equalizer.clear_bass {
+        check_steps(capability.clear_bass, preset, &[clear_bass])?;
+    }
+    // A Model with both takes them together.
+    if capability.bands.is_some()
+        && capability.clear_bass.is_some()
+        && equalizer.bands.is_some() != equalizer.clear_bass.is_some()
+    {
+        return Err(CommandError::IncompleteEqualizer);
+    }
+    Ok(())
+}
+
+/// Rejects `steps` unless a Device with the step Capability `range` can set
+/// them on `preset`.
+fn check_steps(
+    range: Option<StepRange>,
+    preset: &Preset,
+    steps: &[i8],
+) -> Result<(), CommandError> {
+    let range = range.ok_or(CommandError::MissingCapability)?;
+    if !preset.editable {
+        return Err(CommandError::FixedPreset);
+    }
+    if !steps.iter().all(|&step| range.contains(step)) {
+        return Err(CommandError::OutOfRange);
+    }
+    Ok(())
+}
+
 impl NotAttachedReason {
     /// Whether trying again by itself might Attach the Device. Not when only
     /// the listener can fix the cause, e.g. by quitting the app holding the
@@ -337,8 +390,12 @@ enum SessionCommand {
     SetNoiseControlMode(NoiseControlMode),
     SetAmbientLevel(u8),
     SetNoiseCancellingLevel(u8),
+    SetEqualizer(Equalizer),
     PowerOff,
 }
+
+/// Where a command's acceptance or rejection is sent.
+type Reply = oneshot::Sender<Result<(), CommandError>>;
 
 #[derive(Debug, Clone, Copy)]
 enum Vendor {
@@ -575,6 +632,12 @@ impl<P: Platform> State<P> {
             LinkEventKind::Update(Update::NoiseCancellingLevel(level)) => {
                 device.noise_cancelling_level = Some(level);
             }
+            LinkEventKind::Update(Update::Equalizer(equalizer)) => {
+                device.equalizer = Some(equalizer);
+            }
+            LinkEventKind::Update(Update::EqualizerUnavailable(unavailable)) => {
+                device.equalizer_unavailable = unavailable;
+            }
             LinkEventKind::Update(Update::PowerOffAcknowledged) => {
                 if device.state == DeviceState::PoweringOff {
                     tracked.power_off_deadline = Some(Instant::now() + POWER_OFF_TIMEOUT);
@@ -627,6 +690,18 @@ impl<P: Platform> State<P> {
                 check_level(device.capabilities.noise_cancelling_level, level)?;
                 device.settings_reported()?;
                 session.send(SessionCommand::SetNoiseCancellingLevel(level))
+            }
+            Command::SetEqualizer(address, equalizer) => {
+                let (device, session) = self.attached(&address)?;
+                // Before anything else: the Device takes no Equalizer change.
+                if device.equalizer_unavailable {
+                    return Err(CommandError::EqualizerUnavailable);
+                }
+                check_equalizer(device.capabilities.equalizer.as_ref(), &equalizer)?;
+                if device.equalizer.is_none() {
+                    return Err(CommandError::SettingsNotReported);
+                }
+                session.send(SessionCommand::SetEqualizer(equalizer))
             }
             Command::PowerOff(address) => {
                 let (device, session) = self.attached(&address)?;
@@ -858,6 +933,9 @@ async fn run_samsung_session(
                     SessionCommand::SetNoiseCancellingLevel(level) => {
                         session.set_noise_cancelling_level(level)
                     }
+                    SessionCommand::SetEqualizer(equalizer) => {
+                        session.set_equalizer_preset(equalizer.preset)
+                    }
                     // No Samsung Model can Power Off, so the command is
                     // rejected before it gets here.
                     SessionCommand::PowerOff => {
@@ -953,6 +1031,7 @@ async fn run_sony_session(
                     SessionCommand::SetNoiseCancellingLevel(_) => {
                         debug_assert!(false, "no Sony Model has a Noise Cancelling Level");
                     }
+                    SessionCommand::SetEqualizer(equalizer) => session.set_equalizer(&equalizer),
                     SessionCommand::PowerOff => session.power_off(),
                 }
                 if !write(&mut session, slug) {
@@ -960,5 +1039,25 @@ async fn run_sony_session(
                 }
             }
         }
+    }
+}
+
+// Every Model on the allowlist has an Equalizer, so a Device can't be asked
+// for one without it; the rule is checked here instead.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_equalizer_for_a_model_without_the_capability_is_rejected() {
+        let preset = Equalizer {
+            preset: PresetId(0),
+            bands: None,
+            clear_bass: None,
+        };
+        assert_eq!(
+            check_equalizer(None, &preset),
+            Err(CommandError::MissingCapability)
+        );
     }
 }

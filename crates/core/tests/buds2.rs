@@ -40,8 +40,12 @@ async fn a_buds2_is_sent_the_handshake_and_attached_as_a_galaxy_buds2() {
     let list = wait_for(&core, |list| list.devices[0].state == DeviceState::Attached).await;
     let device = &list.devices[0];
     assert_eq!(device.model, Some(Model::GalaxyBuds2));
+    // The Equalizer is checked in buds2_equalizer, so it's left out here.
     assert_eq!(
-        device.capabilities,
+        Capabilities {
+            equalizer: None,
+            ..device.capabilities.clone()
+        },
         Capabilities {
             noise_control_modes: vec![
                 NoiseControlMode::Off,
@@ -51,6 +55,7 @@ async fn a_buds2_is_sent_the_handshake_and_attached_as_a_galaxy_buds2() {
             ambient_level: Some(LevelRange { min: 0, max: 2 }),
             noise_cancelling_level: None,
             power_off: false,
+            equalizer: None,
         }
     );
 }

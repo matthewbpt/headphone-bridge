@@ -1,6 +1,6 @@
 //! What a control link session reports to the core, whatever the vendor.
 
-use crate::command::NoiseControlMode;
+use crate::command::{Equalizer, NoiseControlMode};
 use crate::device_list::{Battery, EffectiveModeReason};
 use crate::model::Model;
 
@@ -20,6 +20,11 @@ pub enum Update {
     AmbientLevel(u8),
     /// In the Model's own steps, within its Capabilities' range.
     NoiseCancellingLevel(u8),
+    /// The Equalizer the Device is applying. Its Preset may be one the
+    /// Model's Capability doesn't list.
+    Equalizer(Equalizer),
+    /// Whether the Device refuses Equalizer changes for now.
+    EqualizerUnavailable(bool),
     /// The Device acknowledged a request to Power Off. It should stop being
     /// Connected soon after.
     PowerOffAcknowledged,

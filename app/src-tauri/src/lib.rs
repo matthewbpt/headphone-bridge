@@ -18,7 +18,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 use headphone_bridge_core::platform::DeviceAddress;
-use headphone_bridge_core::{Command, CommandError, Core, DeviceList, NoiseControlMode};
+use headphone_bridge_core::{Command, CommandError, Core, DeviceList, Equalizer, NoiseControlMode};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// The process's one core. On Android it's the platform adapter's instead,
@@ -189,6 +189,16 @@ async fn set_noise_cancelling_level(
         level,
     ))
     .await
+}
+
+#[tauri::command]
+async fn set_equalizer(
+    core: State<'_, &'static Core>,
+    address: String,
+    equalizer: Equalizer,
+) -> Result<(), CommandError> {
+    core.command(Command::SetEqualizer(DeviceAddress(address), equalizer))
+        .await
 }
 
 #[tauri::command]
@@ -413,6 +423,7 @@ pub fn run() {
             set_noise_control_mode,
             set_ambient_level,
             set_noise_cancelling_level,
+            set_equalizer,
             retry_attach,
             power_off,
             frame_log,

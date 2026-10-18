@@ -15,6 +15,7 @@ import {
 import { BatteryGlyph, DevicePicture, ModeIcon, PowerIcon } from "./deviceArt";
 import { FrameLogSetting } from "./FrameLogSetting";
 import { LaunchAtLoginSetting } from "./LaunchAtLoginSetting";
+import { Equalizer } from "./Equalizer";
 import { Levels } from "./Levels";
 import { usePendingSetting } from "./usePendingSetting";
 
@@ -213,6 +214,13 @@ function DeviceView({ device, labels }: { device: Device; labels: Labels }) {
           )}
           <Levels device={device} shownMode={mode.shown} />
         </fieldset>
+      )}
+      {(attached || poweringOff) && device.capabilities.equalizer && (
+        <Equalizer
+          device={device}
+          capability={device.capabilities.equalizer}
+          disabled={poweringOff}
+        />
       )}
     </>
   );
