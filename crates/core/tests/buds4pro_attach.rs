@@ -15,8 +15,8 @@ const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 
 
 #[tokio::test]
 async fn a_connected_buds4_pro_is_attached_with_the_manager_info_handshake() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
 
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
@@ -32,8 +32,8 @@ async fn a_connected_buds4_pro_is_attached_with_the_manager_info_handshake() {
 
 #[tokio::test]
 async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
 
@@ -73,8 +73,8 @@ async fn the_extended_status_identifies_the_buds4_pro_and_its_battery() {
 
 #[tokio::test]
 async fn battery_follows_status_updates() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
 
@@ -97,8 +97,8 @@ async fn battery_follows_status_updates() {
 
 #[tokio::test]
 async fn a_charging_bud_counts_as_docked_before_its_placement_says_so() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
 
@@ -129,8 +129,8 @@ async fn a_charging_bud_counts_as_docked_before_its_placement_says_so() {
 
 #[tokio::test]
 async fn the_case_level_is_only_read_while_a_bud_is_docked() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     link.send
@@ -172,8 +172,8 @@ async fn the_case_level_is_only_read_while_a_bud_is_docked() {
 
 #[tokio::test]
 async fn a_seven_byte_status_update_without_the_charging_byte_updates_battery() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     link.send
@@ -201,8 +201,8 @@ async fn a_seven_byte_status_update_without_the_charging_byte_updates_battery() 
 
 #[tokio::test]
 async fn a_device_without_a_supported_vendor_service_is_ignored() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
 
     os.observe(Observation::DeviceConnected(DeviceIdentity {
         address: DeviceAddress::parse("11:22:33:44:55:66").unwrap(),
@@ -218,8 +218,8 @@ async fn a_device_without_a_supported_vendor_service_is_ignored() {
 
 #[tokio::test]
 async fn a_samsung_device_whose_name_is_not_on_the_allowlist_is_never_attached() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let buds3pro = DeviceIdentity {
         address: DeviceAddress::parse("10:20:30:40:50:60").unwrap(),
         name: "Galaxy Buds3 Pro (9F3C)".into(),
@@ -248,8 +248,8 @@ async fn a_samsung_device_whose_name_is_not_on_the_allowlist_is_never_attached()
 
 #[tokio::test]
 async fn a_device_whose_extended_status_names_another_model_is_detached_after_the_handshake() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
 
@@ -303,8 +303,8 @@ async fn a_link_that_cannot_be_opened_leaves_the_device_connected_with_the_reaso
             NotAttachedReason::LinkFailed(LinkFailure::Other("timed out".into())),
         ),
     ] {
-        let (platform, os) = fake_platform();
-        let core = Core::builder().start(platform);
+        let (platform, observations, os) = fake_platform();
+        let core = Core::builder().start(platform, observations);
         os.fail_links(buds4pro().address, failure);
 
         os.observe(Observation::DeviceConnected(buds4pro()));
@@ -321,8 +321,8 @@ async fn a_link_that_cannot_be_opened_leaves_the_device_connected_with_the_reaso
 
 #[tokio::test]
 async fn a_dropped_link_detaches_the_device() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     link.send
@@ -349,8 +349,8 @@ async fn a_dropped_link_detaches_the_device() {
 
 #[tokio::test]
 async fn a_disconnected_device_is_removed_and_its_link_closed() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.send
@@ -375,8 +375,8 @@ async fn frames_are_reassembled_from_any_fragmentation() {
         stream.extend(frame);
     }
     for chunk_size in [1, 2, 7, 64, stream.len()] {
-        let (platform, mut os) = fake_platform();
-        let core = Core::builder().start(platform);
+        let (platform, observations, mut os) = fake_platform();
+        let core = Core::builder().start(platform, observations);
         os.observe(Observation::DeviceConnected(buds4pro()));
         let link = os.next_link().await;
 
@@ -403,8 +403,8 @@ async fn frames_are_reassembled_from_any_fragmentation() {
 
 #[tokio::test]
 async fn garbage_that_looks_like_the_start_of_a_long_frame_does_not_hide_a_real_one() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
 
@@ -418,8 +418,8 @@ async fn garbage_that_looks_like_the_start_of_a_long_frame_does_not_hide_a_real_
 
 #[tokio::test]
 async fn a_frame_that_fails_its_crc_is_ignored() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
 

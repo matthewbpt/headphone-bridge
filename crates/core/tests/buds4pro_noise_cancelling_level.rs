@@ -22,8 +22,8 @@ fn extended_status(ambient: u8, noise_cancelling: u8) -> Vec<u8> {
 #[tokio::test]
 async fn attaching_reports_the_noise_cancelling_level_the_buds_are_at() {
     for level in 0..=4 {
-        let (platform, mut os) = fake_platform();
-        let core = Core::builder().start(platform);
+        let (platform, observations, mut os) = fake_platform();
+        let core = Core::builder().start(platform, observations);
         os.observe(Observation::DeviceConnected(buds4pro()));
         let link = os.next_link().await;
 
@@ -48,8 +48,8 @@ async fn attaching_reports_the_noise_cancelling_level_the_buds_are_at() {
 
 #[tokio::test]
 async fn a_level_outside_the_models_range_from_the_device_is_ignored() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let link = os.next_link().await;
     link.send.send(extended_status(3, 2)).unwrap();
@@ -69,8 +69,8 @@ async fn a_level_outside_the_models_range_from_the_device_is_ignored() {
 /// Starts a core with a Buds4 Pro Attached at Ambient Level 3 and Noise
 /// Cancelling Level 2.
 async fn attached_buds4pro() -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -210,8 +210,8 @@ async fn a_level_past_the_models_range_is_rejected_before_anything_is_sent() {
 
 #[tokio::test]
 async fn a_wh1000xm5_has_no_noise_cancelling_level_to_set() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -238,8 +238,8 @@ async fn real_buds4pro_level_sets_are_confirmed_by_their_acks() {
         Level(u8),
         Mode(NoiseControlMode),
     }
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     // The Device ACKs each level set with `83 <applied level>` and answers

@@ -21,8 +21,8 @@ use support::{
 /// extended status from GalaxyBudsClient's tests, which reports Preset 3,
 /// Dynamic (byte 9).
 async fn attached_buds2() -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds2()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");

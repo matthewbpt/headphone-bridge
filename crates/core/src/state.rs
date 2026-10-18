@@ -12,7 +12,7 @@ use tokio::time::Instant;
 use crate::command::{Command, CommandError, CommandKind, DeviceCommand};
 use crate::device_list::{Device, DeviceList, DeviceState, NotAttachedReason};
 use crate::frame_log::FrameLog;
-use crate::platform::{DeviceAddress, DeviceIdentity, Observation, Platform};
+use crate::platform::{DeviceAddress, DeviceIdentity, Observation, Observations, Platform};
 use crate::session::{run_session, SessionCommand};
 use crate::update::Update;
 use crate::{samsung, sony, AttachPolicy, Model};
@@ -28,10 +28,11 @@ pub(crate) enum Request {
 /// Where a command's acceptance or rejection is sent.
 pub(crate) type Reply = oneshot::Sender<Result<(), CommandError>>;
 
-/// Starts the State actor on the current Tokio runtime, serving `requests`
-/// and publishing to `device_list`.
+/// Starts the State actor on the current Tokio runtime, following
+/// `observations`, serving `requests` and publishing to `device_list`.
 pub(crate) fn spawn(
     platform: impl Platform,
+    observations: Observations,
     policy: AttachPolicy,
     device_list: watch::Sender<DeviceList>,
     frame_log: FrameLog,
@@ -50,7 +51,7 @@ pub(crate) fn spawn(
         frame_log,
         holds: BTreeMap::new(),
     };
-    tokio::spawn(state.run(requests, link_events_rx));
+    tokio::spawn(state.run(observations, requests, link_events_rx));
 }
 
 struct State<P> {
@@ -214,10 +215,10 @@ enum LinkEventKind {
 impl<P: Platform> State<P> {
     async fn run(
         mut self,
+        mut observations: Observations,
         mut requests: mpsc::UnboundedReceiver<Request>,
         mut link_events: mpsc::UnboundedReceiver<LinkEvent>,
     ) {
-        let mut observations = self.platform.observations();
         loop {
             let power_off_deadline = self.power_off_deadline();
             let power_off_timeout = async {

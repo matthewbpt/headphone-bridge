@@ -33,11 +33,11 @@ use bluetooth_thread::{Command, Waker};
 pub struct MacBluetooth {
     commands: std_mpsc::Sender<Command>,
     waker: Waker,
-    observations: Mutex<Option<Observations>>,
 }
 
 impl MacBluetooth {
-    pub fn start() -> io::Result<MacBluetooth> {
+    /// Starts the adapter, with the observations it reports.
+    pub fn start() -> io::Result<(MacBluetooth, Observations)> {
         let (observations_tx, observations) = mpsc::unbounded_channel();
         let (commands, waker) = bluetooth_thread::spawn(observations_tx)?;
         let audio_changes = Mutex::new(commands.clone());
@@ -49,11 +49,7 @@ impl MacBluetooth {
                 .send(Command::CheckAudioOutput);
             audio_waker.wake();
         });
-        Ok(MacBluetooth {
-            commands,
-            waker,
-            observations: Mutex::new(Some(observations)),
-        })
+        Ok((MacBluetooth { commands, waker }, observations))
     }
 
     fn send(&self, command: Command) -> bool {
@@ -64,14 +60,6 @@ impl MacBluetooth {
 }
 
 impl Platform for MacBluetooth {
-    fn observations(&self) -> Observations {
-        self.observations
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-            .unwrap_or_else(|| mpsc::unbounded_channel().1)
-    }
-
     async fn open_control_link(
         &self,
         address: DeviceAddress,
