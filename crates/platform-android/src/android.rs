@@ -271,14 +271,7 @@ pub async fn nearby_devices_granted<R: Runtime>(app: &AppHandle<R>) -> bool {
 /// Opens the app's page in Android's settings, where the listener can grant
 /// the Nearby devices permission.
 pub async fn open_app_settings<R: Runtime>(app: &AppHandle<R>) -> Result<(), PluginError> {
-    let plugin = app
-        .try_state::<BluetoothPlugin<R>>()
-        .ok_or(PluginError::NotRegistered)?;
-    plugin
-        .0
-        .run_mobile_plugin_async::<serde_json::Value>("openAppSettings", ())
-        .await?;
-    Ok(())
+    call(app, "openAppSettings", ()).await
 }
 
 /// Hands `file` to Android's share sheet, titled `title`. Resolves once the
@@ -288,15 +281,22 @@ pub async fn share_file<R: Runtime>(
     file: &Path,
     title: &str,
 ) -> Result<(), PluginError> {
+    let payload = serde_json::json!({ "path": file, "title": title });
+    call(app, "shareFile", payload).await
+}
+
+/// Runs `command` on the App Screen's `BluetoothPlugin`, for its side effect.
+async fn call<R: Runtime>(
+    app: &AppHandle<R>,
+    command: &str,
+    payload: impl serde::Serialize,
+) -> Result<(), PluginError> {
     let plugin = app
         .try_state::<BluetoothPlugin<R>>()
         .ok_or(PluginError::NotRegistered)?;
     plugin
         .0
-        .run_mobile_plugin_async::<serde_json::Value>(
-            "shareFile",
-            serde_json::json!({ "path": file, "title": title }),
-        )
+        .run_mobile_plugin_async::<serde_json::Value>(command, payload)
         .await?;
     Ok(())
 }
