@@ -8,6 +8,7 @@ use std::sync::{Once, OnceLock};
 use headphone_bridge_core::Core;
 use jni::objects::{GlobalRef, JClass, JValue};
 use jni::{JNIEnv, JavaVM};
+use tauri::plugin::mobile::PluginInvokeError;
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::runtime::Runtime as Tokio;
@@ -184,6 +185,18 @@ fn to_kotlin(message: Message) -> bool {
     true
 }
 
+/// Why a call to the App Screen's `BluetoothPlugin` failed.
+#[derive(Debug, thiserror::Error)]
+pub enum PluginError {
+    /// The Tauri plugin from [`init`] isn't registered on this app.
+    #[error("the Android plugin isn't registered")]
+    NotRegistered,
+    /// Kotlin rejected the call or couldn't be reached. Its text is
+    /// Kotlin's, e.g. "No app can share files".
+    #[error(transparent)]
+    Call(#[from] PluginInvokeError),
+}
+
 /// The App Screen's `BluetoothPlugin`, for calling its commands from Rust.
 struct BluetoothPlugin<R: Runtime>(PluginHandle<R>);
 
@@ -228,16 +241,15 @@ pub async fn nearby_devices_granted<R: Runtime>(app: &AppHandle<R>) -> bool {
 
 /// Opens the app's page in Android's settings, where the listener can grant
 /// the Nearby devices permission.
-pub async fn open_app_settings<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+pub async fn open_app_settings<R: Runtime>(app: &AppHandle<R>) -> Result<(), PluginError> {
     let plugin = app
         .try_state::<BluetoothPlugin<R>>()
-        .ok_or("the Android plugin isn't registered")?;
+        .ok_or(PluginError::NotRegistered)?;
     plugin
         .0
         .run_mobile_plugin_async::<serde_json::Value>("openAppSettings", ())
-        .await
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+        .await?;
+    Ok(())
 }
 
 /// Hands `file` to Android's share sheet, titled `title`. Resolves once the
@@ -246,17 +258,16 @@ pub async fn share_file<R: Runtime>(
     app: &AppHandle<R>,
     file: &Path,
     title: &str,
-) -> Result<(), String> {
+) -> Result<(), PluginError> {
     let plugin = app
         .try_state::<BluetoothPlugin<R>>()
-        .ok_or("the Android plugin isn't registered")?;
+        .ok_or(PluginError::NotRegistered)?;
     plugin
         .0
         .run_mobile_plugin_async::<serde_json::Value>(
             "shareFile",
             serde_json::json!({ "path": file, "title": title }),
         )
-        .await
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+        .await?;
+    Ok(())
 }

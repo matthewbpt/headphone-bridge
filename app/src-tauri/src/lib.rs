@@ -297,7 +297,9 @@ fn report_nearby_devices_permission(app: &AppHandle) {
 #[tauri::command]
 async fn open_app_settings(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "android")]
-    return headphone_bridge_platform_android::android::open_app_settings(&app).await;
+    return headphone_bridge_platform_android::android::open_app_settings(&app)
+        .await
+        .map_err(|error| error.to_string());
     #[cfg(not(target_os = "android"))]
     {
         let _ = app;
@@ -321,7 +323,7 @@ async fn share_frame_log(
     #[cfg(target_os = "android")]
     return headphone_bridge_platform_android::android::share_file(&app, file, "Share frame log")
         .await
-        .map_err(share::ShareError::ShareFailed);
+        .map_err(|error| share::ShareError::ShareFailed(error.to_string()));
     #[cfg(not(target_os = "android"))]
     {
         let _ = (app, file);
