@@ -29,7 +29,7 @@ use frame_log::{FrameLog, FrameLogError};
 pub use model::{
     Bands, Capabilities, EqualizerCapability, LevelRange, Model, Preset, PresetId, StepRange, Steps,
 };
-use platform::{DeviceAddress, Platform};
+use platform::{DeviceAddress, Observations, Platform};
 use state::Request;
 
 /// A running core. Dropping it stops the core.
@@ -88,12 +88,21 @@ impl CoreBuilder {
         self.frame_log.start(path)
     }
 
-    /// Starts the core on the current Tokio runtime.
-    pub fn start(self, platform: impl Platform) -> Core {
+    /// Starts the core on the current Tokio runtime, following what the OS
+    /// reports on `observations` and opening control links through
+    /// `platform`.
+    pub fn start(self, platform: impl Platform, observations: Observations) -> Core {
         let CoreBuilder { policy, frame_log } = self;
         let (requests, requests_rx) = mpsc::unbounded_channel();
         let (device_list_tx, device_list) = watch::channel(DeviceList::default());
-        state::spawn(platform, policy, device_list_tx, frame_log, requests_rx);
+        state::spawn(
+            platform,
+            observations,
+            policy,
+            device_list_tx,
+            frame_log,
+            requests_rx,
+        );
         Core {
             requests,
             device_list,

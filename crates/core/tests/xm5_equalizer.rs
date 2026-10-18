@@ -20,8 +20,8 @@ use support::{
 /// fixture, which reports Bright with Clear Bass +2 and Bands −1, 0, +3, +5
 /// and +10.
 async fn attached_xm5() -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -458,8 +458,8 @@ async fn clear_bass_outside_the_range_is_rejected_before_anything_is_sent() {
 
 #[tokio::test]
 async fn a_preset_set_before_the_device_reports_its_equalizer_is_rejected() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     // Up to the app's ACK of the NCASM reply, before the Equalizer GET.
@@ -498,8 +498,8 @@ async fn a_preset_set_before_the_device_reports_its_equalizer_is_rejected() {
 
 #[tokio::test]
 async fn attaching_reads_whether_the_equalizer_is_unavailable() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     // Up to the app's ACK of the NCASM reply.
@@ -574,8 +574,8 @@ async fn a_set_while_the_equalizer_is_unavailable_is_rejected_and_nothing_is_sen
 
 #[tokio::test]
 async fn a_set_is_rejected_as_unavailable_even_before_the_device_reports_its_equalizer() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")[..20]).await;
@@ -861,8 +861,8 @@ async fn real_xm5_curve_edits_are_read_back_after_their_ack() {
 
 #[tokio::test]
 async fn a_real_xm5_keeps_a_curve_it_only_acked_across_an_attach() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
 

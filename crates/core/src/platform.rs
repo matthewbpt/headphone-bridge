@@ -1,8 +1,10 @@
 //! The platform port: everything OS-specific the core depends on.
 //!
-//! An adapter per OS implements [`Platform`]; tests use a scripted fake. The
-//! port knows nothing about vendor protocols: it reports what the OS sees and
-//! opens byte streams.
+//! The port has two halves: the [`Observations`] the OS reports, which the
+//! core is handed once as it starts, and a [`Platform`], which opens control
+//! links whenever the core asks. An adapter per OS makes both; tests use a
+//! scripted fake. The port knows nothing about vendor protocols: it reports
+//! what the OS sees and opens byte streams.
 
 use std::fmt;
 use std::future::Future;
@@ -13,10 +15,6 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub trait Platform: Send + Sync + 'static {
-    /// The stream of OS observations. The core calls this once, at start; a
-    /// later call may get a stream that never yields.
-    fn observations(&self) -> Observations;
-
     /// Opens a control link to the vendor service `service` of the Connected
     /// Device at `address`.
     fn open_control_link(
@@ -26,6 +24,8 @@ pub trait Platform: Send + Sync + 'static {
     ) -> impl Future<Output = Result<ControlLink, LinkFailure>> + Send;
 }
 
+/// The stream of what the OS reports. Once it ends, the core observes nothing
+/// more and carries on.
 pub type Observations = mpsc::UnboundedReceiver<Observation>;
 
 /// Something the OS reports. The core only observes; it never pairs, connects

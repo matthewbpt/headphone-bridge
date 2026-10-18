@@ -21,8 +21,6 @@ pub use linux::LinuxBluetooth;
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use std::sync::{Mutex, PoisonError};
-
     use headphone_bridge_core::platform::{
         ControlLink, DeviceAddress, LinkFailure, Observations, Platform,
     };
@@ -36,31 +34,20 @@ mod linux {
     /// process.
     pub struct LinuxBluetooth {
         bluez: bluez::Connection,
-        observations: Mutex<Option<Observations>>,
     }
 
     impl LinuxBluetooth {
-        pub fn start() -> LinuxBluetooth {
+        /// Starts the adapter, with the observations it reports.
+        pub fn start() -> (LinuxBluetooth, Observations) {
             let (observations_tx, observations) = mpsc::unbounded_channel();
             let bluez = bluez::Connection::default();
             audio::watch(observations_tx.clone());
             tokio::spawn(bluez::watch(bluez.clone(), observations_tx));
-            LinuxBluetooth {
-                bluez,
-                observations: Mutex::new(Some(observations)),
-            }
+            (LinuxBluetooth { bluez }, observations)
         }
     }
 
     impl Platform for LinuxBluetooth {
-        fn observations(&self) -> Observations {
-            self.observations
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-                .unwrap_or_else(|| mpsc::unbounded_channel().1)
-        }
-
         async fn open_control_link(
             &self,
             address: DeviceAddress,

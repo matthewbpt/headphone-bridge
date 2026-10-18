@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use headphone_bridge_core::platform::{
-    ControlLink, DeviceAddress, LinkFailure, Observation, Observations, Platform,
+    ControlLink, DeviceAddress, LinkFailure, Observation, Platform,
 };
 #[cfg(debug_assertions)]
 use headphone_bridge_core::Model;
@@ -103,12 +103,12 @@ impl Host {
             #[cfg(debug_assertions)]
             simulated: Mutex::default(),
         });
-        let core = core
-            .attach_policy(AttachPolicy::OnRequest)
-            .start(KotlinBluetooth {
+        let core = core.attach_policy(AttachPolicy::OnRequest).start(
+            KotlinBluetooth {
                 shared: shared.clone(),
-                observations: Mutex::new(Some(observations_rx)),
-            });
+            },
+            observations_rx,
+        );
         let mut snapshots = core.subscribe();
         let forwarding = shared.clone();
         tokio::spawn(async move {
@@ -265,18 +265,9 @@ impl Host {
 /// The core's platform port, with Kotlin's `Hub` behind it.
 struct KotlinBluetooth {
     shared: Arc<Shared>,
-    observations: Mutex<Option<Observations>>,
 }
 
 impl Platform for KotlinBluetooth {
-    fn observations(&self) -> Observations {
-        self.observations
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-            .unwrap_or_else(|| mpsc::unbounded_channel().1)
-    }
-
     async fn open_control_link(
         &self,
         address: DeviceAddress,

@@ -105,7 +105,8 @@ fn frame_log_wanted(app: &AppHandle) -> bool {
 fn start_core(app: &AppHandle) -> anyhow::Result<(Core, Option<PathBuf>)> {
     let mut core = Core::builder();
     let path = start_frame_log(app, &mut core);
-    Ok((core.start(platform::start()?), path))
+    let (platform, observations) = platform::start()?;
+    Ok((core.start(platform, observations), path))
 }
 
 /// Switches the frame log on for the core `core` starts, if wanted. Returns

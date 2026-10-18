@@ -19,7 +19,6 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub struct FakePlatform {
-    observations: Mutex<Option<Observations>>,
     failures: Arc<Mutex<HashMap<DeviceAddress, LinkFailure>>>,
     attempted: mpsc::UnboundedSender<DeviceAddress>,
     opened: mpsc::UnboundedSender<DeviceLink>,
@@ -43,13 +42,14 @@ pub struct DeviceLink {
     pub send: mpsc::UnboundedSender<Vec<u8>>,
 }
 
-pub fn fake_platform() -> (FakePlatform, FakeOs) {
+/// A fake platform, the observations it reports, and the test's handle on
+/// the fake OS behind both.
+pub fn fake_platform() -> (FakePlatform, Observations, FakeOs) {
     let (observations_tx, observations_rx) = mpsc::unbounded_channel();
     let (attempted_tx, attempted_rx) = mpsc::unbounded_channel();
     let (opened_tx, opened_rx) = mpsc::unbounded_channel();
     let failures = Arc::new(Mutex::new(HashMap::new()));
     let platform = FakePlatform {
-        observations: Mutex::new(Some(observations_rx)),
         failures: failures.clone(),
         attempted: attempted_tx,
         opened: opened_tx,
@@ -60,7 +60,7 @@ pub fn fake_platform() -> (FakePlatform, FakeOs) {
         attempted: attempted_rx,
         opened: opened_rx,
     };
-    (platform, os)
+    (platform, observations_rx, os)
 }
 
 impl FakeOs {
@@ -106,14 +106,6 @@ impl FakeOs {
 }
 
 impl Platform for FakePlatform {
-    fn observations(&self) -> Observations {
-        self.observations
-            .lock()
-            .unwrap()
-            .take()
-            .expect("observations taken twice")
-    }
-
     async fn open_control_link(
         &self,
         address: DeviceAddress,
@@ -230,8 +222,8 @@ pub async fn replay(link: &mut DeviceLink, records: &[FrameRecord]) {
 /// Starts a core, reports `device` Connected, and takes the control link the
 /// core opens to it.
 pub async fn linked_core(device: DeviceIdentity) -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(device));
     let link = os.next_link().await;
     (core, os, link)

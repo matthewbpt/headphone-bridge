@@ -43,8 +43,8 @@ async fn wait_until_attached(core: &Core, identity: &DeviceIdentity) {
 
 #[tokio::test]
 async fn with_nothing_connected_there_is_no_primary_device() {
-    let (platform, os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
 
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));
 
@@ -53,8 +53,8 @@ async fn with_nothing_connected_there_is_no_primary_device() {
 
 #[tokio::test]
 async fn the_only_attached_device_is_the_primary_device() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
 
     let _xm5 = attach_xm5(&core, &mut os).await;
 
@@ -63,8 +63,8 @@ async fn the_only_attached_device_is_the_primary_device() {
 
 #[tokio::test]
 async fn with_two_devices_attached_the_primary_device_is_the_one_playing_audio() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _buds = attach_buds4pro(&core, &mut os).await;
     let _xm5 = attach_xm5(&core, &mut os).await;
 
@@ -76,8 +76,8 @@ async fn with_two_devices_attached_the_primary_device_is_the_one_playing_audio()
 
 #[tokio::test]
 async fn the_primary_device_follows_the_audio_output_when_it_switches() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _buds = attach_buds4pro(&core, &mut os).await;
     let _xm5 = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
@@ -90,8 +90,8 @@ async fn the_primary_device_follows_the_audio_output_when_it_switches() {
 
 #[tokio::test]
 async fn when_the_audio_output_is_not_bluetooth_the_most_recently_attached_device_is_primary() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _buds = attach_buds4pro(&core, &mut os).await;
     let _xm5 = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
@@ -105,8 +105,8 @@ async fn when_the_audio_output_is_not_bluetooth_the_most_recently_attached_devic
 
 #[tokio::test]
 async fn a_device_playing_audio_is_primary_while_it_is_still_attaching() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _xm5 = attach_xm5(&core, &mut os).await;
     // The Buds4 Pro are Connected, but still Attaching.
     os.observe(Observation::DeviceConnected(buds4pro()));
@@ -119,8 +119,8 @@ async fn a_device_playing_audio_is_primary_while_it_is_still_attaching() {
 
 #[tokio::test]
 async fn a_device_playing_audio_becomes_primary_once_it_is_attached() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
 
     let _buds = attach_buds4pro(&core, &mut os).await;
@@ -131,8 +131,8 @@ async fn a_device_playing_audio_becomes_primary_once_it_is_attached() {
 
 #[tokio::test]
 async fn when_the_primary_device_disconnects_the_other_attached_device_becomes_primary() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _buds = attach_buds4pro(&core, &mut os).await;
     let _xm5 = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));
@@ -146,8 +146,8 @@ async fn when_the_primary_device_disconnects_the_other_attached_device_becomes_p
 
 #[tokio::test]
 async fn when_the_only_attached_device_disconnects_there_is_no_primary_device() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _xm5 = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));
 
@@ -159,8 +159,8 @@ async fn when_the_only_attached_device_disconnects_there_is_no_primary_device() 
 
 #[tokio::test]
 async fn when_the_primary_devices_control_link_drops_it_stays_primary() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let _buds = attach_buds4pro(&core, &mut os).await;
     let xm5_link = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));
@@ -179,8 +179,8 @@ async fn when_the_primary_devices_control_link_drops_it_stays_primary() {
 
 #[tokio::test]
 async fn a_device_that_is_not_primary_can_still_be_controlled() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let mut buds = attach_buds4pro(&core, &mut os).await;
     let _xm5 = attach_xm5(&core, &mut os).await;
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));

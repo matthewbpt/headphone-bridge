@@ -38,10 +38,10 @@ async fn closed(link: &mut DeviceLink) -> bool {
 
 #[tokio::test(start_paused = true)]
 async fn the_primary_device_is_chosen_among_detached_devices_by_the_audio_output() {
-    let (platform, os) = fake_platform();
+    let (platform, observations, os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
 
@@ -56,10 +56,10 @@ async fn the_primary_device_is_chosen_among_detached_devices_by_the_audio_output
 
 #[tokio::test(start_paused = true)]
 async fn with_no_bluetooth_audio_output_the_most_recently_shown_device_is_primary() {
-    let (platform, os) = fake_platform();
+    let (platform, observations, os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
 
@@ -69,10 +69,10 @@ async fn with_no_bluetooth_audio_output_the_most_recently_shown_device_is_primar
 
 #[tokio::test(start_paused = true)]
 async fn an_unsupported_model_is_never_primary() {
-    let (platform, os) = fake_platform();
+    let (platform, observations, os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     let buds3pro = DeviceIdentity {
         address: DeviceAddress::parse("AA:BB:CC:DD:EE:03").unwrap(),
         name: "Galaxy Buds3 Pro (A1B2)".into(),
@@ -89,10 +89,10 @@ async fn an_unsupported_model_is_never_primary() {
 
 #[tokio::test(start_paused = true)]
 async fn holding_the_primary_device_attaches_only_it_until_the_hold_ends() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
@@ -121,20 +121,20 @@ async fn holding_the_primary_device_attaches_only_it_until_the_hold_ends() {
 
 #[tokio::test(start_paused = true)]
 async fn with_no_device_connected_there_is_nothing_to_hold() {
-    let (platform, _os) = fake_platform();
+    let (platform, observations, _os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
 
     assert!(core.hold_primary().is_none());
 }
 
 #[tokio::test(start_paused = true)]
 async fn the_hold_stays_on_the_device_it_attached_when_the_primary_device_changes() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
     os.observe(Observation::AudioOutputChanged(Some(buds4pro().address)));
@@ -158,10 +158,10 @@ async fn the_hold_stays_on_the_device_it_attached_when_the_primary_device_change
 
 #[tokio::test(start_paused = true)]
 async fn ending_a_hold_on_all_leaves_a_held_primary_device_attached() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     os.observe(Observation::DeviceConnected(xm5()));
     os.observe(Observation::AudioOutputChanged(Some(xm5().address)));
@@ -190,10 +190,10 @@ async fn ending_a_hold_on_all_leaves_a_held_primary_device_attached() {
 
 #[tokio::test(start_paused = true)]
 async fn a_detached_device_keeps_its_last_reported_values_and_when_they_were_reported() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     wait_for(&core, |list| list.primary == Some(xm5().address)).await;
     let before = SystemTime::now();
@@ -235,10 +235,10 @@ async fn a_detached_device_keeps_its_last_reported_values_and_when_they_were_rep
 
 #[tokio::test(start_paused = true)]
 async fn a_detached_devices_values_are_dropped_when_it_stops_being_connected() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     wait_for(&core, |list| list.primary == Some(xm5().address)).await;
     let hold = core.hold_primary().expect("a Primary Device");
@@ -263,10 +263,10 @@ async fn a_detached_devices_values_are_dropped_when_it_stops_being_connected() {
 
 #[tokio::test(start_paused = true)]
 async fn kept_values_give_way_once_the_device_is_attached_again() {
-    let (platform, mut os) = fake_platform();
+    let (platform, observations, mut os) = fake_platform();
     let core = Core::builder()
         .attach_policy(AttachPolicy::OnRequest)
-        .start(platform);
+        .start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     wait_for(&core, |list| list.primary == Some(xm5().address)).await;
     let hold = core.hold_primary().expect("a Primary Device");

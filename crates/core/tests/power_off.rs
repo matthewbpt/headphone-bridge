@@ -15,8 +15,8 @@ use support::{
 
 /// Starts a core with a WH-1000XM5 Attached through the whole attach fixture.
 async fn attached_xm5() -> (Core, FakeOs, DeviceLink) {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     let mut link = os.next_link().await;
     replay(&mut link, &fixture("wh-1000xm5/attach")).await;
@@ -295,8 +295,8 @@ async fn an_xm5_keeps_its_power_off_capability_while_reattaching_but_refuses_it(
 
 #[tokio::test]
 async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothing() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(buds4pro()));
     let mut link = os.next_link().await;
     link.written.recv().await.expect("MANAGER_INFO");
@@ -316,8 +316,8 @@ async fn a_buds4pro_refuses_power_off_as_a_missing_capability_and_is_sent_nothin
 
 #[tokio::test]
 async fn an_xm5_that_is_not_attached_refuses_power_off() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     os.observe(Observation::DeviceConnected(xm5()));
     // The link is open, but the Device hasn't identified itself.
     let _link = os.next_link().await;
@@ -335,8 +335,8 @@ async fn an_xm5_that_is_not_attached_refuses_power_off() {
 
 #[tokio::test]
 async fn an_unsupported_model_refuses_power_off() {
-    let (platform, os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let buds2pro = DeviceIdentity {
         address: DeviceAddress::parse("A1:B2:C3:00:00:02").unwrap(),
         name: "Galaxy Buds2 Pro (0002)".into(),
@@ -374,8 +374,8 @@ async fn written(link: &mut DeviceLink) -> Vec<u8> {
 
 #[tokio::test]
 async fn real_xm5_power_offs_replay_from_their_frame_log() {
-    let (platform, mut os) = fake_platform();
-    let core = Core::builder().start(platform);
+    let (platform, observations, mut os) = fake_platform();
+    let core = Core::builder().start(platform, observations);
     let records = fixture("wh-1000xm5/real-power-off");
     // Each session starts with the first request of an Attach.
     let first_request = &records[0].bytes;
