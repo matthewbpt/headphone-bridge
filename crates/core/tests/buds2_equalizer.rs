@@ -105,11 +105,12 @@ async fn a_preset_reported_in_a_later_extended_status_replaces_the_last() {
 
 #[tokio::test]
 async fn a_preset_the_buds2_does_not_list_is_reported_unchanged() {
+    // 6, the Buds4 Pro's Custom on the wire, which the Buds2 doesn't have.
     let (core, _os, link) = attached_buds2().await;
 
-    link.send.send(extended_status_with_preset(7)).unwrap();
+    link.send.send(extended_status_with_preset(6)).unwrap();
 
-    wait_for(&core, |list| list.devices[0].equalizer == Some(preset(7))).await;
+    wait_for(&core, |list| list.devices[0].equalizer == Some(preset(6))).await;
 }
 
 /// `EQUALIZER` (0x86) with Preset 1, Bass boost.
@@ -173,12 +174,12 @@ async fn rejected(equalizer: Equalizer, error: CommandError) {
 
 #[tokio::test]
 async fn custom_is_rejected_as_the_buds2_has_no_custom_preset() {
-    rejected(preset(7), CommandError::UnavailablePreset).await;
+    rejected(preset(6), CommandError::UnavailablePreset).await;
 }
 
 #[tokio::test]
 async fn a_preset_beyond_treble_boost_is_rejected() {
-    rejected(preset(6), CommandError::UnavailablePreset).await;
+    rejected(preset(8), CommandError::UnavailablePreset).await;
 }
 
 #[tokio::test]

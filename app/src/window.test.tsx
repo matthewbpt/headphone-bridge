@@ -927,9 +927,9 @@ describe("Equalizer", () => {
     expect(select).toHaveAttribute("aria-busy", "false");
   });
 
-  it("shows a Buds2 reporting 7 as Unrecognised, with no Custom to pick", async () => {
+  it("shows a Buds2 reporting 6, Samsung's Custom, as Unrecognised, with no Custom to pick", async () => {
     renderWindow(
-      new FakeCore(only(buds2({ equalizer: { preset: 7, bands: null, clearBass: null } }))),
+      new FakeCore(only(buds2({ equalizer: { preset: 6, bands: null, clearBass: null } }))),
     );
 
     expect(await preset()).toHaveDisplayValue("Unrecognised Preset");
