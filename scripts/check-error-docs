@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Checks that every error type in production code, and each variant of an
+error enum, has a doc comment, as docs/agents/rust.md asks ("one documented
+variant per cause"). An error type is one that derives `Error`.
+
+rustc's missing_docs lint would cover this, but it can't be scoped to error
+types and the rest of the code base doesn't document every public item.
+
+Usage: scripts/check-error-docs [file.rs ...]
+With no arguments, checks every .rs file under crates/*/src and app/src-tauri/src.
+"""
+
+import pathlib
+import re
+import sys
+
+DERIVE = re.compile(r"^\s*#\[derive\(([^]]*)")
+ITEM = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(enum|struct)\s+(\w+)")
+VARIANT = re.compile(r"^[A-Z]\w*\b")
+STRING = re.compile(r'"(?:\\.|[^"\\])*"')
+
+
+def depth_change(line):
+    code = STRING.sub('""', line.split("//", 1)[0])
+    return sum(code.count(c) for c in "([{") - sum(code.count(c) for c in ")]}")
+
+
+def has_doc(lines):
+    return any(line.strip().startswith("///") for line in lines)
+
+
+def check(path):
+    lines = path.read_text().split("\n")
+    problems = []
+    for i, line in enumerate(lines):
+        derive = DERIVE.match(line)
+        if not derive or not re.search(r"\bError\b", derive.group(1)):
+            continue
+        # The item follows the derive, after any other attributes.
+        j = next((j for j in range(i, len(lines)) if ITEM.match(lines[j])), None)
+        if j is None:
+            continue
+        kind, name = ITEM.match(lines[j]).groups()
+        # Its doc comment is above the derive, back to the previous item.
+        start = i
+        while start > 0 and lines[start - 1].strip() and not re.search(
+            r"[;{}]$", lines[start - 1].strip()
+        ):
+            start -= 1
+        if not has_doc(lines[start:j]):
+            problems.append(f"{path}:{j + 1}: document the error {kind} {name}")
+        if kind != "enum":
+            continue
+        # Each variant's doc comment sits between the end of the previous
+        # variant (or the enum's opening brace) and the variant's name.
+        depth, since = 0, j + 1
+        for k in range(j, len(lines)):
+            before = depth
+            depth += depth_change(lines[k])
+            stripped = lines[k].strip()
+            if k > j and before == 1 and VARIANT.match(stripped):
+                if not has_doc(lines[since:k]):
+                    variant = VARIANT.match(stripped).group(0)
+                    problems.append(
+                        f"{path}:{k + 1}: document the variant {name}::{variant}"
+                    )
+            if k > j and depth == 1 and stripped.endswith(","):
+                since = k + 1
+            if k > j and depth == 0:
+                break
+    return problems
+
+
+def main(args):
+    if args:
+        paths = [pathlib.Path(a) for a in args]
+    else:
+        roots = [*pathlib.Path("crates").glob("*/src"), pathlib.Path("app/src-tauri/src")]
+        paths = sorted(p for root in roots for p in root.rglob("*.rs"))
+    problems = [p for path in paths for p in check(path)]
+    for problem in problems:
+        print(problem, flush=True)
+    if problems:
+        print(
+            "\nEach error type and each variant of an error enum needs a /// doc "
+            "comment: one documented variant per cause (docs/agents/rust.md).",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

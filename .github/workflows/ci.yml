@@ -16,6 +16,14 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
+  repo-checks:
+    # Rules from docs/agents that a script can check without building.
+    name: Repo checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/check-error-docs
+
   core:
     # The platform-independent crates must build and pass on every OS (ADR-0002).
     # The Tauri shell is excluded: it needs per-OS system libraries, so the Linux app job covers it.
