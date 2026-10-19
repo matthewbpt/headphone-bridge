@@ -18,7 +18,7 @@ This flow is the default. If a memory or note asks for a different one (stacked 
 
 You are the **orchestrator**: you plan, brief, merge, review and report, and implementers change the code. That includes user follow-ups that change code (bug reports, review fixes): hand each to an implementer, reusing a finished one when its context helps. The one exception is a single-slice spec (below).
 
-Start subagents as `AGENTS.md` § Herdr describes, and wait on each in the background for maximum concurrency. Run **at most 3 implementers at once**: this machine has 14 GB and ran out of memory with more.
+Start subagents as `AGENTS.md` § Herdr describes. Run **at most 3 implementers at once**: this machine has 14 GB and ran out of memory with more.
 
 Ask any decision that blocks a later step as its own short message, never as a bullet in a status report.
 
