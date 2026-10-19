@@ -1,6 +1,6 @@
 # Commits
 
-Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The `commit-msg` hook in `.githooks/` checks the header locally, and the `Commits` workflow runs the same hook on every commit in a pull request.
+Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The `commit-msg` hook in `.githooks/` checks the header, the body's wrap and the footer block locally, and the `Commits` workflow runs the same hook on every commit in a pull request.
 
 Pull requests are squash-merged: the PR title becomes the header of the one commit that lands on `main`, and the PR's commit messages become its body. The title follows the same format, and the `Commits` workflow checks it too. release-please reads that commit to choose the next version, so title a PR for its most significant change: `feat` if any commit is a `feat`. A PR title takes `!` only for an approved user-facing break (see Breaking changes).
 
