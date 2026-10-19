@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Checks that release-please bumps every workspace crate's version.
+
+Every crate shares the app's one version, so each needs two entries in
+release-please-config.json's root package (README.md › Releasing): a toml
+extra-file for its own Cargo.toml, and its name in the Cargo.lock filter.
+The crates are one release-please package, ".", so .release-please-manifest.json
+needs only that entry, which this checks too.
+
+Usage: scripts/check-release-config
+"""
+
+import json
+import pathlib
+import subprocess
+import sys
+
+CONFIG = pathlib.Path("release-please-config.json")
+MANIFEST = pathlib.Path(".release-please-manifest.json")
+
+
+def main():
+    metadata = json.loads(
+        subprocess.run(
+            ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    root = pathlib.Path(metadata["workspace_root"])
+    crates = {
+        package["name"]: pathlib.Path(package["manifest_path"]).relative_to(root).as_posix()
+        for package in metadata["packages"]
+    }
+
+    config = json.loads(CONFIG.read_text())
+    package = config["packages"].get(".")
+    if package is None:
+        print(f'{CONFIG}: no "." package, which every crate\'s version belongs to')
+        return 1
+    files = package.get("extra-files", [])
+    tomls = {f["path"] for f in files if f.get("type") == "toml"}
+    lock_filters = [
+        f["jsonpath"] for f in files if f.get("type") == "toml" and f["path"] == "Cargo.lock"
+    ]
+
+    problems = []
+    for name, manifest in sorted(crates.items()):
+        if manifest not in tomls:
+            problems.append(f"{CONFIG}: add {manifest} as a toml extra-file of the \".\" package")
+        if not any(f"'{name}'" in jsonpath for jsonpath in lock_filters):
+            problems.append(f"{CONFIG}: add '{name}' to the Cargo.lock filter")
+    if "." not in json.loads(MANIFEST.read_text()):
+        problems.append(f'{MANIFEST}: add the "." package')
+
+    for problem in problems:
+        print(problem, flush=True)
+    if problems:
+        print(
+            "\nrelease-please bumps every crate's version with the app's; see README.md › Releasing.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

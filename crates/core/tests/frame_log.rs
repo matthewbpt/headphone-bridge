@@ -74,7 +74,7 @@ const MANAGER_INFO: [u8; 10] = [0xfd, 0x06, 0x00, 0x88, 0x01, 0x01, 0x22, 0xda, 
 /// A fresh path for a test's frame log.
 fn log_path(test: &str) -> PathBuf {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{test}.frames"));
-    let _ = std::fs::remove_file(&path);
+    std::fs::remove_file(&path).ok();
     path
 }
 

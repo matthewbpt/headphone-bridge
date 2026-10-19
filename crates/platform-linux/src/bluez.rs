@@ -256,13 +256,13 @@ impl Watcher {
         };
         let service_uuids = service_uuids.into_iter().collect();
         self.reported.insert(address);
-        let _ = self
-            .observations
+        self.observations
             .send(Observation::DeviceConnected(DeviceIdentity {
                 address: DeviceAddress::from_octets(address.0),
                 name,
                 service_uuids,
-            }));
+            }))
+            .ok();
     }
 
     fn stopped(&mut self) {
@@ -278,11 +278,11 @@ impl Watcher {
     }
 
     fn report_disconnected(&self, address: Address) {
-        let _ =
-            self.observations
-                .send(Observation::DeviceDisconnected(DeviceAddress::from_octets(
-                    address.0,
-                )));
+        self.observations
+            .send(Observation::DeviceDisconnected(DeviceAddress::from_octets(
+                address.0,
+            )))
+            .ok();
     }
 }
 
@@ -384,7 +384,7 @@ async fn connect_profile(
         tokio::select! {
             arrived = &mut request => {
                 let stream = accept(arrived.map_err(|_| router_stopped())?)?;
-                let _ = call.await;
+                call.await.ok();
                 Ok(stream)
             }
             called = &mut call => {
@@ -434,7 +434,7 @@ fn spawn_link(device: Device, service: Uuid, stream: Stream) -> ControlLink {
         }
         reading.abort();
         drop(writer);
-        let _ = device.disconnect_profile(&service).await;
+        device.disconnect_profile(&service).await.ok();
     });
     ControlLink { incoming, outgoing }
 }

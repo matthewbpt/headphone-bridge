@@ -1,6 +1,6 @@
 # Commits
 
-Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The `commit-msg` hook in `.githooks/` checks the header locally, and the `Commits` workflow runs the same hook on every commit in a pull request.
+Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The `commit-msg` hook in `.githooks/` checks the header, the body's wrap and the footer block locally, and the `Commits` workflow runs the same hook on every commit in a pull request.
 
 Pull requests are squash-merged: the PR title becomes the header of the one commit that lands on `main`, and the PR's commit messages become its body. The title follows the same format, and the `Commits` workflow checks it too. release-please reads that commit to choose the next version, so title a PR for its most significant change: `feat` if any commit is a `feat`. A PR title takes `!` only for an approved user-facing break (see Breaking changes).
 
@@ -23,8 +23,8 @@ git config core.hooksPath .githooks
 ```
 
 - **Header**: at most 72 characters. The `(<scope>)` is optional. A `!` before the colon marks an approved break (see Breaking changes).
-- **Description**: imperative mood, starting with a lower-case verb ("add", "fix", "let"), no trailing period. Glossary terms keep their capitals: `let a Device settle`, not `let a device settle`.
-- **Body**: optional, after one blank line. Explain why the change is needed and what it trades off; the diff already shows what changed. Wrap at 72 characters.
+- **Description**: imperative mood, starting with a lower-case verb ("add", "fix", "let"), no trailing period. Glossary headwords keep their capitals, and only they do: `let a Device settle`, not `let a device settle`; a type is lower-case prose (`hand the core its observations`), not `Observations`.
+- **Body**: optional, after one blank line. Explain why the change is needed and what it trades off; the diff already shows what changed. When a `refactor` changes an existing test's expected value, say why the new value is right and who reads it. Wrap at 72 characters.
 - **Footers**: after one blank line, one `Token: value` per line.
 
 ## Types
@@ -43,9 +43,11 @@ git config core.hooksPath .githooks
 | `style`    | Formatting only (`cargo fmt`, whitespace), no behaviour change |
 | `revert`   | Reverting an earlier commit                                   |
 
+Text the listener sees is behaviour: a change to it is a `feat` or a `fix`, whatever else the commit restructures.
+
 ## Scopes
 
-A scope names the one area the commit touches. When a commit spans several areas, or none of these fits, omit the scope rather than invent a vague one like `misc` or `app`.
+A scope names the one area the commit touches. When a commit spans several areas, or none of these fits, omit the scope rather than invent a vague one like `misc` or `app`. The `Commits` workflow fails a scoped commit that touches a file outside its area (`scripts/check-commit-scopes`). The core's tests and fixtures (`crates/core/tests`, `crates/fixtures`) belong to `core`, `samsung` and `sony` alike, any scope may update a lockfile, and `deps` covers only dependency manifests and lockfiles.
 
 | Scope      | Area                                                               |
 | ---------- | ------------------------------------------------------------------ |
@@ -58,7 +60,7 @@ A scope names the one area the commit touches. When a commit spans several areas
 | `simulated` | `crates/simulated`: the Simulated Device                          |
 | `fixtures` | `crates/fixtures`: the recorded frames the core's tests and the Simulated Device share |
 | `shell`    | `app/src-tauri`: the Tauri shell and tray                          |
-| `ui`       | `app/src`: the React UI                                            |
+| `ui`       | `app`, except `app/src-tauri`: the React UI and its build          |
 | `ci`       | `.github/workflows` (with a type other than `ci`, e.g. `fix(ci)`)  |
 | `deps`     | Dependency bumps, usually with `build`                             |
 | `adr`      | `docs/adr`                                                         |
@@ -78,7 +80,7 @@ The crates, the shell-to-UI commands and events, and the Kotlin wire ship togeth
 
 ## Vocabulary
 
-Name domain concepts with the terms in `GLOSSARY.md`, never the synonyms it lists under _Avoid_: "Noise Control Mode", not "ANC mode"; "Ambient", not "transparency"; "Attach", not "connect" when the control link is meant.
+Name domain concepts with the terms in `GLOSSARY.md`, never the synonyms it lists under _Avoid_: "Noise Control Mode", not "ANC mode"; "Ambient", not "transparency"; "Attach", not "connect" when the control link is meant. The `Commits` workflow fails a PR whose added lines or commit messages use an avoided acronym or phrase (`scripts/check-glossary --list` names them); in Markdown and commit messages, quote a term to write about it; elsewhere, mark a line that must use one, such as a Model's own name, with `glossary-ok` in a comment.
 
 ## Examples
 

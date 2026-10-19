@@ -158,7 +158,7 @@ fn replace(
 ) {
     let report = |observation| {
         if let Some(observations) = observations {
-            let _ = observations.send(observation);
+            observations.send(observation).ok();
         }
     };
     if let Some(previous) = device.take() {

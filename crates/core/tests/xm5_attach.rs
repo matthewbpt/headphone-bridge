@@ -274,7 +274,7 @@ async fn a_dropped_link_detaches_the_xm5() {
 #[tokio::test]
 async fn every_frame_of_an_attach_is_frame_logged_like_the_fixture() {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("xm5_attach.frames");
-    let _ = std::fs::remove_file(&path);
+    std::fs::remove_file(&path).ok();
     let (platform, observations, mut os) = fake_platform();
     let core = Core::builder().start(platform, observations);
     core.command(Command::SetFrameLog(Some(path.clone())))
@@ -304,7 +304,7 @@ async fn every_frame_of_an_attach_is_frame_logged_like_the_fixture() {
 #[tokio::test]
 async fn a_frame_log_on_from_the_start_logs_an_attach_at_startup() {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("xm5_attach_at_startup.frames");
-    let _ = std::fs::remove_file(&path);
+    std::fs::remove_file(&path).ok();
     let (platform, observations, mut os) = fake_platform();
     // The Device is already Connected when the core starts.
     os.observe(Observation::DeviceConnected(xm5()));

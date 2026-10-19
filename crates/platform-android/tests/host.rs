@@ -301,7 +301,7 @@ async fn an_open_kotlin_never_got_fails_as_bluetooth_unavailable_instead_of_wait
     let (sink, messages) = mpsc::unbounded_channel();
     let host = Host::start(
         move |message| {
-            let _ = sink.send(message);
+            sink.send(message).ok();
             false
         },
         Core::builder(),
@@ -329,7 +329,7 @@ async fn kotlin_connecting_late_is_sent_the_device_list_it_missed() {
 #[tokio::test]
 async fn a_host_started_with_the_frame_log_on_logs_the_first_attach() {
     let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("host_first_attach.frames");
-    let _ = std::fs::remove_file(&path);
+    std::fs::remove_file(&path).ok();
     let (sink, messages) = mpsc::unbounded_channel();
     let mut builder = Core::builder();
     builder.frame_log(&path).unwrap();

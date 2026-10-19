@@ -111,18 +111,20 @@ impl Platform for FakePlatform {
         address: DeviceAddress,
         service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let _ = self.attempted.send(address);
+        self.attempted.send(address).ok();
         if let Some(failure) = self.failures.lock().unwrap().get(&address) {
             return Err(failure.clone());
         }
         let (to_core, from_device) = mpsc::unbounded_channel();
         let (to_device, from_core) = mpsc::unbounded_channel();
-        let _ = self.opened.send(DeviceLink {
-            address,
-            service,
-            written: from_core,
-            send: to_core,
-        });
+        self.opened
+            .send(DeviceLink {
+                address,
+                service,
+                written: from_core,
+                send: to_core,
+            })
+            .ok();
         Ok(ControlLink {
             incoming: from_device,
             outgoing: to_device,

@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Checks a PR's added lines and commit messages for terms GLOSSARY.md lists
+under _Avoid_.
+
+Many _Avoid_ terms are everyday words that are also right in other senses
+("state", "lock", "release", "channel"), so this checks only those a script
+can tell apart:
+  - acronyms (EQ, SKU, NC/ASM), case-sensitively, so `Eq` doesn't match;
+  - phrases of two or more words or with a hyphen (custom curve, ANC mode,
+    keep-alive), in any case.
+Every match is between word boundaries, so code identifiers such as
+`SET_EQ` or `sound_mode` don't match. Single ordinary words, terms the
+glossary qualifies in brackets ("Connected (when the Control Link is
+meant)"), and the phrases in SKIPPED need judgement and are left to review.
+The terms in ALLOWED are right in the paths listed, where they name
+something other than the glossary's concept.
+
+Markdown files and commit messages may quote a term ("EQ", `custom
+curve`) to talk about it. Any other line that has to use a term, such as a
+Model's own Preset name, says so with `glossary-ok` in a comment on the
+same line.
+
+Usage: scripts/check-glossary <base> <head>
+       scripts/check-glossary --list
+"""
+
+import fnmatch
+import re
+import subprocess
+import sys
+
+GLOSSARY = "GLOSSARY.md"
+MARKER = "glossary-ok"
+# Files that list the terms, record past commits, or are generated.
+EXCLUDED = [GLOSSARY, "scripts/check-glossary", "CHANGELOG.md", "*.lock", "*package-lock.json", "app/src-tauri/gen"]
+QUOTED = re.compile(r"\"[^\"]*\"|`[^`]*`|“[^”]*”")
+TRAILER = re.compile(r"^[A-Za-z-]+: .*<[^>]+>$")
+SKIPPED = {
+    # A Preset's own name on the Galaxy Buds and the WH-1000XM5.
+    "Bass boost",
+    # Everyday phrases: "once the key is let go", "no Bluetooth adapter".
+    "let go",
+    "no Bluetooth",
+}
+ALLOWED = {
+    # The adapters open the OS's RFCOMM channel that carries a Control Link.
+    "RFCOMM channel": ["crates/platform-*", "docs/spikes/*"],
+    # Sony's own name for the wire message, as the protocol code and the
+    # recorded frames use it.
+    "NC/ASM": ["crates/core/src/sony/*", "crates/fixtures/*"],
+}
+
+
+def avoid_terms():
+    """Splits each _Avoid_ line on the commas outside brackets."""
+    terms = []
+    for line in open(GLOSSARY):
+        if not line.startswith("_Avoid_:"):
+            continue
+        depth, term = 0, ""
+        for c in line[len("_Avoid_:") :].strip() + ",":
+            depth += (c == "(") - (c == ")")
+            if c == "," and depth == 0:
+                terms.append(term.strip())
+                term = ""
+            else:
+                term += c
+    return list(dict.fromkeys(terms))
+
+
+def classify(term):
+    """The pattern for a term this checks, or None for one left to review."""
+    if "(" in term or term in SKIPPED:
+        return None
+    if re.fullmatch(r"[A-Z]{2,}(/[A-Z]{2,})*", term):
+        return re.compile(r"(?<![\w/])" + re.escape(term) + r"(?![\w/])")
+    if " " in term or "-" in term:
+        words = [re.escape(w) for w in term.split()]
+        return re.compile(r"(?<![\w-])" + r"\s+".join(words) + r"(?![\w-])", re.IGNORECASE)
+    return None
+
+
+def git(*args):
+    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
+
+
+def added_lines(base, head):
+    """(path, line number, text) for each line the PR adds."""
+    diff = git(
+        "diff", "-U0", "--no-color", "--no-ext-diff", f"{base}...{head}", "--", ".",
+        *(f":!{e}" for e in EXCLUDED),
+    )
+    path, number = None, 0
+    for line in diff.split("\n"):
+        if line.startswith("+++ "):
+            path = line[6:] if line.startswith("+++ b/") else None
+        elif line.startswith("@@"):
+            number = int(re.search(r"\+(\d+)", line).group(1))
+        elif line.startswith("+") and path:
+            yield path, number, line[1:]
+            number += 1
+
+
+def find(patterns, text, path=None):
+    """The terms in a line of a file at `path`, or of a commit message."""
+    if MARKER in text:
+        return []
+    if path is None or path.endswith(".md"):
+        text = QUOTED.sub("", text)
+    return [
+        term
+        for term, pattern in patterns
+        if pattern.search(text)
+        and not (path and any(fnmatch.fnmatch(path, p) for p in ALLOWED.get(term, [])))
+    ]
+
+
+def main(args):
+    terms = avoid_terms()
+    patterns = [(t, p) for t in terms if (p := classify(t))]
+    if args == ["--list"]:
+        print("Checked:", ", ".join(t for t, _ in patterns))
+        print("Left to review:", ", ".join(t for t in terms if not classify(t)))
+        return 0
+    if len(args) != 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+    base, head = args
+
+    problems = []
+    for path, number, text in added_lines(base, head):
+        for term in find(patterns, text, path):
+            problems.append(f"{path}:{number}: '{term}': {text.strip()}")
+    for sha in git("rev-list", "--reverse", "--no-merges", f"{base}..{head}").split():
+        for line in git("log", "-1", "--format=%B", sha).split("\n"):
+            if TRAILER.match(line):
+                continue
+            for term in find(patterns, line):
+                problems.append(f"commit {sha[:7]}: '{term}': {line.strip()}")
+
+    for problem in problems:
+        print(problem, flush=True)
+    if problems:
+        print(
+            f"\nUse the {GLOSSARY} term each of these avoids. Where the avoided "
+            f"term is right, such as a Model's own name for a Preset, add "
+            f"`{MARKER}` in a comment on the line.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

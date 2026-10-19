@@ -116,19 +116,22 @@ impl FrameLog {
             .take();
         if let Some(Writer { records, thread }) = writer {
             drop(records);
-            let _ = thread.join();
+            thread.join().ok();
         }
     }
 
     /// Records a frame, timestamped now, if the log is on.
     pub(crate) fn record(&self, model: &str, direction: Direction, bytes: &[u8]) {
         if let Some(writer) = &*self.writer.lock().unwrap_or_else(PoisonError::into_inner) {
-            let _ = writer.records.send(FrameRecord {
-                timestamp: SystemTime::now(),
-                model: model.to_owned(),
-                direction,
-                bytes: bytes.to_vec(),
-            });
+            writer
+                .records
+                .send(FrameRecord {
+                    timestamp: SystemTime::now(),
+                    model: model.to_owned(),
+                    direction,
+                    bytes: bytes.to_vec(),
+                })
+                .ok();
         }
     }
 }
@@ -138,11 +141,11 @@ impl FrameLog {
 fn write_records(file: File, queue: mpsc::Receiver<FrameRecord>) {
     let mut out = BufWriter::new(file);
     while let Ok(record) = queue.recv() {
-        let _ = writeln!(out, "{record}");
+        writeln!(out, "{record}").ok();
         for record in queue.try_iter() {
-            let _ = writeln!(out, "{record}");
+            writeln!(out, "{record}").ok();
         }
-        let _ = out.flush();
+        out.flush().ok();
     }
 }
 

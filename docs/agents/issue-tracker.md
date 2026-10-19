@@ -10,6 +10,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
+- **Title a PR**: the title becomes the squashed commit's header, so it follows `docs/agents/commits.md` and fits in 72 characters; a spec issue's title is usually too long. Check it before `gh pr create` or `gh pr edit --title` with the checks the `Commits` workflow runs: `printf '%s\n' "$title" > "$tmp" && sh .githooks/commit-msg "$tmp" && scripts/check-commit-scopes --title "$title" origin/main HEAD`.
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 

@@ -233,7 +233,7 @@ impl<P: Platform> State<P> {
                 Some(event) = link_events.recv() => self.link_event(event),
                 request = requests.recv() => match request {
                     Some(Request::Command(command, reply)) => {
-                        let _ = reply.send(self.command(command));
+                        reply.send(self.command(command)).ok();
                     }
                     Some(Request::Hold(id, device)) => {
                         self.holds.insert(id, device);
@@ -325,11 +325,13 @@ impl<P: Platform> State<P> {
         let frame_log = self.frame_log.clone();
         let task = tokio::spawn(async move {
             let send = |kind| {
-                let _ = events.send(LinkEvent {
-                    address,
-                    attempt,
-                    kind,
-                });
+                events
+                    .send(LinkEvent {
+                        address,
+                        attempt,
+                        kind,
+                    })
+                    .ok();
             };
             if !delay.is_zero() {
                 tokio::time::sleep(delay).await;

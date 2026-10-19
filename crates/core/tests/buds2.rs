@@ -435,7 +435,7 @@ async fn a_seven_byte_status_update_from_older_firmware_updates_battery() {
 #[tokio::test]
 async fn frame_logs_label_the_buds2s_frames_galaxy_buds2() {
     let path = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("buds2.frames");
-    let _ = std::fs::remove_file(&path);
+    std::fs::remove_file(&path).ok();
     let (platform, observations, mut os) = fake_platform();
     let core = Core::builder().start(platform, observations);
     core.command(Command::SetFrameLog(Some(path.clone())))

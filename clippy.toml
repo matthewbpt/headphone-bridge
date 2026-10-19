@@ -1,2 +1,5 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+# Lint public items too: every crate ships in one build, so changing an
+# exported signature breaks no one outside the workspace.
+avoid-breaking-exported-api = false

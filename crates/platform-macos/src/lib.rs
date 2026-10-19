@@ -43,10 +43,11 @@ impl MacBluetooth {
         let audio_changes = Mutex::new(commands.clone());
         let audio_waker = waker.clone();
         audio_output::watch(move || {
-            let _ = audio_changes
+            audio_changes
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .send(Command::CheckAudioOutput);
+                .send(Command::CheckAudioOutput)
+                .ok();
             audio_waker.wake();
         });
         Ok((MacBluetooth { commands, waker }, observations))
@@ -91,7 +92,7 @@ impl Platform for MacBluetooth {
                 }
                 waker.wake();
             }
-            let _ = commands.send(Command::Close { link });
+            commands.send(Command::Close { link }).ok();
             waker.wake();
         });
         Ok(ControlLink { incoming, outgoing })
