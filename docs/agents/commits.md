@@ -78,7 +78,7 @@ The crates, the shell-to-UI commands and events, and the Kotlin wire ship togeth
 
 ## Vocabulary
 
-Name domain concepts with the terms in `GLOSSARY.md`, never the synonyms it lists under _Avoid_: "Noise Control Mode", not "ANC mode"; "Ambient", not "transparency"; "Attach", not "connect" when the control link is meant.
+Name domain concepts with the terms in `GLOSSARY.md`, never the synonyms it lists under _Avoid_: "Noise Control Mode", not "ANC mode"; "Ambient", not "transparency"; "Attach", not "connect" when the control link is meant. The `Commits` workflow fails a PR whose added lines or commit messages use an avoided acronym or phrase (`scripts/check-glossary --list` names them); in Markdown and commit messages, quote a term to write about it; elsewhere, mark a line that must use one, such as a Model's own name, with `glossary-ok` in a comment.
 
 ## Examples
 

@@ -65,3 +65,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: scripts/check-commit-scopes --title "$TITLE" "$BASE_SHA" "$HEAD_SHA"
+
+  glossary:
+    # Terms GLOSSARY.md lists under Avoid, in the lines the PR adds and its
+    # commit messages. scripts/check-glossary says which terms it checks.
+    name: Glossary terms
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check the PR's added lines and commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-glossary "$BASE_SHA" "$HEAD_SHA"
