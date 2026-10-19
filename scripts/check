@@ -1,0 +1,95 @@
+#!/bin/sh
+# Runs locally what .github/workflows/ci.yml runs, as far as this machine can:
+# one line per step, with the full output only for a step that fails.
+# Keep the steps in step with ci.yml when a job changes.
+#
+# Usage: scripts/check
+
+set -u
+
+cd "$(dirname "$0")/.." || exit 1
+
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+failed=0
+skipped=''
+
+step() {
+	name=$1
+	shift
+	if "$@" >"$log" 2>&1; then
+		printf 'pass  %s\n' "$name"
+	else
+		printf 'FAIL  %s\n' "$name"
+		sed 's/^/      /' "$log"
+		failed=1
+	fi
+}
+
+skip() {
+	printf 'skip  %s: %s\n' "$1" "$2"
+	skipped="$skipped $1;"
+}
+
+has_target() {
+	rustup target list --installed 2>/dev/null | grep -qx "$1"
+}
+
+in_app() {
+	(cd app && "$@")
+}
+
+clippy() {
+	cargo clippy "$@" --all-targets --locked -- -D warnings
+}
+
+step 'cargo fmt' cargo fmt --all --check
+
+# The ui job. The UI is built before the shell's clippy, which embeds it.
+if [ ! -d app/node_modules ]; then
+	step 'npm ci' in_app npm ci
+fi
+step 'ui format' in_app npm run format:check
+step 'ui lint' in_app npm run lint
+step 'ui build' in_app npm run build
+step 'ui test' in_app npm test
+
+# The core job, on this OS.
+step 'core clippy' clippy --workspace --exclude headphone-bridge
+step 'core test' cargo test --workspace --exclude headphone-bridge --locked
+
+# The linux-app job, up to the bundle.
+step 'app clippy (linux)' clippy -p headphone-bridge -p headphone-bridge-platform-linux -p headphone-bridge-platform-android
+step 'app test' cargo test -p headphone-bridge --locked
+
+# Cross-target clippy: without --target the macOS adapter compiles to nothing here.
+if has_target aarch64-apple-darwin; then
+	step 'macos adapter clippy' clippy -p headphone-bridge-platform-macos --target aarch64-apple-darwin
+else
+	skip 'macos adapter clippy' 'rustup target add aarch64-apple-darwin'
+fi
+if has_target aarch64-linux-android; then
+	step 'android clippy' clippy -p headphone-bridge -p headphone-bridge-platform-android --target aarch64-linux-android
+else
+	skip 'android clippy' 'rustup target add aarch64-linux-android'
+fi
+
+# The kotlin job, when its tools are on the PATH.
+kotlin_dir=crates/platform-android/android
+if command -v ktlint >/dev/null 2>&1; then
+	step 'kotlin ktlint' sh -c "cd $kotlin_dir && ktlint 'src/**/*.kt' '*.kts'"
+else
+	skip 'kotlin ktlint' 'ktlint not on the PATH'
+fi
+if command -v detekt >/dev/null 2>&1; then
+	step 'kotlin detekt' sh -c "cd $kotlin_dir && detekt --config detekt.yml --input src"
+else
+	skip 'kotlin detekt' 'detekt not on the PATH'
+fi
+
+echo
+echo 'Not covered: the Android APK build and its Gradle tests, the macOS shell'
+echo "(clippy and build need macOS), and the deb/AppImage bundles; CI runs them."
+[ -n "$skipped" ] && echo "Skipped here:$skipped"
+
+exit "$failed"

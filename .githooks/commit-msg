@@ -33,6 +33,11 @@ case $header in
 	'Merge '* | 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) exit 0 ;;
 esac
 
+# A warning only: the break may be approved, and CI runs this hook too.
+case $header in
+	*'!:'*) printf 'commit-msg: warning: "!" marks a break the listener notices across an upgrade and makes\nrelease-please propose a major version. Use it only with the owner'"'"'s approval;\nsee "Breaking changes" in docs/agents/commits.md.\n' >&2 ;;
+esac
+
 problems=''
 if ! printf '%s\n' "$header" | grep -Eq "$pattern"; then
 	problems="$problems

@@ -5,7 +5,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
+- **Read an issue**: `gh issue view <number> --json title,body,labels,comments --jq '"# \(.title)\nlabels: \([.labels[].name] | join(", "))\n\n\(.body)", (.comments[] | "\n--- \(.author.login):\n\(.body)")'`. It prints the title, labels, body and each comment; `--comments` alone prints nothing when an issue has none.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
@@ -13,13 +13,17 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Rate limits
+
+`gh issue`, `gh pr` and `gh label` spend the GraphQL quota, which other sessions share and which runs out while the REST quota still has thousands of calls left; `gh api rate_limit --jq '.resources | {core: .core.remaining, graphql: .graphql.remaining}'` shows both. When GraphQL is rate-limited, use REST: `gh api repos/matthewbpt/headphone-bridge/issues/<n>` (and `…/issues/<n>/comments`) to read, `gh api repos/matthewbpt/headphone-bridge/pulls/<n>` to read a PR, and `gh api --method PATCH repos/matthewbpt/headphone-bridge/pulls/<n> -F body=@<file>` to replace a PR body.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
 
 When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
 
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
+- **Read a PR**: `gh pr view <number>` with the same `--json` and `--jq` as an issue, and `gh pr diff <number>` for the diff.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
 - **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
@@ -31,7 +35,7 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Read it as in **Read an issue** above.
 
 ## Wayfinding operations
 
