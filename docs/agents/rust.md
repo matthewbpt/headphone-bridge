@@ -22,6 +22,13 @@ Keep the happy path at the left margin with early returns, `?` and `let ... else
 
 ## Lints
 
-Before committing, `scripts/check` passes: it runs `cargo fmt --check`, clippy with `-D warnings` and the tests over CI's package sets and targets, and the UI checks. `cargo fmt --all` fixes formatting.
+Before committing, both pass clean (CI denies warnings):
+
+```sh
+cargo fmt --all
+cargo clippy -p <each crate you touched> --all-targets --locked -- -D warnings
+```
+
+Before pushing, `scripts/check` passes: it runs `cargo fmt --check`, clippy with `-D warnings` and the tests over CI's package sets and targets, and the UI checks.
 
 The workspace lints in `Cargo.toml` deny `unwrap`, `expect` and reasonless `allow`s. Fix the cause of a warning. When silencing one is right, use `#[expect(lint, reason = "...")]` on the smallest item, wrapped in `cfg_attr` when only some targets trip it. `#[allow(lint, reason = "...")]` is only for a lint that fires in some builds of the same code and not others, such as `dead_code` in shared test support.

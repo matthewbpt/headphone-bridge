@@ -4,7 +4,7 @@
 
 ### Checks
 
-Before committing, run `scripts/check`: what CI runs, as far as this machine can, with output only for failures.
+Before pushing, run `scripts/check`: what CI runs, as far as this machine can, with output only for failures.
 
 ### Issue tracker
 
