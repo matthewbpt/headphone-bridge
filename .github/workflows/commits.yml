@@ -33,6 +33,12 @@ jobs:
             fi
           done
           exit "$status"
+      # The hook sees only the message; this sees the files each commit touches.
+      - name: Check each commit's scope covers the files it touches
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-commit-scopes "$BASE_SHA" "$HEAD_SHA"
 
   pr-title:
     # PRs are squash-merged, so the title becomes the header of the one commit
@@ -41,6 +47,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Check the PR title
         env:
           TITLE: ${{ github.event.pull_request.title }}
@@ -51,3 +59,9 @@ jobs:
             echo "::error::The PR title does not follow Conventional Commits"
             exit 1
           fi
+      - name: Check the PR title's scope covers the whole diff
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-commit-scopes --title "$TITLE" "$BASE_SHA" "$HEAD_SHA"

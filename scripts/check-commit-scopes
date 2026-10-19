@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""Checks that each commit's scope covers every file it touches, as the
+Scopes table in docs/agents/commits.md sets out. A commit with no scope
+passes; so do messages git writes itself (merges, reverts, fixup!s).
+
+Each table row maps a scope to the path in the first backticks of its Area
+column, less any paths after "except" before the colon. Three rules the
+table can't express are written here: the core's tests and the recorded
+fixtures (crates/core/tests, crates/fixtures) belong to core, samsung and
+sony alike, any scope may update a lockfile, and deps
+covers dependency manifests and lockfiles wherever they are.
+
+Usage: scripts/check-commit-scopes <base> <head>
+       scripts/check-commit-scopes --title "<PR title>" <base> <head>
+The first form checks every commit in base..head; the second checks the PR
+title's scope against the whole diff base...head, the one squashed commit
+that lands on main.
+"""
+
+import pathlib
+import re
+import subprocess
+import sys
+
+COMMITS_DOC = pathlib.Path("docs/agents/commits.md")
+HEADER = re.compile(r"^\w+\(([^)]+)\)!?: ")
+EXEMPT = re.compile(r"^(Merge |Revert \"|fixup! |squash! |amend! )")
+ROW = re.compile(r"^\|\s*`([a-z0-9-]+)`\s*\|(.*)\|\s*$")
+SHARED_TESTS = ["crates/core/tests", "crates/fixtures"]
+SHARED_TESTS_SCOPES = {"core", "samsung", "sony"}
+LOCKFILES = {"Cargo.lock", "package-lock.json"}
+MANIFESTS = LOCKFILES | {
+    "Cargo.toml",
+    "package.json",
+    "build.gradle.kts",
+    "settings.gradle",
+}
+
+
+def scope_paths():
+    """Each scope in the Scopes table, mapped to its path and the paths
+    excepted from it (deps has neither)."""
+    text = COMMITS_DOC.read_text()
+    table = text.split("## Scopes", 1)[1].split("\n## ", 1)[0]
+    scopes = {}
+    for line in table.splitlines():
+        row = ROW.match(line)
+        if not row:
+            continue
+        scope, area = row.groups()
+        place = area.split(":", 1)[0]
+        path = re.match(r"\s*`([^`]+)`", place)
+        excepted = place.split("except", 1)[1] if "except" in place else ""
+        scopes[scope] = (
+            path.group(1) if path and scope != "deps" else None,
+            re.findall(r"`([^`]+)`", excepted),
+        )
+    return scopes
+
+
+def under(file, path):
+    return file == path or file.startswith(path + "/")
+
+
+def covers(scope, area, file):
+    name = pathlib.PurePosixPath(file).name
+    if scope == "deps":
+        return name in MANIFESTS
+    if name in LOCKFILES:
+        return True
+    if scope in SHARED_TESTS_SCOPES and any(under(file, t) for t in SHARED_TESTS):
+        return True
+    path, excepted = area
+    return (
+        path is not None
+        and under(file, path)
+        and not any(under(file, e) for e in excepted)
+    )
+
+
+def git(*args):
+    return subprocess.run(
+        ["git", *args], check=True, capture_output=True, text=True
+    ).stdout
+
+
+def check(label, header, files, scopes):
+    if EXEMPT.match(header):
+        return []
+    match = HEADER.match(header)
+    if not match:
+        return []
+    scope = match.group(1)
+    if scope not in scopes:
+        return [
+            f"{label}: scope '{scope}' isn't in the Scopes table of {COMMITS_DOC}; "
+            "use one from it or omit the scope"
+        ]
+    outside = [f for f in files if not covers(scope, scopes[scope], f)]
+    if not outside:
+        return []
+    path, excepted = scopes[scope]
+    where = path or "dependency manifests"
+    if excepted:
+        where += ", except " + ", ".join(excepted)
+    listed = "".join(f"\n    {f}" for f in outside)
+    return [
+        f"{label}: scope '{scope}' ({where}) doesn't cover:{listed}\n"
+        "  Omit the scope, or split the commit by area."
+    ]
+
+
+def main(args):
+    scopes = scope_paths()
+    title = None
+    if args[:1] == ["--title"]:
+        title, args = args[1], args[2:]
+    if len(args) != 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+    base, head = args
+    if title is not None:
+        files = git("diff", "--name-only", f"{base}...{head}").splitlines()
+        problems = check("PR title", title, files, scopes)
+    else:
+        problems = []
+        for sha in git("rev-list", "--reverse", "--no-merges", f"{base}..{head}").split():
+            header = git("log", "-1", "--format=%s", sha).strip()
+            files = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines()
+            problems += check(f"{sha[:7]} {header}", header, files, scopes)
+    for problem in problems:
+        print(problem, flush=True)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

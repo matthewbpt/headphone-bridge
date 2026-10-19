@@ -45,7 +45,7 @@ git config core.hooksPath .githooks
 
 ## Scopes
 
-A scope names the one area the commit touches. When a commit spans several areas, or none of these fits, omit the scope rather than invent a vague one like `misc` or `app`.
+A scope names the one area the commit touches. When a commit spans several areas, or none of these fits, omit the scope rather than invent a vague one like `misc` or `app`. The `Commits` workflow fails a scoped commit that touches a file outside its area (`scripts/check-commit-scopes`). The core's tests and fixtures (`crates/core/tests`, `crates/fixtures`) belong to `core`, `samsung` and `sony` alike, any scope may update a lockfile, and `deps` covers only dependency manifests and lockfiles.
 
 | Scope      | Area                                                               |
 | ---------- | ------------------------------------------------------------------ |
@@ -58,7 +58,7 @@ A scope names the one area the commit touches. When a commit spans several areas
 | `simulated` | `crates/simulated`: the Simulated Device                          |
 | `fixtures` | `crates/fixtures`: the recorded frames the core's tests and the Simulated Device share |
 | `shell`    | `app/src-tauri`: the Tauri shell and tray                          |
-| `ui`       | `app/src`: the React UI                                            |
+| `ui`       | `app`, except `app/src-tauri`: the React UI and its build          |
 | `ci`       | `.github/workflows` (with a type other than `ci`, e.g. `fix(ci)`)  |
 | `deps`     | Dependency bumps, usually with `build`                             |
 | `adr`      | `docs/adr`                                                         |
