@@ -1,5 +1,5 @@
 ---
-name: implement-spec
+name: hb-implement-spec
 description: "Implement the result of /to-spec and /to-tickets in code."
 disable-model-invocation: true
 ---
@@ -34,7 +34,7 @@ Ask any decision that blocks a later step as its own short message, never as a b
 
 5. When an implementer reports done, fast-forward the integration branch onto its branch (`git merge --ff-only`). Use a **merger subagent** only when the fast-forward fails. Push, then:
    - after the first merge, open a draft PR whose body starts `Closes #<spec>, closes #<ticket>, …` for the spec and every ticket;
-   - after every push, refresh the PR body (the `pr` skill writes it).
+   - after every push, refresh the PR body (the `hb-pr` skill writes it).
 
    Done when the ticket's commits are on the pushed integration branch and the PR body covers them.
 
