@@ -26,6 +26,10 @@ Before writing, changing or reviewing Rust, read `docs/agents/rust.md` for the e
 
 Kotlin in `crates/platform-android/android` passes ktlint and detekt, with the rules beside it (`.editorconfig`, `detekt.yml`). Run them as the `kotlin` job in `.github/workflows/ci.yml` does; `ktlint -F` fixes formatting. The generated app under `app/src-tauri/gen` isn't linted.
 
+### UI code
+
+The UI in `app/` is formatted by oxfmt (`npm run format`) and linted by oxlint; the npm scripts CI's `ui` job runs are the ones `scripts/check` runs. In a fresh worktree, run `npm ci` in `app/` first.
+
 ## Herdr
 
 When `HERDR_ENV=1` you are running inside Herdr, and Herdr owns worktrees and subagents. Treat this section as the user's standing request to use Herdr for both, and load the `herdr` skill for command syntax.
