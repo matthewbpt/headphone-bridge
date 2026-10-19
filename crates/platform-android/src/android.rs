@@ -133,7 +133,7 @@ pub fn start(env: &mut JNIEnv, class: &JClass, frame_log: Option<&Path>) -> Resu
     if BRIDGE.get().is_none() {
         match (env.get_java_vm(), env.new_global_ref(class)) {
             (Ok(vm), Ok(class)) => {
-                let _ = BRIDGE.set(Bridge { vm, class });
+                BRIDGE.set(Bridge { vm, class }).ok();
                 log("Kotlin connected");
             }
             (Err(error), _) | (_, Err(error)) => return Err(StartError::Kotlin(error)),
@@ -193,8 +193,8 @@ fn to_kotlin(message: Message) -> bool {
     if let Err(error) = called {
         log(&format!("fromCore failed: {error}"));
         if env.exception_check().unwrap_or(false) {
-            let _ = env.exception_describe();
-            let _ = env.exception_clear();
+            env.exception_describe().ok();
+            env.exception_clear().ok();
         }
         return false;
     }

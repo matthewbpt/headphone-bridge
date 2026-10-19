@@ -60,7 +60,7 @@ impl Hold {
 impl Drop for Hold {
     fn drop(&mut self) {
         // A stopped core holds nothing.
-        let _ = self.requests.send(Request::EndHold(self.id));
+        self.requests.send(Request::EndHold(self.id)).ok();
     }
 }
 
@@ -145,7 +145,7 @@ impl Core {
     fn hold(&self, device: Option<DeviceAddress>) -> Hold {
         let id = self.next_hold.fetch_add(1, Ordering::Relaxed);
         // A stopped core holds nothing.
-        let _ = self.requests.send(Request::Hold(id, device));
+        self.requests.send(Request::Hold(id, device)).ok();
         Hold {
             id,
             device,

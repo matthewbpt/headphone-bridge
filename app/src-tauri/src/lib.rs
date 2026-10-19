@@ -271,7 +271,7 @@ fn report_nearby_devices_permission(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let permission = nearby_devices_permission(app.clone()).await;
-        let _ = app.emit("nearby-devices-permission", permission);
+        app.emit("nearby-devices-permission", permission).ok();
     });
 }
 
@@ -357,11 +357,12 @@ const HIDDEN: &str = "--hidden";
 #[cfg(desktop)]
 fn show_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
-    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    app.set_activation_policy(tauri::ActivationPolicy::Regular)
+        .ok();
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        window.show().ok();
+        window.unminimize().ok();
+        window.set_focus().ok();
     }
 }
 
@@ -404,7 +405,7 @@ pub fn run() {
                     let snapshot = snapshots.borrow_and_update().clone();
                     #[cfg(desktop)]
                     tray::update(&handle, &snapshot);
-                    let _ = handle.emit("device-list", snapshot);
+                    handle.emit("device-list", snapshot).ok();
                 }
             });
             app.manage(core);
@@ -416,7 +417,7 @@ pub fn run() {
             // The config's window starts hidden for the tray; a phone has none.
             #[cfg(mobile)]
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
+                window.show().ok();
             }
             Ok(())
         })
@@ -425,11 +426,12 @@ pub fn run() {
             #[cfg(desktop)]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                window.hide().ok();
                 #[cfg(target_os = "macos")]
-                let _ = window
+                window
                     .app_handle()
-                    .set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    .set_activation_policy(tauri::ActivationPolicy::Accessory)
+                    .ok();
             }
             // Back from the permission prompt or the app's settings.
             #[cfg(target_os = "android")]

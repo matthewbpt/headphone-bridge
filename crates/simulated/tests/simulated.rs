@@ -28,7 +28,7 @@ impl Platform for Os {
         address: DeviceAddress,
         _service: Uuid,
     ) -> Result<ControlLink, LinkFailure> {
-        let _ = self.asked.send(address);
+        self.asked.send(address).ok();
         Err(LinkFailure::DeviceNotConnected)
     }
 }

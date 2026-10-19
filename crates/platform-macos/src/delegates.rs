@@ -103,7 +103,7 @@ define_class!(
             // The buffer is only valid during the callback.
             let bytes = unsafe { std::slice::from_raw_parts(data as *const u8, length) }.to_vec();
             if let Some(incoming) = &*self.incoming() {
-                let _ = incoming.send(bytes);
+                incoming.send(bytes).ok();
             }
         }
 

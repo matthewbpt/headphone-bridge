@@ -78,7 +78,7 @@ pub fn update(app: &AppHandle, list: &DeviceList) {
 fn show(app: &AppHandle, icon: &TrayIcon, menu: &TrayMenu) {
     match build(app, menu) {
         Ok(built) => {
-            let _ = icon.set_menu(Some(built));
+            icon.set_menu(Some(built)).ok();
         }
         Err(error) => eprintln!("couldn't build the tray menu: {error}"),
     }

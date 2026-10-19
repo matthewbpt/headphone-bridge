@@ -142,7 +142,7 @@ impl Host {
         let shared = &self.shared;
         match parse_event(json)? {
             Event::Observed(observation) => {
-                let _ = shared.observations.send(observation);
+                shared.observations.send(observation).ok();
             }
             Event::Opened { request, link } => {
                 let (incoming_tx, incoming) = mpsc::unbounded_channel();
@@ -175,7 +175,7 @@ impl Host {
                     .unwrap_or_else(PoisonError::into_inner)
                     .remove(&request)
                 {
-                    let _ = waiter.send(Err(failure));
+                    waiter.send(Err(failure)).ok();
                 }
             }
             Event::Data { link, bytes } => {
@@ -185,7 +185,7 @@ impl Host {
                     .unwrap_or_else(PoisonError::into_inner)
                     .get(&link)
                 {
-                    let _ = incoming.send(bytes);
+                    incoming.send(bytes).ok();
                 }
             }
             Event::Closed { link } => {

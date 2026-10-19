@@ -300,7 +300,7 @@ mod tests {
             "headphone-bridge-session-{}-{test}.frames",
             std::process::id()
         ));
-        let _ = std::fs::remove_file(&path);
+        std::fs::remove_file(&path).ok();
         path
     }
 
@@ -319,7 +319,7 @@ mod tests {
         device.close().await;
         frame_log.stop();
         let log = fixture(&std::fs::read_to_string(&path).unwrap());
-        let _ = std::fs::remove_file(&path);
+        std::fs::remove_file(&path).ok();
         log.into_iter()
             .map(|record| (record.model, record.direction, record.bytes))
             .collect()

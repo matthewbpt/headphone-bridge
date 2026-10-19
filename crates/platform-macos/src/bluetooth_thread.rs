@@ -95,7 +95,7 @@ pub fn spawn(
             let Some(run_loop) = CFRunLoop::current() else {
                 return;
             };
-            let _ = waker_tx.send(Waker(Arc::new(RunLoopHandle(run_loop))));
+            waker_tx.send(Waker(Arc::new(RunLoopHandle(run_loop)))).ok();
             BluetoothThread::new(observations).run(commands);
         })?;
     let waker = waker_rx
@@ -203,7 +203,7 @@ impl BluetoothThread {
                         self.close(*link);
                     }
                 }
-                let _ = reply.send(result);
+                reply.send(result).ok();
             }
             Command::Write { link, bytes } => self.write(link, bytes),
             Command::Close { link } => self.close(link),
@@ -267,13 +267,13 @@ impl BluetoothThread {
                 connected_at: Instant::now(),
             },
         );
-        let _ = self
-            .observations
+        self.observations
             .send(Observation::DeviceConnected(DeviceIdentity {
                 address,
                 name: unsafe { device.name() }.to_string(),
                 service_uuids: service_uuids(device),
-            }));
+            }))
+            .ok();
         // The audio output may have been matched by this Device's name.
         self.check_audio_output();
     }
@@ -285,9 +285,9 @@ impl BluetoothThread {
         if let Some(connected) = self.connected.remove(&address) {
             // Notifications retain their observer until unregistered.
             unsafe { connected.disconnect_notification.unregister() };
-            let _ = self
-                .observations
-                .send(Observation::DeviceDisconnected(address));
+            self.observations
+                .send(Observation::DeviceDisconnected(address))
+                .ok();
             self.check_audio_output();
         }
     }
@@ -306,9 +306,9 @@ impl BluetoothThread {
         });
         if output != self.audio_output {
             self.audio_output = output;
-            let _ = self
-                .observations
-                .send(Observation::AudioOutputChanged(output));
+            self.observations
+                .send(Observation::AudioOutputChanged(output))
+                .ok();
         }
     }
 
