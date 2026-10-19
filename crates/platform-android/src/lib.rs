@@ -7,8 +7,6 @@
 
 mod host;
 pub mod messages;
-#[cfg(debug_assertions)]
-mod simulated;
 
 pub use host::Host;
 

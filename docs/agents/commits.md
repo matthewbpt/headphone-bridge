@@ -2,7 +2,7 @@
 
 Every commit message follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The `commit-msg` hook in `.githooks/` checks the header locally, and the `Commits` workflow runs the same hook on every commit in a pull request.
 
-Pull requests are squash-merged: the PR title becomes the header of the one commit that lands on `main`, and the PR's commit messages become its body. The title follows the same format, and the `Commits` workflow checks it too. release-please reads that commit to choose the next version, so title a PR for its most significant change: `feat` if any commit is a `feat`, with `!` if any commit breaks an interface.
+Pull requests are squash-merged: the PR title becomes the header of the one commit that lands on `main`, and the PR's commit messages become its body. The title follows the same format, and the `Commits` workflow checks it too. release-please reads that commit to choose the next version, so title a PR for its most significant change: `feat` if any commit is a `feat`. A PR title takes `!` only for an approved user-facing break (see Breaking changes).
 
 ## Setup
 
@@ -15,14 +15,14 @@ git config core.hooksPath .githooks
 ## Format
 
 ```
-<type>(<scope>)!: <description>
+<type>(<scope>): <description>
 
 <body>
 
 <footers>
 ```
 
-- **Header**: at most 72 characters. The `(<scope>)` and `!` are optional.
+- **Header**: at most 72 characters. The `(<scope>)` is optional. A `!` before the colon marks an approved break (see Breaking changes).
 - **Description**: imperative mood, starting with a lower-case verb ("add", "fix", "let"), no trailing period. Glossary terms keep their capitals: `let a Device settle`, not `let a device settle`.
 - **Body**: optional, after one blank line. Explain why the change is needed and what it trades off; the diff already shows what changed. Wrap at 72 characters.
 - **Footers**: after one blank line, one `Token: value` per line.
@@ -54,6 +54,9 @@ A scope names the one area the commit touches. When a commit spans several areas
 | `sony`     | `crates/core/src/sony`: the WH-1000XM5 protocol                    |
 | `macos`    | `crates/platform-macos`: the IOBluetooth and audio output adapter  |
 | `linux`    | `crates/platform-linux`: the BlueZ and default sink adapter        |
+| `android`  | `crates/platform-android`: the core's host and its Kotlin side     |
+| `simulated` | `crates/simulated`: the Simulated Device                          |
+| `fixtures` | `crates/fixtures`: the recorded frames the core's tests and the Simulated Device share |
 | `shell`    | `app/src-tauri`: the Tauri shell and tray                          |
 | `ui`       | `app/src`: the React UI                                            |
 | `ci`       | `.github/workflows` (with a type other than `ci`, e.g. `fix(ci)`)  |
@@ -63,12 +66,14 @@ A scope names the one area the commit touches. When a commit spans several areas
 
 ## Breaking changes
 
-Mark a change that breaks a public interface (a crate API another crate uses, the shell-to-UI commands and events, saved settings) with `!` before the colon, and explain the break in a `BREAKING CHANGE:` footer. Use both together.
+The crates, the shell-to-UI commands and events, and the Kotlin wire ship together in one build, so changing them never breaks anything: write those commits without `!`. A `!` makes release-please propose the next major version.
+
+`!` is only for a break the listener notices across an upgrade, such as saved settings that no longer load or a changed file format, and only with the owner's approval. Mark it with `!` before the colon and explain the break and the migration in a `BREAKING CHANGE:` footer; use both together.
 
 ## Footers
 
 - `Refs: #<issue>` links a GitHub issue the commit works towards; `Closes: #<issue>` for the commit that finishes it.
-- `BREAKING CHANGE: <what breaks and how to migrate>`.
+- `BREAKING CHANGE: <what breaks and how to migrate>`, only beside an approved `!`.
 - Keep `Co-Authored-By:` trailers as the last footers.
 
 ## Vocabulary
@@ -92,10 +97,10 @@ control link until it reconnects.
 ```
 
 ```
-feat(core)!: report the Chosen Mode and Effective Mode separately
+feat(core): report the Chosen Mode and Effective Mode separately
 
-BREAKING CHANGE: the noise_control update now carries chosen and
-effective fields in place of mode; the UI reads both.
+The noise_control update now carries chosen and effective fields in
+place of mode; the UI reads both, and ships in the same build.
 ```
 
 ```

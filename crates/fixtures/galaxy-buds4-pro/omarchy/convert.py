@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Converts the omarchy-buds Buds4 Pro captures in this directory into
-headphone-bridge fixtures (see crates/core/tests/fixtures/README.md).
+headphone-bridge fixtures (see crates/fixtures/README.md).
 
 Usage: python3 convert.py   (writes ../*.frames)
 

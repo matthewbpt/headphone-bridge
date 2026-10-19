@@ -45,18 +45,48 @@ impl DataType {
     }
 }
 
+/// A data frame's 1-bit sequence number. Each side flips its own after every
+/// data frame the other acknowledges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sequence(u8);
+
+impl Sequence {
+    /// A control link's first data frame's.
+    pub const FIRST: Sequence = Sequence(0);
+
+    /// The sequence number a frame's seq byte carries: its low bit.
+    pub const fn from_byte(byte: u8) -> Sequence {
+        Sequence(byte & 1)
+    }
+
+    pub const fn byte(self) -> u8 {
+        self.0
+    }
+
+    /// The other sequence number: the next data frame's, after this one.
+    pub const fn flipped(self) -> Sequence {
+        Sequence(1 - self.0)
+    }
+
+    /// The sequence number of the ACK that answers a data frame with this one.
+    pub const fn ack(self) -> Sequence {
+        self.flipped()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
     pub data_type: DataType,
-    /// The sequence number, 0 or 1.
+    /// The seq byte as it was on the wire, 0 or 1 from a well-behaved
+    /// sender: [`Sequence::from_byte`] reads it.
     pub seq: u8,
     pub data: Vec<u8>,
     /// The whole frame as it appeared on the wire.
     pub raw: Vec<u8>,
 }
 
-pub fn encode(data_type: DataType, seq: u8, data: &[u8]) -> Vec<u8> {
-    let mut body = vec![data_type.byte(), seq];
+pub fn encode(data_type: DataType, seq: Sequence, data: &[u8]) -> Vec<u8> {
+    let mut body = vec![data_type.byte(), seq.byte()];
     body.extend_from_slice(&(data.len() as u32).to_be_bytes());
     body.extend_from_slice(data);
     body.push(checksum(&body));

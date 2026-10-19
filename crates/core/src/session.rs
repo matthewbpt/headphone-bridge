@@ -168,11 +168,10 @@ mod tests {
     use super::*;
     use crate::frame_log::FrameRecord;
     use crate::model::Model;
-    use crate::sony::frame::DataType;
+    use crate::sony::frame::{DataType, Sequence};
     use crate::{samsung, sony};
 
-    const BUDS2_ATTACH: &str = include_str!("../tests/fixtures/galaxy-buds2/attach.frames");
-    const XM5_ATTACH: &str = include_str!("../tests/fixtures/wh-1000xm5/attach.frames");
+    use headphone_bridge_fixtures::{BUDS2_ATTACH, XM5_ATTACH};
 
     /// The WH-1000XM5 Attach up to the model name reply and what the app
     /// writes in answer to it.
@@ -353,7 +352,7 @@ mod tests {
         let asked_for_name = &records[..6];
         let mut name = vec![0x05, 0x01, 0x0a];
         name.extend_from_slice(b"WH-1000XM4");
-        let xm4 = sony::frame::encode(DataType::Mdr, 1, &name);
+        let xm4 = sony::frame::encode(DataType::Mdr, Sequence::FIRST.flipped(), &name);
         let device = Device::start(sony::Session::new(), FrameLog::default());
 
         let mut from_device = frames(asked_for_name, Direction::Received);

@@ -12,7 +12,7 @@
 //! 3. direction: `>>` sent to the Device, `<<` received from it;
 //! 4. the whole frame as raw wire bytes, lowercase hex, one space between bytes.
 //!
-//! Lines starting with `#` are comments. `crates/core/tests/fixtures/README.md`
+//! Lines starting with `#` are comments. `crates/fixtures/README.md`
 //! describes the fixture files.
 //!
 //! The frame log itself is a developer setting, off by default, switched with
