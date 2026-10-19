@@ -23,8 +23,8 @@ git config core.hooksPath .githooks
 ```
 
 - **Header**: at most 72 characters. The `(<scope>)` is optional. A `!` before the colon marks an approved break (see Breaking changes).
-- **Description**: imperative mood, starting with a lower-case verb ("add", "fix", "let"), no trailing period. Glossary terms keep their capitals: `let a Device settle`, not `let a device settle`.
-- **Body**: optional, after one blank line. Explain why the change is needed and what it trades off; the diff already shows what changed. Wrap at 72 characters.
+- **Description**: imperative mood, starting with a lower-case verb ("add", "fix", "let"), no trailing period. Glossary headwords keep their capitals, and only they do: `let a Device settle`, not `let a device settle`; a type is lower-case prose (`hand the core its observations`), not `Observations`.
+- **Body**: optional, after one blank line. Explain why the change is needed and what it trades off; the diff already shows what changed. When a `refactor` changes an existing test's expected value, say why the new value is right and who reads it. Wrap at 72 characters.
 - **Footers**: after one blank line, one `Token: value` per line.
 
 ## Types
@@ -42,6 +42,8 @@ git config core.hooksPath .githooks
 | `chore`    | Upkeep that fits nowhere else, e.g. `.gitignore`              |
 | `style`    | Formatting only (`cargo fmt`, whitespace), no behaviour change |
 | `revert`   | Reverting an earlier commit                                   |
+
+Text the listener sees is behaviour: a change to it is a `feat` or a `fix`, whatever else the commit restructures.
 
 ## Scopes
 
