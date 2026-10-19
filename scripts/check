@@ -47,6 +47,7 @@ step 'cargo fmt' cargo fmt --all --check
 
 # The repo-checks job.
 step 'error docs' scripts/check-error-docs
+step 'release config' scripts/check-release-config
 
 # The ui job. The UI is built before the shell's clippy, which embeds it.
 if [ ! -d app/node_modules ]; then

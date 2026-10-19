@@ -22,7 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
       - run: scripts/check-error-docs
+      - run: scripts/check-release-config
 
   core:
     # The platform-independent crates must build and pass on every OS (ADR-0002).
