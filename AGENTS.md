@@ -2,6 +2,10 @@
 
 ## Agent skills
 
+### Checks
+
+Before committing, run `scripts/check`: what CI runs, as far as this machine can, with output only for failures.
+
 ### Issue tracker
 
 Issues are tracked in GitHub Issues for `matthewbpt/headphone-bridge`, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
